@@ -7,18 +7,21 @@ import android.util.Log;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Date;
 
 class DecoderThread extends Thread {
     private static final String TAG = "DecoderThread";
     private final MediaCodecInfo codecInfo;
     private MainActivity mainActivity;
-    private NALParser nalParser;
+    private SrtReceiverThread nalParser;
 
-    private byte[] IDRBuffer = null;
-    private byte[] SPSBuffer = null;
-    private byte[] PPSBuffer = null;
+    private NAL IDRBuffer = null;
+    private NAL SPSBuffer = null;
+    private NAL PPSBuffer = null;
 
-    DecoderThread(MainActivity mainActivity, NALParser nalParser, MediaCodecInfo codecInfo){
+    long time0;
+
+    DecoderThread(MainActivity mainActivity, SrtReceiverThread nalParser, MediaCodecInfo codecInfo) {
         this.mainActivity = mainActivity;
         this.nalParser = nalParser;
         this.codecInfo = codecInfo;
@@ -27,45 +30,33 @@ class DecoderThread extends Thread {
     @Override
     public void run() {
         try {
-
-            if (true) {
-                for (int i = 0; ; i++) {
-                    ByteBuffer packet = nalParser.getPacket();
-                    nalParser.parseNAL(packet);
-
-                    for (byte[] buf : nalParser.getNALList()) {
-                        int NALType = buf[4] & 0x1F;
-                        //Log.v(TAG, "nal " + NALType);
-                        if (NALType == 5) {
-                            // First I-Frame
-
-                            SPSBuffer = nalParser.getNALList().get(0);
-                            PPSBuffer = nalParser.getNALList().get(1);
-                            IDRBuffer = nalParser.getNALList().get(2);
-                            break;
-                        }
-                    }
-                    if (SPSBuffer != null) {
-                        break;
-                    }
+            while (true) {
+                NAL packet = nalParser.getNal();
+                if (packet == null) {
+                    Thread.sleep(10);
+                    continue;
                 }
 
-            } else {
-                for (int i = 0; ; i++) {
-                    ByteBuffer packet = nalParser.getPacket();
-                    //Log.v(TAG, "Packet received " + packet.getLength());
-                    nalParser.parseNAL(packet);
-                    nalParser.getNALList().clear();
+                int NALType = packet.buf[4] & 0x1F;
+
+                if (NALType == 7) {
+                    SPSBuffer = packet;
+                } else if (NALType == 8) {
+                    PPSBuffer = packet;
+                    if (SPSBuffer != null)
+                        break;
                 }
             }
+            time0 = System.nanoTime() / 1000;
+
 
             int width = 1920;
             int height = 1080;
             String videoFormat = "video/avc";
             MediaFormat format = MediaFormat.createVideoFormat(videoFormat, width, height);
             format.setString("KEY_MIME", videoFormat);
-            format.setByteBuffer("csd-0", ByteBuffer.wrap(SPSBuffer));
-            format.setByteBuffer("csd-1", ByteBuffer.wrap(PPSBuffer));
+            format.setByteBuffer("csd-0", ByteBuffer.wrap(SPSBuffer.buf, 0, SPSBuffer.len));
+            format.setByteBuffer("csd-1", ByteBuffer.wrap(PPSBuffer.buf, 0, PPSBuffer.len));
 
             String codecName = codecInfo.getName();
             Log.v(TAG, "Create codec " + codecName);
@@ -99,12 +90,10 @@ class DecoderThread extends Thread {
 
                     ByteBuffer buffer = decoder.getInputBuffer(inIndex);
 
-                    int sampleSize = 0;
-
-                    byte[] buf = nalParser.recvNextNAL();
+                    NAL buf = nalParser.getNal();
                     if (buf != null) {
-                        int NALType = buf[4] & 0x1F;
-                        Log.v(TAG, "Got NAL TYPE " + NALType + " Len " + buf.length);
+                        int NALType = buf.buf[4] & 0x1F;
+                        Log.v(TAG, "Got NAL TYPE " + NALType + " Len " + buf.len + "  q:" + nalParser.getNalListSize());
 
                         if (NALType == 7) {
                             // SPS
@@ -117,8 +106,8 @@ class DecoderThread extends Thread {
 
                             if (waitNextIDR) {
                                 if (SPSBuffer != null)
-                                    buffer.put(SPSBuffer);
-                                buffer.put(buf);
+                                    buffer.put(SPSBuffer.buf, 0, SPSBuffer.len);
+                                buffer.put(buf.buf, 0, buf.len);
 
                                 waitNextIDR = false;
                                 Log.v(TAG, "Sending Codec Config. Size: " + buffer.position());
@@ -128,22 +117,18 @@ class DecoderThread extends Thread {
                             }
                         } else if (NALType == 5) {
                             // IDR
-                            Log.v(TAG, "Sending IDR SPS:" + SPSBuffer.length + " PPS:" + PPSBuffer.length + " IDR:" + buf.length);
+                            Log.v(TAG, "Sending IDR SPS:" + SPSBuffer.len + " PPS:" + PPSBuffer.len + " IDR:" + buf.len);
 
-                            //buffer.put(buf);
-                            nalParser.replaceNAL3To4(buffer, ByteBuffer.wrap(buf));
-
+                            buffer.put(buf.buf, 0, buf.len);
                             frameNumber++;
 
-                            decoder.queueInputBuffer(inIndex, 0, buffer.position(), timestamp, 0);
+                            decoder.queueInputBuffer(inIndex, 0, buffer.position(), buf.presentationTime, 0);
                             //decoder.queueInputBuffer(inIndex, 0, buffer.position(), startTimestamp, 0);
                             prevTimestamp = timestamp;
                         } else {
-                            //buffer.put(buf);
-                            nalParser.replaceNAL3To4(buffer, ByteBuffer.wrap(buf));
-                            sampleSize += buffer.position();
+                            buffer.put(buf.buf, 0, buf.len);
 
-                            if ((buf[4] & 0x1F) == 1) {
+                            if (NALType == 1) {
                                 // PFrame
                                 mainActivity.counter.countPFrame();
                             }
@@ -152,10 +137,10 @@ class DecoderThread extends Thread {
                             if (waitNextIDR) {
                                 // Ignore P-Frame until next I-Frame
                                 Log.v(TAG, "Ignoring P-Frame");
-                                decoder.queueInputBuffer(inIndex, 0, 0, timestamp, 0);
+                                decoder.queueInputBuffer(inIndex, 0, 0, buf.presentationTime, 0);
                             } else {
-                                Log.v(TAG, "Feed " + sampleSize + " bytes " + String.format("%02X", (buf[4] & 0x1F)) + " frame " + frameNumber);
-                                decoder.queueInputBuffer(inIndex, 0, sampleSize, timestamp, 0);
+                                Log.v(TAG, "Feed " + buffer.position() + " bytes " + String.format("%02X", NALType) + " frame " + frameNumber + " " + calcDiff(buf.presentationTime));
+                                decoder.queueInputBuffer(inIndex, 0, buffer.position(), buf.presentationTime, 0);
                             }
                             prevTimestamp = timestamp;
                         }
@@ -176,17 +161,16 @@ class DecoderThread extends Thread {
                         // Codec input stalled. Try reset.
                         Log.v(TAG, "Codec input stalled. Try reset.");
                         waitNextIDR = true;
-                        nalParser.flushPacketQueue();
-                        nalParser.flushNALQueue();
+                        nalParser.flushNALList();
 
                         prevResetTimestamp = System.nanoTime() / 1000;
                         if (false) {
+                            /*
                             decoder.reset();
 
-                            nalParser.flushPacketQueue();
-                            nalParser.flushNALQueue();
+                            nalParser.flushNALList();
                             while (true) {
-                                byte[] buf = nalParser.peekNextNAL();
+                                byte[] buf = nalParser.getNal();
                                 if (buf != null) {
                                     int NALType = buf[4] & 0x1F;
                                     if (NALType == 7) {
@@ -209,7 +193,7 @@ class DecoderThread extends Thread {
                                         nalParser.recvNextNAL();
                                     }
                                 }
-                            }
+                            }*/
                         } else {
                             decoder.flush();
                         }
@@ -252,7 +236,7 @@ class DecoderThread extends Thread {
                     }
 
                     if (lastIndex >= 0) {
-                        Log.v(TAG, "render frame " + info.presentationTimeUs + " (" + (info.presentationTimeUs - timestamp) + ")");
+                        Log.v(TAG, "render frame " + info.presentationTimeUs + " (" + (info.presentationTimeUs - timestamp) + ")" + " " + calcDiff(info.presentationTimeUs));
                         decoder.releaseOutputBuffer(lastIndex, true);
                     }
                     break;
@@ -264,5 +248,10 @@ class DecoderThread extends Thread {
             Log.v(TAG, "DecoderThread stopped by Exception.");
         }
         Log.v(TAG, "DecoderThread stopped.");
+    }
+
+    String calcDiff(long us) {
+        long ms = (us-11644473600000000L)/1000;
+        return "" + (ms - System.currentTimeMillis()) + " ms";
     }
 }

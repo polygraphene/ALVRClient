@@ -26,10 +26,15 @@ android {
             path "CMakeLists.txt"
         }
     }
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ["src/main/jniLibs", "C:\\Users\\lll\\Desktop\\RemoteGlass\\app\\src\\main\\jniLibs\\arm64-v8a", "C:\\Users\\lll\\Desktop\\RemoteGlass\\app\\src\\main\\jniLibs"]
+        }
+    }
 }
 
 dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation fileTree(dir: 'libs', include: ['*.jar','*.so'])
     implementation 'com.android.support:appcompat-v7:26.1.0'
     implementation 'com.android.support.constraint:constraint-layout:1.1.0'
     testImplementation 'junit:junit:4.12'

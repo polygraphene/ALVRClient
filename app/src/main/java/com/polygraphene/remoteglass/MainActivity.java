@@ -38,7 +38,7 @@ public class MainActivity extends AppCompatActivity {
 
     private DecoderThread decoderThread;
     //private ReceiverThread receiverThread = new ReceiverThread();
-    private ReceiverThread receiverThread;
+    private SrtReceiverThread receiverThread;
 
     public Surface getSurface() {
         return mHolder.getSurface();
@@ -135,22 +135,26 @@ public class MainActivity extends AppCompatActivity {
 
         nalParser = new NALParser();
 
-        decoderThread = new DecoderThread(this, nalParser, AvcCodecInfoes.get(0));
-        receiverThread = new ReceiverThread(nalParser, counter);
+
+        //receiverThread = new ReceiverThread(nalParser, counter, this);
+        receiverThread = new SrtReceiverThread(nalParser, counter, this);
         //receiverThread = new ReplayReceiverThread();
         receiverThread.setHost("10.1.0.2", 9944);
+        decoderThread = new DecoderThread(this, receiverThread, AvcCodecInfoes.get(0));
     }
 
 
-    private class ReceiverThread extends Thread {
+    static class ReceiverThread extends Thread {
         NALParser nalParser;
         StatisticsCounter counter;
         String host;
         int port;
+        MainActivity mainActivity;
 
-        ReceiverThread(NALParser nalParser, StatisticsCounter counter) {
+        ReceiverThread(NALParser nalParser, StatisticsCounter counter, MainActivity activity) {
             this.nalParser = nalParser;
             this.counter = counter;
+            this.mainActivity = activity;
         }
 
         public void setHost(String host, int port) {
@@ -180,7 +184,7 @@ public class MainActivity extends AppCompatActivity {
 
                 int previousSequence = -1;
                 for (int i = 0; ; i++) {
-                    if (stopped) {
+                    if (mainActivity.isStopped()) {
                         break;
                     }
 
@@ -213,8 +217,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private class ReplayReceiverThread extends ReceiverThread {
-        ReplayReceiverThread(NALParser nalParser, StatisticsCounter counter) {
-            super(nalParser, counter);
+        ReplayReceiverThread(NALParser nalParser, StatisticsCounter counter, MainActivity activity) {
+            super(nalParser, counter, activity);
         }
 
         @Override
