@@ -19,16 +19,25 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            ndk {
+                abiFilters "arm64-v8a"
+            }
+        }
+        debug {
+            ndk {
+                abiFilters "arm64-v8a"
+            }
         }
     }
     externalNativeBuild {
         cmake {
             path "CMakeLists.txt"
         }
+
     }
     sourceSets {
         main {
-            jniLibs.srcDirs = ["src/main/jniLibs", "C:\\Users\\lll\\Desktop\\RemoteGlass\\app\\src\\main\\jniLibs\\arm64-v8a", "C:\\Users\\lll\\Desktop\\RemoteGlass\\app\\src\\main\\jniLibs"]
+            jniLibs.srcDirs = ["src/main/jniLibs"]
         }
     }
 }

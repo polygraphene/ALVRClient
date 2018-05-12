@@ -19,16 +19,19 @@ class DecoderThread extends Thread {
     private NAL SPSBuffer = null;
     private NAL PPSBuffer = null;
 
-    long time0;
-
     DecoderThread(MainActivity mainActivity, SrtReceiverThread nalParser, MediaCodecInfo codecInfo) {
         this.mainActivity = mainActivity;
         this.nalParser = nalParser;
         this.codecInfo = codecInfo;
     }
 
+    void frameLog(String s){
+        //Log.v(TAG, s);
+    }
+
     @Override
     public void run() {
+        MediaCodec decoder = null;
         try {
             while (true) {
                 NAL packet = nalParser.getNal();
@@ -47,8 +50,6 @@ class DecoderThread extends Thread {
                         break;
                 }
             }
-            time0 = System.nanoTime() / 1000;
-
 
             int width = 1920;
             int height = 1080;
@@ -60,7 +61,7 @@ class DecoderThread extends Thread {
 
             String codecName = codecInfo.getName();
             Log.v(TAG, "Create codec " + codecName);
-            final MediaCodec decoder = MediaCodec.createByCodecName(codecName);
+            decoder = MediaCodec.createByCodecName(codecName);
 
             decoder.configure(format, mainActivity.getSurface(), null, 0);
             decoder.setVideoScalingMode(MediaCodec.VIDEO_SCALING_MODE_SCALE_TO_FIT);
@@ -93,7 +94,7 @@ class DecoderThread extends Thread {
                     NAL buf = nalParser.getNal();
                     if (buf != null) {
                         int NALType = buf.buf[4] & 0x1F;
-                        Log.v(TAG, "Got NAL TYPE " + NALType + " Len " + buf.len + "  q:" + nalParser.getNalListSize());
+                        frameLog("Got NAL TYPE " + NALType + " Len " + buf.len + "  q:" + nalParser.getNalListSize());
 
                         if (NALType == 7) {
                             // SPS
@@ -110,14 +111,14 @@ class DecoderThread extends Thread {
                                 buffer.put(buf.buf, 0, buf.len);
 
                                 waitNextIDR = false;
-                                Log.v(TAG, "Sending Codec Config. Size: " + buffer.position());
+                                frameLog("Sending Codec Config. Size: " + buffer.position());
                                 decoder.queueInputBuffer(inIndex, 0, buffer.position(), 0, MediaCodec.BUFFER_FLAG_CODEC_CONFIG);
                             } else {
                                 decoder.queueInputBuffer(inIndex, 0, buffer.position(), 0, 0);
                             }
                         } else if (NALType == 5) {
                             // IDR
-                            Log.v(TAG, "Sending IDR SPS:" + SPSBuffer.len + " PPS:" + PPSBuffer.len + " IDR:" + buf.len);
+                            frameLog("Sending IDR SPS:" + SPSBuffer.len + " PPS:" + PPSBuffer.len + " IDR:" + buf.len);
 
                             buffer.put(buf.buf, 0, buf.len);
                             frameNumber++;
@@ -136,10 +137,10 @@ class DecoderThread extends Thread {
 
                             if (waitNextIDR) {
                                 // Ignore P-Frame until next I-Frame
-                                Log.v(TAG, "Ignoring P-Frame");
+                                frameLog("Ignoring P-Frame");
                                 decoder.queueInputBuffer(inIndex, 0, 0, buf.presentationTime, 0);
                             } else {
-                                Log.v(TAG, "Feed " + buffer.position() + " bytes " + String.format("%02X", NALType) + " frame " + frameNumber + " " + calcDiff(buf.presentationTime));
+                                frameLog("Feed " + buffer.position() + " bytes " + String.format("%02X", NALType) + " frame " + frameNumber + " " + calcDiff(buf.presentationTime));
                                 decoder.queueInputBuffer(inIndex, 0, buffer.position(), buf.presentationTime, 0);
                             }
                             prevTimestamp = timestamp;
@@ -236,16 +237,24 @@ class DecoderThread extends Thread {
                     }
 
                     if (lastIndex >= 0) {
-                        Log.v(TAG, "render frame " + info.presentationTimeUs + " (" + (info.presentationTimeUs - timestamp) + ")" + " " + calcDiff(info.presentationTimeUs));
+                        frameLog("render frame " + info.presentationTimeUs + " (" + (info.presentationTimeUs - timestamp) + ")" + " " + calcDiff(info.presentationTimeUs));
                         decoder.releaseOutputBuffer(lastIndex, true);
                     }
                     break;
                 }
             }
 
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException | InterruptedException | IllegalStateException e) {
             e.printStackTrace();
             Log.v(TAG, "DecoderThread stopped by Exception.");
+        } finally {
+            if(decoder != null) {
+                try {
+                    decoder.stop();
+                    decoder.release();
+                }catch(IllegalStateException e){
+                }
+            }
         }
         Log.v(TAG, "DecoderThread stopped.");
     }

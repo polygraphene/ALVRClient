@@ -19,7 +19,9 @@ add_library( # Sets the name of the library.
              SHARED
 
              # Provides a relative path to your source file(s).
-             src/main/cpp/native-lib.cpp )
+             src/main/cpp/native-lib.cpp
+             src/main/cpp/vrapi.cpp
+              )
 
 link_directories(src/main/jniLibs/${ANDROID_ABI})
 
@@ -49,6 +51,10 @@ target_link_libraries( # Specifies the target library.
                        ${log-lib}
 
                        srt
-                       c++_shared)
+                       c++_shared
+                       vrapi
+                       GLESv3
+                       EGL
+                       android)
 
 include_directories(include)

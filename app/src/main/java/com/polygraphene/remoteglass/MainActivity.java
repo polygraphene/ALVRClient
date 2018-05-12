@@ -32,6 +32,7 @@ public class MainActivity extends AppCompatActivity {
     private List<MediaCodecInfo> AvcCodecInfoes = new ArrayList<>();
 
 
+    private boolean surfaceCreated = false;
     private boolean stopped = false;
     NALParser nalParser;
     StatisticsCounter counter = new StatisticsCounter();
@@ -39,6 +40,8 @@ public class MainActivity extends AppCompatActivity {
     private DecoderThread decoderThread;
     //private ReceiverThread receiverThread = new ReceiverThread();
     private SrtReceiverThread receiverThread;
+
+    private VrAPI vrAPI = new VrAPI();
 
     public Surface getSurface() {
         return mHolder.getSurface();
@@ -52,20 +55,34 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void surfaceCreated(final SurfaceHolder holder) {
+            Thread th = new Thread(){
+                @Override
+                public void run() {
+
+                    vrAPI.onSurfaceCreated(holder.getSurface(), MainActivity.this);
+                    while(true) {
+                        vrAPI.render();
+                    }
+                }
+            };
+            th.start();
+            /*
             try {
                 decoderThread.start();
                 receiverThread.start();
             } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
                 e.printStackTrace();
-            }
+            }*/
         }
 
         @Override
         public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+
         }
 
         @Override
         public void surfaceDestroyed(SurfaceHolder holder) {
+            vrAPI.onSurfaceDestroyed();
         }
 
     }
@@ -74,6 +91,10 @@ public class MainActivity extends AppCompatActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+
+        // Force the screen to stay on, rather than letting it dim and shut off
+        // while the user is watching a movie.
+        getWindow().addFlags( WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON );
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
 
@@ -114,9 +135,19 @@ public class MainActivity extends AppCompatActivity {
         stopped = true;
         if (decoderThread != null) {
             decoderThread.interrupt();
+            try {
+                decoderThread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
         if (receiverThread != null) {
             receiverThread.interrupt();
+            try {
+                receiverThread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
         decoderThread = null;
         receiverThread = null;
@@ -141,6 +172,15 @@ public class MainActivity extends AppCompatActivity {
         //receiverThread = new ReplayReceiverThread();
         receiverThread.setHost("10.1.0.2", 9944);
         decoderThread = new DecoderThread(this, receiverThread, AvcCodecInfoes.get(0));
+
+        if(surfaceCreated) {
+            try {
+                decoderThread.start();
+                receiverThread.start();
+            } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
 
