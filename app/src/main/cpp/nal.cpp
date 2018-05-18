@@ -1,22 +1,47 @@
+/// H.264 NAL Parser functions
+// Extract NAL Units from packet by UDP/SRT socket.
+////////////////////////////////////////////////////////////////////
+
 #include <jni.h>
 #include <string>
 #include <stdlib.h>
-#include <srt.h>
-#include <udt.h>
 #include <list>
+#include <android/log.h>
+#include <pthread.h>
+#include "nal.h"
+#include "utils.h"
 
-jfieldID buf_field = NULL;
-jfieldID sequence_field = NULL;
+bool initialized = false;
+
+// NAL parser status
 int parseState = 0;
 int parseSubState = 0;
+
+// Initial length of NAL buffer
+const int INITIAL_LENGTH = 30000;
+
+// NAL buffer
 jbyteArray currentBuf = NULL;
 char *cbuf = NULL;
 int bufferLength = 0;
 int bufferPos = 0;
-uint64_t presentationTime;
-const int INITIAL_LENGTH = 30000;
-JNIEnv *env_ = NULL;
 
+// Current NAL meta data from packet
+uint64_t presentationTime;
+uint64_t frameIndex;
+
+static JNIEnv *env_;
+
+// Parsed NAL queue
+struct NALBuffer {
+    jbyteArray array;
+    int len;
+    uint64_t presentationTime;
+    uint64_t frameIndex;
+};
+std::list<NALBuffer> nalList;
+
+// mutex for access to nalList
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 class MutexLock {
@@ -26,123 +51,29 @@ public:
     ~MutexLock() { pthread_mutex_unlock(&mutex); }
 };
 
-struct NALBuffer {
-    jbyteArray array;
-    int len;
-    uint64_t presentationTime;
-};
-std::list<NALBuffer> nalList;
+static static pthread_cond_t cond_nonzero =  PTHREAD_COND_INITIALIZER;
 
-void processPacket(char *buf, int len);
-
-extern "C"
-JNIEXPORT jint JNICALL
-Java_com_polygraphene_remoteglass_SrtReceiverThread_initializeSocket(JNIEnv *env, jobject instance,
-                                                                     jstring host_, jint port,
-                                                                     jbyteArray socket_) {
-    const char *host = env->GetStringUTFChars(host_, 0);
-    jbyte *socket_2 = env->GetByteArrayElements(socket_, NULL);
-    struct sockaddr_in addr;
-    int ret = 0;
-
-    parseState = 0;
-
-    srt_startup();
-
-    SRTSOCKET socket = srt_socket(AF_INET, SOCK_DGRAM, 0);
-    if (socket == SRT_INVALID_SOCK) {
-        *(SRTSOCKET *) socket_2 = SRT_INVALID_SOCK;
-        ret = 1;
-        goto end;
-    }
-
-    *(SRTSOCKET *) socket_2 = socket;
-
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-    inet_pton(addr.sin_family, host, &addr.sin_addr);
-
-    ret = srt_connect(socket, (struct sockaddr *) &addr, sizeof(addr));
-
-    pthread_mutex_init(&mutex, NULL);
-
-    end:
-
-    env->ReleaseStringUTFChars(host_, host);
-    env->ReleaseByteArrayElements(socket_, socket_2, 0);
-
-    if (ret != 0) {
-        srt_close(socket);
-        return ret;
-    }
-    return 0;
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_remoteglass_SrtReceiverThread_closeSocket(JNIEnv *env, jobject instance,
-                                                                jbyteArray socket_) {
-    jbyte *socket = env->GetByteArrayElements(socket_, NULL);
-
-    SRTSOCKET socket_2 = *(SRTSOCKET *) socket;
-    if (socket_2 != SRT_INVALID_SOCK) {
-        srt_close(socket_2);
-    }
-
-    env->ReleaseByteArrayElements(socket_, socket, 0);
-}
-
-extern "C"
-JNIEXPORT jint JNICALL
-Java_com_polygraphene_remoteglass_SrtReceiverThread_recv(JNIEnv *env, jobject instance,
-                                                         jbyteArray socket_, jobject packet) {
-    env_ = env;
-    jbyte *socket = env->GetByteArrayElements(socket_, NULL);
-    if (buf_field == NULL) {
-        jclass clazz = env->GetObjectClass(packet);
-        buf_field = env->GetFieldID(clazz, "buf", "[B");
-        sequence_field = env->GetFieldID(clazz, "sequence", "J");
-    }
-    jbyteArray buf_ = (jbyteArray) env->GetObjectField(packet, buf_field);
-
-    int len = env->GetArrayLength(buf_);
-    jbyte *buf = env->GetByteArrayElements(buf_, NULL);
-
-    SRTSOCKET socket_2 = *(SRTSOCKET *) socket;
-
-    if (socket_2 == SRT_INVALID_SOCK) {
-        return -1;
-    }
-
-    int ret = srt_recv(socket_2, (char *) buf, len);
-
-    processPacket((char *) buf, ret);
-
-    env->SetLongField(packet, sequence_field, *(uint32_t *) buf);
-
-    env->ReleaseByteArrayElements(buf_, buf, 0);
-    env->ReleaseByteArrayElements(socket_, socket, 0);
-
-    return ret;
-}
-
-void allocateBuffer(int length) {
+static void allocateBuffer(int length) {
     if (currentBuf != NULL) {
         env_->ReleaseByteArrayElements(currentBuf, (jbyte *) cbuf, 0);
         env_->DeleteGlobalRef(currentBuf);
     }
     currentBuf = env_->NewByteArray(length);
+    jobject tmp = currentBuf;
     currentBuf = (jbyteArray) env_->NewGlobalRef(currentBuf);
+    env_->DeleteLocalRef(tmp);
     bufferLength = length;
     bufferPos = 0;
 
     cbuf = (char *) env_->GetByteArrayElements(currentBuf, NULL);
 }
 
-void expandBuffer() {
+static void expandBuffer() {
     // Allocate new buffer
     jbyteArray newBuf = env_->NewByteArray(bufferLength * 2);
+    jobject tmp = newBuf;
     newBuf = (jbyteArray) env_->NewGlobalRef(newBuf);
+    env_->DeleteLocalRef(tmp);
     char *newcBuf = (char *) env_->GetByteArrayElements(newBuf, NULL);
 
     // Copy
@@ -160,21 +91,40 @@ void expandBuffer() {
     bufferLength = bufferLength * 2;
 }
 
-void append(char c) {
+static void append(char c) {
     if (bufferPos + 1 >= bufferLength) {
         expandBuffer();
     }
     cbuf[bufferPos++] = c;
 }
 
-void processPacket(char *buf, int len) {
-    uint32_t sequence = *(uint32_t *) buf;
-    int pos = sizeof(sequence);
+void initNAL() {
+    pthread_mutex_init(&mutex, NULL);
+    pthread_cond_init(&cond_nonzero, NULL);
 
-    if (sequence & (1 << 31)) {
-        sequence &= ~(1 << 31);
+    parseState = 0;
+    initialized = true;
+}
+
+bool processPacket(JNIEnv *env, char *buf, int len) {
+    if (!initialized) {
+        initNAL();
+    }
+
+    bool newNalParsed = false;
+
+    env_ = env;
+
+    uint32_t type = *(uint32_t *) buf;
+    int pos = sizeof(uint32_t);
+    uint32_t sequence = *(uint32_t *) (buf + pos);
+    pos += sizeof(uint32_t);
+
+    if (type == 1){
         presentationTime = *(uint64_t *) (buf + pos);
-        pos += 8;
+        pos += sizeof(uint64_t);
+        frameIndex = *(uint64_t *) (buf + pos);
+        pos += sizeof(uint64_t);
     }
 
     for (; pos < len; pos++) {
@@ -231,11 +181,16 @@ void processPacket(char *buf, int len) {
                         buf.len = bufferPos - 3;
                         buf.array = currentBuf;
                         buf.presentationTime = presentationTime;
+                        buf.frameIndex = frameIndex;
                         currentBuf = NULL;
+                        newNalParsed = true;
 
                         {
                             MutexLock lock;
+
                             nalList.push_back(buf);
+
+                            pthread_cond_broadcast(&cond_nonzero);
                         }
 
                         parseState = 4;
@@ -253,12 +208,17 @@ void processPacket(char *buf, int len) {
                         buf.len = bufferPos - 3;
                         buf.array = currentBuf;
                         buf.presentationTime = presentationTime;
+                        buf.frameIndex = frameIndex;
+                        newNalParsed = true;
 
                         env_->ReleaseByteArrayElements(currentBuf, (jbyte *) cbuf, 0);
                         currentBuf = NULL;
                         {
                             MutexLock lock;
+
                             nalList.push_back(buf);
+
+                            pthread_cond_broadcast(&cond_nonzero);
                         }
 
                         parseSubState = 0;
@@ -273,18 +233,49 @@ void processPacket(char *buf, int len) {
                 break;
         }
     }
+    return newNalParsed;
 }
 
-extern "C"
-JNIEXPORT jint JNICALL
-Java_com_polygraphene_remoteglass_SrtReceiverThread_getNalListSize(JNIEnv *env, jobject instance) {
-    MutexLock lock;
-    return nalList.size();
+
+jobject waitNal(JNIEnv *env) {
+    if (!initialized) {
+        initNAL();
+    }
+
+    NALBuffer buf;
+
+    while(true){
+        MutexLock lock;
+        pthread_cond_wait(&cond_nonzero, &mutex);
+        if (nalList.size() != 0) {
+            buf = nalList.front();
+            nalList.pop_front();
+            break;
+        }
+    }
+    jclass clazz = env->FindClass("com/polygraphene/remoteglass/NAL");
+    jmethodID ctor = env->GetMethodID(clazz, "<init>", "()V");
+
+    jobject nal = env->NewObject(clazz, ctor);
+    jfieldID len_ = env->GetFieldID(clazz, "len", "I");
+    jfieldID presentationTime_ = env->GetFieldID(clazz, "presentationTime", "J");
+    jfieldID frameIndex_ = env->GetFieldID(clazz, "frameIndex", "J");
+    jfieldID buf_ = env->GetFieldID(clazz, "buf", "[B");
+
+    env->SetIntField(nal, len_, buf.len);
+    env->SetLongField(nal, presentationTime_, buf.presentationTime);
+    env->SetLongField(nal, frameIndex_, buf.frameIndex);
+    env->SetObjectField(nal, buf_, env->NewLocalRef(buf.array));
+    env->DeleteGlobalRef(buf.array);
+
+    return nal;
 }
 
-extern "C"
-JNIEXPORT jobject JNICALL
-Java_com_polygraphene_remoteglass_SrtReceiverThread_getNal(JNIEnv *env, jobject instance) {
+jobject getNal(JNIEnv *env) {
+    if (!initialized) {
+        initNAL();
+    }
+
     NALBuffer buf;
     {
         MutexLock lock;
@@ -300,19 +291,62 @@ Java_com_polygraphene_remoteglass_SrtReceiverThread_getNal(JNIEnv *env, jobject 
     jobject nal = env->NewObject(clazz, ctor);
     jfieldID len_ = env->GetFieldID(clazz, "len", "I");
     jfieldID presentationTime_ = env->GetFieldID(clazz, "presentationTime", "J");
+    jfieldID frameIndex_ = env->GetFieldID(clazz, "frameIndex", "J");
     jfieldID buf_ = env->GetFieldID(clazz, "buf", "[B");
 
     env->SetIntField(nal, len_, buf.len);
     env->SetLongField(nal, presentationTime_, buf.presentationTime);
-    env->SetObjectField(nal, buf_, buf.array);
+    env->SetLongField(nal, frameIndex_, buf.frameIndex);
+    env->SetObjectField(nal, buf_, env->NewLocalRef(buf.array));
     env->DeleteGlobalRef(buf.array);
 
     return nal;
 }
 
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_remoteglass_SrtReceiverThread_flushNALList(JNIEnv *env, jobject instance) {
+jobject peekNal(JNIEnv *env) {
+    if (!initialized) {
+        initNAL();
+    }
+
+    NALBuffer buf;
+    {
+        MutexLock lock;
+        if (nalList.size() == 0) {
+            return NULL;
+        }
+        buf = nalList.front();
+    }
+    jclass clazz = env->FindClass("com/polygraphene/remoteglass/NAL");
+    jmethodID ctor = env->GetMethodID(clazz, "<init>", "()V");
+
+    jobject nal = env->NewObject(clazz, ctor);
+    jfieldID len_ = env->GetFieldID(clazz, "len", "I");
+    jfieldID presentationTime_ = env->GetFieldID(clazz, "presentationTime", "J");
+    jfieldID frameIndex_ = env->GetFieldID(clazz, "frameIndex", "J");
+    jfieldID buf_ = env->GetFieldID(clazz, "buf", "[B");
+
+    env->SetIntField(nal, len_, buf.len);
+    env->SetLongField(nal, presentationTime_, buf.presentationTime);
+    env->SetLongField(nal, frameIndex_, buf.frameIndex);
+    env->SetObjectField(nal, buf_, env->NewLocalRef(buf.array));
+
+    return nal;
+}
+
+
+int getNalListSize() {
+    if (!initialized) {
+        initNAL();
+    }
+    MutexLock lock;
+    return nalList.size();
+}
+
+
+void flushNalList(JNIEnv *env) {
+    if (!initialized) {
+        initNAL();
+    }
     MutexLock lock;
     for (auto it = nalList.begin();
          it != nalList.end(); ++it) {

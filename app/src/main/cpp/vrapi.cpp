@@ -9,11 +9,15 @@
 #include <VrApi_Types.h>
 #include <VrApi_Helpers.h>
 #include <VrApi_SystemUtils.h>
+#include "utils.h"
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES3/gl3.h>
 #include <GLES3/gl3ext.h>
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
+
 #define CHECK_GL_ERRORS 1
 #if !defined( EGL_OPENGL_ES3_BIT_KHR )
 #define EGL_OPENGL_ES3_BIT_KHR		0x0040
@@ -90,6 +94,8 @@ static const int NUM_MULTI_SAMPLES = 4;
 ANativeWindow *window = NULL;
 ovrMobile *Ovr;
 bool UseMultiview = true;
+GLuint SurfaceTextureID = 0;
+int enableTestMode = 0;
 
 static double GetTimeInSeconds() {
     struct timespec now;
@@ -189,34 +195,36 @@ static const char *GlFrameBufferStatusString(GLenum status) {
 
 #ifdef CHECK_GL_ERRORS
 
-static const char * GlErrorString( GLenum error )
-{
-    switch ( error )
-    {
-        case GL_NO_ERROR:						return "GL_NO_ERROR";
-        case GL_INVALID_ENUM:					return "GL_INVALID_ENUM";
-        case GL_INVALID_VALUE:					return "GL_INVALID_VALUE";
-        case GL_INVALID_OPERATION:				return "GL_INVALID_OPERATION";
-        case GL_INVALID_FRAMEBUFFER_OPERATION:	return "GL_INVALID_FRAMEBUFFER_OPERATION";
-        case GL_OUT_OF_MEMORY:					return "GL_OUT_OF_MEMORY";
-        default: return "unknown";
+static const char *GlErrorString(GLenum error) {
+    switch (error) {
+        case GL_NO_ERROR:
+            return "GL_NO_ERROR";
+        case GL_INVALID_ENUM:
+            return "GL_INVALID_ENUM";
+        case GL_INVALID_VALUE:
+            return "GL_INVALID_VALUE";
+        case GL_INVALID_OPERATION:
+            return "GL_INVALID_OPERATION";
+        case GL_INVALID_FRAMEBUFFER_OPERATION:
+            return "GL_INVALID_FRAMEBUFFER_OPERATION";
+        case GL_OUT_OF_MEMORY:
+            return "GL_OUT_OF_MEMORY";
+        default:
+            return "unknown";
     }
 }
 
-static void GLCheckErrors( int line )
-{
-    for ( int i = 0; i < 10; i++ )
-    {
+static void GLCheckErrors(int line) {
+    for (int i = 0; i < 10; i++) {
         const GLenum error = glGetError();
-        if ( error == GL_NO_ERROR )
-        {
+        if (error == GL_NO_ERROR) {
             break;
         }
-        ALOGE( "GL error on line %d: %s", line, GlErrorString( error ) );
+        ALOGE("GL error on line %d: %s", line, GlErrorString(error));
     }
 }
 
-#define GL( func )		func; GLCheckErrors( __LINE__ );
+#define GL(func)        func; GLCheckErrors( __LINE__ );
 
 #else // CHECK_GL_ERRORS
 
@@ -240,24 +248,43 @@ static const char VERTEX_SHADER[] =
                 "in vec3 vertexPosition;\n"
                 "in vec4 vertexColor;\n"
                 "in mat4 vertexTransform;\n"
-                "uniform SceneMatrices\n"
-                "{\n"
-                "	uniform mat4 ViewMatrix[NUM_VIEWS];\n"
-                "	uniform mat4 ProjectionMatrix[NUM_VIEWS];\n"
-                "} sm;\n"
+                "in vec2 vertexUv;\n"
+                "uniform mat4 TestModeMatrix[NUM_VIEWS];\n"
+                "uniform int EnableTestMode;\n"
                 "out vec4 fragmentColor;\n"
+                "out vec2 uv;\n"
                 "void main()\n"
                 "{\n"
-                "	gl_Position = sm.ProjectionMatrix[VIEW_ID] * ( sm.ViewMatrix[VIEW_ID] * ( vertexTransform * vec4( vertexPosition, 1.0 ) ) );\n"
-                "	fragmentColor = vertexColor;\n"
+                "	gl_Position = TestModeMatrix[VIEW_ID] * vec4( vertexPosition, 1.0 );\n"
+                "if(EnableTestMode == 2){"
+                "gl_Position.z=0.5;}\n"
+                "   if(VIEW_ID == uint(0)){\n"
+                "      uv = vec2(vertexUv.x, vertexUv.y);\n"
+                "   }else{\n"
+                "      uv = vec2(vertexUv.x + 0.5, vertexUv.y);\n"
+                "   }\n"
+                "   fragmentColor = vertexColor;\n"
                 "}\n";
 
 static const char FRAGMENT_SHADER[] =
-        "in lowp vec4 fragmentColor;\n"
+        "#extension GL_OES_EGL_image_external_essl3 : require\n"
+                "#extension GL_OES_EGL_image_external : require\n"
+                "in lowp vec2 uv;\n"
+                "in lowp vec4 fragmentColor;\n"
                 "out lowp vec4 outColor;\n"
+                "uniform samplerExternalOES sTexture;\n"
+                "uniform int EnableTestMode;\n"
                 "void main()\n"
                 "{\n"
-                "	outColor = fragmentColor;\n"
+                //"if(uv.x < 0.05 || uv.x > 0.95){outColor=vec4(0.0, 0.0, 1.0, 1.0);}else if(uv.x>0.45 && uv.x < 0.55){outColor=vec4(1.0, 0.0, 0.0, 1.0);}else{"
+                "   if(EnableTestMode == 0){\n"
+                "	    outColor = texture(sTexture, uv);\n"
+                "   } else if(EnableTestMode <= 0) {\n"
+                "       outColor = texture(sTexture, uv);\n"
+                "   } else {\n"
+                "       outColor = fragmentColor;\n"
+                "   }\n"
+                //"	outColor = vec4(0.5, 0.7, 0.2, 1.0);\n"
                 "}\n";
 
 struct {
@@ -652,12 +679,13 @@ typedef struct {
     const GLvoid *Pointer;
 } ovrVertexAttribPointer;
 
-#define MAX_VERTEX_ATTRIB_POINTERS        3
+#define MAX_VERTEX_ATTRIB_POINTERS        4
 
 typedef struct {
     GLuint VertexBuffer;
     GLuint IndexBuffer;
     GLuint VertexArrayObject;
+    GLuint VertexUVBuffer;
     int VertexCount;
     int IndexCount;
     ovrVertexAttribPointer VertexAttribs[MAX_VERTEX_ATTRIB_POINTERS];
@@ -697,32 +725,89 @@ static void ovrGeometry_Clear(ovrGeometry *geometry) {
 
 static void ovrGeometry_CreateCube(ovrGeometry *geometry) {
     typedef struct {
-        signed char positions[8][4];
-        unsigned char colors[8][4];
+        float positions[4][4];
+        float uv[4][2];
     } ovrCubeVertices;
 
     static const ovrCubeVertices cubeVertices =
             {
                     // positions
                     {
-                            {-126, +127, -126, +127}, {+127, +127, -126, +127}, {+127, +127, +127, +127}, {-126, +127, +127, +127},    // top
-                            {-126, -126, -126, +127}, {-126, -126, +127, +127}, {+127, -126, +127, +127}, {+127, -126, -126, +127}    // bottom
+                            {-1, -1, 0.0, 1}, {1, 1, 0, 1}, {1, -1, 0, 1}, {-1, 1, 0, 1}
+                    },
+                    // uv
+                    {       {0, 1},       {0.5, 0},       {0.5, 1},       {0, 0}}
+            };
+
+    static const unsigned short cubeIndices[6] =
+            {
+                    0, 2, 1, 0, 1, 3,
+            };
+
+
+    geometry->VertexCount = 4;
+    geometry->IndexCount = 6;
+
+    geometry->VertexAttribs[0].Index = VERTEX_ATTRIBUTE_LOCATION_POSITION;
+    geometry->VertexAttribs[0].Size = 4;
+    geometry->VertexAttribs[0].Type = GL_FLOAT;
+    geometry->VertexAttribs[0].Normalized = true;
+    geometry->VertexAttribs[0].Stride = sizeof(cubeVertices.positions[0]);
+    geometry->VertexAttribs[0].Pointer = (const GLvoid *) offsetof(ovrCubeVertices, positions);
+
+    geometry->VertexAttribs[1].Index = VERTEX_ATTRIBUTE_LOCATION_UV;
+    geometry->VertexAttribs[1].Size = 2;
+    geometry->VertexAttribs[1].Type = GL_FLOAT;
+    geometry->VertexAttribs[1].Normalized = true;
+    geometry->VertexAttribs[1].Stride = 8;
+    geometry->VertexAttribs[1].Pointer = (const GLvoid *) offsetof(ovrCubeVertices, uv);
+
+    GL(glGenBuffers(1, &geometry->VertexBuffer));
+    GL(glBindBuffer(GL_ARRAY_BUFFER, geometry->VertexBuffer));
+    GL(glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), &cubeVertices, GL_STATIC_DRAW));
+    GL(glBindBuffer(GL_ARRAY_BUFFER, 0));
+
+    GL(glGenBuffers(1, &geometry->IndexBuffer));
+    GL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, geometry->IndexBuffer));
+    GL(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndices), cubeIndices, GL_STATIC_DRAW));
+    GL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
+}
+
+static void ovrGeometry_CreateTestMode(ovrGeometry *geometry) {
+    typedef struct
+    {
+        float positions[8][4];
+        unsigned char colors[8][4];
+        float uv[8][2];
+    } ovrCubeVertices;
+
+    static const ovrCubeVertices cubeVertices =
+            {
+                    // positions
+                    {
+                            { -0.5, +0.5, -0.5, +0.5 }, { +0.5, +0.5, -0.5, +0.5 }, { +0.5, +0.5, +0.5, +0.5 }, { -0.5, +0.5, +0.5, +0.5 },	// top
+                            { -0.5, -0.5, -0.5, +0.5 }, { -0.5, -0.5, +0.5, +0.5 }, { +0.5, -0.5, +0.5, +0.5 }, { +0.5, -0.5, -0.5, +0.5 }	// bottom
                     },
                     // colors
                     {
-                            {255,  0,    255,  255},  {0,    255,  0,    255},  {0,    0,    255,  255},  {255,  0,    0,    255},
-                            {0,    0,    255,  255},  {0,    255,  0,    255},  {255,  0,    255,  255},  {255,  0,    0,    255}
+                            { 255,   0, 255, 255 }, {   0, 255,   0, 255 }, {   0,   0, 255, 255 }, { 255,   0,   0, 255 },
+                            {   0,   0, 255, 255 }, {   0, 255,   0, 255 }, { 255,   0, 255, 255 }, { 255,   0,   0, 255 }
                     },
+                    // uv
+                    {
+                            {0, 1},       {0.5, 0},       {0.5, 1},       {0, 0},
+                            {0, 1},       {0.5, 0},       {0.5, 1},       {0, 0},
+                    }
             };
 
     static const unsigned short cubeIndices[36] =
             {
-                    0, 2, 1, 2, 0, 3,    // top
-                    4, 6, 5, 6, 4, 7,    // bottom
-                    2, 6, 7, 7, 1, 2,    // right
-                    0, 4, 5, 5, 3, 0,    // left
-                    3, 5, 6, 6, 2, 3,    // front
-                    0, 1, 7, 7, 4, 0    // back
+                    0, 2, 1, 2, 0, 3,	// top
+                    4, 6, 5, 6, 4, 7,	// bottom
+                    2, 6, 7, 7, 1, 2,	// right
+                    0, 4, 5, 5, 3, 0,	// left
+                    3, 5, 6, 6, 2, 3,	// front
+                    0, 1, 7, 7, 4, 0	// back
             };
 
     geometry->VertexCount = 8;
@@ -730,17 +815,24 @@ static void ovrGeometry_CreateCube(ovrGeometry *geometry) {
 
     geometry->VertexAttribs[0].Index = VERTEX_ATTRIBUTE_LOCATION_POSITION;
     geometry->VertexAttribs[0].Size = 4;
-    geometry->VertexAttribs[0].Type = GL_BYTE;
+    geometry->VertexAttribs[0].Type = GL_FLOAT;
     geometry->VertexAttribs[0].Normalized = true;
-    geometry->VertexAttribs[0].Stride = sizeof(cubeVertices.positions[0]);
-    geometry->VertexAttribs[0].Pointer = (const GLvoid *) offsetof(ovrCubeVertices, positions);
+    geometry->VertexAttribs[0].Stride = sizeof( cubeVertices.positions[0] );
+    geometry->VertexAttribs[0].Pointer = (const GLvoid *)offsetof( ovrCubeVertices, positions );
 
     geometry->VertexAttribs[1].Index = VERTEX_ATTRIBUTE_LOCATION_COLOR;
     geometry->VertexAttribs[1].Size = 4;
     geometry->VertexAttribs[1].Type = GL_UNSIGNED_BYTE;
     geometry->VertexAttribs[1].Normalized = true;
-    geometry->VertexAttribs[1].Stride = sizeof(cubeVertices.colors[0]);
-    geometry->VertexAttribs[1].Pointer = (const GLvoid *) offsetof(ovrCubeVertices, colors);
+    geometry->VertexAttribs[1].Stride = sizeof( cubeVertices.colors[0] );
+    geometry->VertexAttribs[1].Pointer = (const GLvoid *)offsetof( ovrCubeVertices, colors );
+
+    geometry->VertexAttribs[2].Index = VERTEX_ATTRIBUTE_LOCATION_UV;
+    geometry->VertexAttribs[2].Size = 2;
+    geometry->VertexAttribs[2].Type = GL_FLOAT;
+    geometry->VertexAttribs[2].Normalized = true;
+    geometry->VertexAttribs[2].Stride = 8;
+    geometry->VertexAttribs[2].Pointer = (const GLvoid *) offsetof(ovrCubeVertices, uv);
 
     GL(glGenBuffers(1, &geometry->VertexBuffer));
     GL(glBindBuffer(GL_ARRAY_BUFFER, geometry->VertexBuffer));
@@ -809,9 +901,9 @@ typedef struct {
 } ovrProgram;
 
 enum E1test {
-    UNIFORM_MODEL_MATRIX,
     UNIFORM_VIEW_ID,
-    UNIFORM_SCENE_MATRICES,
+    UNIFORM_TEST_MODE_MATRIX,
+    UNIFORM_ENABLE_TEST_MODE,
 };
 enum E2test {
     UNIFORM_TYPE_VECTOR4,
@@ -827,19 +919,10 @@ typedef struct {
 
 static ovrUniform ProgramUniforms[] =
         {
-                {UNIFORM_MODEL_MATRIX,   UNIFORM_TYPE_MATRIX4X4, "ModelMatrix"},
                 {UNIFORM_VIEW_ID,        UNIFORM_TYPE_INT,       "ViewID"},
-                {UNIFORM_SCENE_MATRICES, UNIFORM_TYPE_BUFFER,    "SceneMatrices"},
+                {UNIFORM_TEST_MODE_MATRIX,   UNIFORM_TYPE_MATRIX4X4, "TestModeMatrix"},
+                {UNIFORM_ENABLE_TEST_MODE,   UNIFORM_TYPE_INT, "EnableTestMode"},
         };
-
-static void ovrProgram_Clear(ovrProgram *program) {
-    program->Program = 0;
-    program->VertexShader = 0;
-    program->FragmentShader = 0;
-    memset(program->UniformLocation, 0, sizeof(program->UniformLocation));
-    memset(program->UniformBinding, 0, sizeof(program->UniformBinding));
-    memset(program->Textures, 0, sizeof(program->Textures));
-}
 
 static const char *programVersion = "#version 300 es\n";
 
@@ -849,7 +932,7 @@ ovrProgram_Create(ovrProgram *program, const char *vertexSource, const char *fra
     GLint r;
 
     GL(program->VertexShader = glCreateShader(GL_VERTEX_SHADER));
-    if(program->VertexShader == 0){
+    if (program->VertexShader == 0) {
         ALOGE("glCreateShader error: %d", glGetError());
         return false;
     }
@@ -951,189 +1034,6 @@ static void ovrProgram_Destroy(ovrProgram *program) {
     }
 }
 
-#define NUM_INSTANCES        1500
-#define NUM_ROTATIONS        16
-
-typedef struct {
-    bool CreatedScene;
-    bool CreatedVAOs;
-    unsigned int Random;
-    ovrProgram Program;
-    ovrGeometry Cube;
-    GLuint SceneMatrices;
-    GLuint InstanceTransformBuffer;
-    ovrVector3f Rotations[NUM_ROTATIONS];
-    ovrVector3f CubePositions[NUM_INSTANCES];
-    int CubeRotations[NUM_INSTANCES];
-} ovrScene;
-
-static void ovrScene_Clear(ovrScene *scene) {
-    scene->CreatedScene = false;
-    scene->CreatedVAOs = false;
-    scene->Random = 2;
-    scene->SceneMatrices = 0;
-    scene->InstanceTransformBuffer = 0;
-
-    ovrProgram_Clear(&scene->Program);
-    ovrGeometry_Clear(&scene->Cube);
-}
-
-static bool ovrScene_IsCreated(ovrScene *scene) {
-    return scene->CreatedScene;
-}
-
-static void ovrScene_CreateVAOs(ovrScene *scene) {
-    if (!scene->CreatedVAOs) {
-        ovrGeometry_CreateVAO(&scene->Cube);
-
-        // Modify the VAO to use the instance transform attributes.
-        GL(glBindVertexArray(scene->Cube.VertexArrayObject));
-        GL(glBindBuffer(GL_ARRAY_BUFFER, scene->InstanceTransformBuffer));
-        for (int i = 0; i < 4; i++) {
-            GL(glEnableVertexAttribArray(VERTEX_ATTRIBUTE_LOCATION_TRANSFORM + i));
-            GL(glVertexAttribPointer(VERTEX_ATTRIBUTE_LOCATION_TRANSFORM + i, 4, GL_FLOAT,
-                                     false, 4 * 4 * sizeof(float),
-                                     (void *) (i * 4 * sizeof(float))));
-            GL(glVertexAttribDivisor(VERTEX_ATTRIBUTE_LOCATION_TRANSFORM + i, 1));
-        }
-        GL(glBindVertexArray(0));
-
-        scene->CreatedVAOs = true;
-    }
-}
-
-static void ovrScene_DestroyVAOs(ovrScene *scene) {
-    if (scene->CreatedVAOs) {
-        ovrGeometry_DestroyVAO(&scene->Cube);
-
-        scene->CreatedVAOs = false;
-    }
-}
-
-// Returns a random float in the range [0, 1].
-static float ovrScene_RandomFloat(ovrScene *scene) {
-    scene->Random = 1664525L * scene->Random + 1013904223L;
-    unsigned int rf = 0x3F800000 | (scene->Random & 0x007FFFFF);
-    return (*(float *) &rf) - 1.0f;
-}
-
-static void ovrScene_Create(ovrScene *scene, bool useMultiview) {
-    ovrProgram_Create(&scene->Program, VERTEX_SHADER, FRAGMENT_SHADER, useMultiview);
-    ovrGeometry_CreateCube(&scene->Cube);
-
-    // Create the instance transform attribute buffer.
-    GL(glGenBuffers(1, &scene->InstanceTransformBuffer));
-    GL(glBindBuffer(GL_ARRAY_BUFFER, scene->InstanceTransformBuffer));
-    GL(glBufferData(GL_ARRAY_BUFFER, NUM_INSTANCES * 4 * 4 * sizeof(float), NULL, GL_DYNAMIC_DRAW));
-    GL(glBindBuffer(GL_ARRAY_BUFFER, 0));
-
-    // Setup the scene matrices.
-    GL(glGenBuffers(1, &scene->SceneMatrices));
-    GL(glBindBuffer(GL_UNIFORM_BUFFER, scene->SceneMatrices));
-    GL(glBufferData(GL_UNIFORM_BUFFER, 2 * sizeof(ovrMatrix4f) /* 2 view matrices */ +
-                                       2 * sizeof(ovrMatrix4f) /* 2 projection matrices */,
-                    NULL, GL_STATIC_DRAW));
-    GL(glBindBuffer(GL_UNIFORM_BUFFER, 0));
-
-    // Setup random rotations.
-    for (int i = 0; i < NUM_ROTATIONS; i++) {
-        scene->Rotations[i].x = ovrScene_RandomFloat(scene);
-        scene->Rotations[i].y = ovrScene_RandomFloat(scene);
-        scene->Rotations[i].z = ovrScene_RandomFloat(scene);
-    }
-
-    // Setup random cube positions and rotations.
-    for (int i = 0; i < NUM_INSTANCES; i++) {
-        // Using volatile keeps the compiler from optimizing away multiple calls to ovrScene_RandomFloat().
-        volatile float rx, ry, rz;
-        for (;;) {
-            rx = (ovrScene_RandomFloat(scene) - 0.5f) * (50.0f + sqrt(NUM_INSTANCES));
-            ry = (ovrScene_RandomFloat(scene) - 0.5f) * (50.0f + sqrt(NUM_INSTANCES));
-            rz = (ovrScene_RandomFloat(scene) - 0.5f) * (50.0f + sqrt(NUM_INSTANCES));
-            // If too close to 0,0,0
-            if (fabsf(rx) < 4.0f && fabsf(ry) < 4.0f && fabsf(rz) < 4.0f) {
-                continue;
-            }
-            // Test for overlap with any of the existing cubes.
-            bool overlap = false;
-            for (int j = 0; j < i; j++) {
-                if (fabsf(rx - scene->CubePositions[j].x) < 4.0f &&
-                    fabsf(ry - scene->CubePositions[j].y) < 4.0f &&
-                    fabsf(rz - scene->CubePositions[j].z) < 4.0f) {
-                    overlap = true;
-                    break;
-                }
-            }
-            if (!overlap) {
-                break;
-            }
-        }
-
-        // Insert into list sorted based on distance.
-        int insert = 0;
-        const float distSqr = rx * rx + ry * ry + rz * rz;
-        for (int j = i; j > 0; j--) {
-            const ovrVector3f *otherPos = &scene->CubePositions[j - 1];
-            const float otherDistSqr = otherPos->x * otherPos->x + otherPos->y * otherPos->y +
-                                       otherPos->z * otherPos->z;
-            if (distSqr > otherDistSqr) {
-                insert = j;
-                break;
-            }
-            scene->CubePositions[j] = scene->CubePositions[j - 1];
-            scene->CubeRotations[j] = scene->CubeRotations[j - 1];
-        }
-
-        scene->CubePositions[insert].x = rx;
-        scene->CubePositions[insert].y = ry;
-        scene->CubePositions[insert].z = rz;
-
-        scene->CubeRotations[insert] = (int) (ovrScene_RandomFloat(scene) * (NUM_ROTATIONS - 0.1f));
-    }
-
-    scene->CreatedScene = true;
-
-#if !MULTI_THREADED
-    ovrScene_CreateVAOs(scene);
-#endif
-}
-
-static void ovrScene_Destroy(ovrScene *scene) {
-#if !MULTI_THREADED
-    ovrScene_DestroyVAOs(scene);
-#endif
-
-    ovrProgram_Destroy(&scene->Program);
-    ovrGeometry_Destroy(&scene->Cube);
-    GL(glDeleteBuffers(1, &scene->InstanceTransformBuffer));
-    GL(glDeleteBuffers(1, &scene->SceneMatrices));
-    scene->CreatedScene = false;
-}
-
-/*
-================================================================================
-
-ovrSimulation
-
-================================================================================
-*/
-
-typedef struct {
-    ovrVector3f CurrentRotation;
-} ovrSimulation;
-
-static void ovrSimulation_Clear(ovrSimulation *simulation) {
-    simulation->CurrentRotation.x = 0.0f;
-    simulation->CurrentRotation.y = 0.0f;
-    simulation->CurrentRotation.z = 0.0f;
-}
-
-static void ovrSimulation_Advance(ovrSimulation *simulation, double elapsedDisplayTime) {
-    // Update rotation.
-    simulation->CurrentRotation.x = (float) (elapsedDisplayTime);
-    simulation->CurrentRotation.y = (float) (elapsedDisplayTime);
-    simulation->CurrentRotation.z = (float) (elapsedDisplayTime);
-}
 
 /*
 ================================================================================
@@ -1142,6 +1042,19 @@ ovrRenderer
 
 ================================================================================
 */
+
+
+
+ovrJava java;
+int SwapInterval = 1;
+bool CreatedScene = false;
+ovrProgram Program;
+ovrGeometry Cube;
+ovrGeometry TestMode;
+
+double startTime;
+uint64_t FrameIndex = 0;
+
 
 static int MAX_FENCES = 4;
 
@@ -1195,79 +1108,9 @@ static void ovrRenderer_Destroy(ovrRenderer *renderer) {
 }
 
 static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava *java,
-                                                   const ovrScene *scene,
-                                                   const ovrSimulation *simulation,
                                                    const ovrTracking2 *tracking, ovrMobile *ovr,
-                                                   unsigned long long *completionFence) {
-    ovrMatrix4f rotationMatrices[NUM_ROTATIONS];
-    for (int i = 0; i < NUM_ROTATIONS; i++) {
-        rotationMatrices[i] = ovrMatrix4f_CreateRotation(
-                scene->Rotations[i].x * simulation->CurrentRotation.x,
-                scene->Rotations[i].y * simulation->CurrentRotation.y,
-                scene->Rotations[i].z * simulation->CurrentRotation.z);
-    }
-
-    // Update the instance transform attributes.
-    GL(glBindBuffer(GL_ARRAY_BUFFER, scene->InstanceTransformBuffer));
-    GL(ovrMatrix4f *cubeTransforms = (ovrMatrix4f *) glMapBufferRange(GL_ARRAY_BUFFER, 0,
-                                                                      NUM_INSTANCES *
-                                                                      sizeof(ovrMatrix4f),
-                                                                      GL_MAP_WRITE_BIT |
-               GL_MAP_INVALIDATE_BUFFER_BIT ));
-    for (int i = 0; i < NUM_INSTANCES; i++) {
-        const int index = scene->CubeRotations[i];
-
-        // Write in order in case the mapped buffer lives on write-combined memory.
-        cubeTransforms[i].M[0][0] = rotationMatrices[index].M[0][0];
-        cubeTransforms[i].M[0][1] = rotationMatrices[index].M[0][1];
-        cubeTransforms[i].M[0][2] = rotationMatrices[index].M[0][2];
-        cubeTransforms[i].M[0][3] = rotationMatrices[index].M[0][3];
-
-        cubeTransforms[i].M[1][0] = rotationMatrices[index].M[1][0];
-        cubeTransforms[i].M[1][1] = rotationMatrices[index].M[1][1];
-        cubeTransforms[i].M[1][2] = rotationMatrices[index].M[1][2];
-        cubeTransforms[i].M[1][3] = rotationMatrices[index].M[1][3];
-
-        cubeTransforms[i].M[2][0] = rotationMatrices[index].M[2][0];
-        cubeTransforms[i].M[2][1] = rotationMatrices[index].M[2][1];
-        cubeTransforms[i].M[2][2] = rotationMatrices[index].M[2][2];
-        cubeTransforms[i].M[2][3] = rotationMatrices[index].M[2][3];
-
-        cubeTransforms[i].M[3][0] = scene->CubePositions[i].x;
-        cubeTransforms[i].M[3][1] = scene->CubePositions[i].y;
-        cubeTransforms[i].M[3][2] = scene->CubePositions[i].z;
-        cubeTransforms[i].M[3][3] = 1.0f;
-    }
-    GL(glUnmapBuffer(GL_ARRAY_BUFFER));
-    GL(glBindBuffer(GL_ARRAY_BUFFER, 0));
-
+                                                   unsigned long long *completionFence, float time) {
     ovrTracking2 updatedTracking = *tracking;
-
-    ovrMatrix4f eyeViewMatrixTransposed[2];
-    eyeViewMatrixTransposed[0] = ovrMatrix4f_Transpose(&updatedTracking.Eye[0].ViewMatrix);
-    eyeViewMatrixTransposed[1] = ovrMatrix4f_Transpose(&updatedTracking.Eye[1].ViewMatrix);
-
-    ovrMatrix4f projectionMatrixTransposed[2];
-    projectionMatrixTransposed[0] = ovrMatrix4f_Transpose(&updatedTracking.Eye[0].ProjectionMatrix);
-    projectionMatrixTransposed[1] = ovrMatrix4f_Transpose(&updatedTracking.Eye[1].ProjectionMatrix);
-
-    // Update the scene matrices.
-    GL(glBindBuffer(GL_UNIFORM_BUFFER, scene->SceneMatrices));
-    GL(ovrMatrix4f *sceneMatrices = (ovrMatrix4f *) glMapBufferRange(GL_UNIFORM_BUFFER, 0,
-                                                                     2 *
-                                                                     sizeof(ovrMatrix4f) /* 2 view matrices */ +
-                                                                     2 *
-                                                                     sizeof(ovrMatrix4f) /* 2 projection matrices */,
-               GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT ));
-
-    if (sceneMatrices != NULL) {
-        memcpy((char *) sceneMatrices, &eyeViewMatrixTransposed, 2 * sizeof(ovrMatrix4f));
-        memcpy((char *) sceneMatrices + 2 * sizeof(ovrMatrix4f), &projectionMatrixTransposed,
-               2 * sizeof(ovrMatrix4f));
-    }
-
-    GL(glUnmapBuffer(GL_UNIFORM_BUFFER));
-    GL(glBindBuffer(GL_UNIFORM_BUFFER, 0));
 
     ovrLayerProjection2 layer = vrapi_DefaultLayerProjection2();
     layer.HeadPose = updatedTracking.HeadPose;
@@ -1280,6 +1123,10 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
     }
     layer.Header.Flags |= VRAPI_FRAME_LAYER_FLAG_CHROMATIC_ABERRATION_CORRECTION;
 
+
+    ovrFramebuffer *frameBuffer = &renderer->FrameBuffer[0];
+    ovrFramebuffer_SetCurrent(frameBuffer);
+
     // Render the eye images.
     for (int eye = 0; eye < renderer->NumBuffers; eye++) {
         // NOTE: In the non-mv case, latency can be further reduced by updating the sensor prediction
@@ -1287,14 +1134,11 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
         ovrFramebuffer *frameBuffer = &renderer->FrameBuffer[eye];
         ovrFramebuffer_SetCurrent(frameBuffer);
 
-        GL(glUseProgram(scene->Program.Program));
-        GL(glBindBufferBase(GL_UNIFORM_BUFFER,
-                            scene->Program.UniformBinding[UNIFORM_SCENE_MATRICES],
-                            scene->SceneMatrices));
-        if (scene->Program.UniformLocation[UNIFORM_VIEW_ID] >=
+        GL(glUseProgram(Program.Program));
+        if (Program.UniformLocation[UNIFORM_VIEW_ID] >=
             0)  // NOTE: will not be present when multiview path is enabled.
         {
-            GL(glUniform1i(scene->Program.UniformLocation[UNIFORM_VIEW_ID], eye));
+            GL(glUniform1i(Program.UniformLocation[UNIFORM_VIEW_ID], eye));
         }
         GL(glEnable(GL_SCISSOR_TEST));
         GL(glDepthMask(GL_TRUE));
@@ -1304,12 +1148,66 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
         GL(glCullFace(GL_BACK));
         GL(glViewport(0, 0, frameBuffer->Width, frameBuffer->Height));
         GL(glScissor(0, 0, frameBuffer->Width, frameBuffer->Height));
-        GL(glClearColor(0.125f, 0.0f, 0.125f, 1.0f));
+        GL(glClearColor(1.0f, 1.0f, 1.0f, 1.0f));
         GL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
-        GL(glBindVertexArray(scene->Cube.VertexArrayObject));
-        GL(glDrawElementsInstanced(GL_TRIANGLES, scene->Cube.IndexCount, GL_UNSIGNED_SHORT, NULL,
-                                   NUM_INSTANCES));
+
+        enableTestMode = 0;
+        GL(glUniform1i(Program.UniformLocation[UNIFORM_ENABLE_TEST_MODE], enableTestMode));
+        if(enableTestMode) {
+            int N = 20;
+            for(int i = 0; i < N; i++) {
+                ovrMatrix4f TestModeMatrix[2];
+                TestModeMatrix[0] = ovrMatrix4f_CreateIdentity();
+                if(i < 0) {
+                    ovrMatrix4f scale = ovrMatrix4f_CreateScale(10, 10, 10);
+                    TestModeMatrix[0] = ovrMatrix4f_Multiply(&scale, &TestModeMatrix[0]);
+                }
+                float theta = 2.0 * M_PI * i / (1.0 * N);
+                ovrMatrix4f translation = ovrMatrix4f_CreateTranslation(5.0 * cos(theta), 0, 5 * sin(theta));
+                TestModeMatrix[0] = ovrMatrix4f_Multiply(&translation, &TestModeMatrix[0]);
+
+                TestModeMatrix[1] = TestModeMatrix[0];
+
+                TestModeMatrix[0] = ovrMatrix4f_Multiply(&tracking->Eye[0].ViewMatrix,
+                                                         &TestModeMatrix[0]);
+                TestModeMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ViewMatrix,
+                                                         &TestModeMatrix[1]);
+                TestModeMatrix[0] = ovrMatrix4f_Multiply(&tracking->Eye[0].ProjectionMatrix,
+                                                         &TestModeMatrix[0]);
+                TestModeMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ProjectionMatrix,
+                                                         &TestModeMatrix[1]);
+
+                GL(glUniformMatrix4fv(Program.UniformLocation[UNIFORM_TEST_MODE_MATRIX], 2, true,
+                                      (float *) TestModeMatrix));
+                GL(glBindVertexArray(TestMode.VertexArrayObject));
+
+                if(i < 2){
+                    GL(glActiveTexture(GL_TEXTURE0));
+                    GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, SurfaceTextureID));
+                }else{
+                    GL(glActiveTexture(GL_TEXTURE0));
+                    GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
+                }
+
+                GL(glDrawElements(GL_TRIANGLES, TestMode.IndexCount, GL_UNSIGNED_SHORT, NULL));
+
+                //GL(glClearDepthf(0.5));
+            }
+        }else {
+            ovrMatrix4f TestModeMatrix[2];
+            TestModeMatrix[0] = ovrMatrix4f_CreateIdentity();
+            TestModeMatrix[1] = ovrMatrix4f_CreateIdentity();
+            GL(glUniformMatrix4fv(Program.UniformLocation[UNIFORM_TEST_MODE_MATRIX], 2, true, (float *)TestModeMatrix));
+
+            GL(glBindVertexArray(Cube.VertexArrayObject));
+
+            GL(glActiveTexture(GL_TEXTURE0));
+            GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, SurfaceTextureID));
+
+            GL(glDrawElements(GL_TRIANGLES, Cube.IndexCount, GL_UNSIGNED_SHORT, NULL));
+        }
         GL(glBindVertexArray(0));
+        GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
         GL(glUseProgram(0));
 
         // Explicitly clear the border texels to black when GL_CLAMP_TO_BORDER is not available.
@@ -1348,22 +1246,11 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
 
 
 ovrRenderer Renderer;
-ovrScene Scene;
-ovrSimulation Simulation;
-ovrJava java;
-int SwapInterval = 1;
 
 void onVrModeChange(JNIEnv *env) {
-
     eglInit();
 
-
     EglInitExtensions();
-
-    java.Env = env;
-    env->GetJavaVM(&java.Vm);
-    ovrModeParms parms = vrapi_DefaultModeParms(&java);
-
 
     const ovrInitParms initParms = vrapi_DefaultInitParms(&java);
     int32_t initResult = vrapi_Initialize(&initParms);
@@ -1379,6 +1266,7 @@ void onVrModeChange(JNIEnv *env) {
 
     ovrRenderer_Create(&Renderer, &java, UseMultiview);
 
+    ovrModeParms parms = vrapi_DefaultModeParms(&java);
 
     parms.Flags |= VRAPI_MODE_FLAG_RESET_WINDOW_FULLSCREEN;
 
@@ -1404,7 +1292,7 @@ void onVrModeChange(JNIEnv *env) {
 
     ALOGV("		vrapi_SetPerfThread( MAIN, %d )", gettid());
 
-
+    //vrapi_SetTrackingTransform( Ovr, vrapi_GetTrackingTransform( Ovr, VRAPI_TRACKING_TRANSFORM_SYSTEM_CENTER_FLOOR_LEVEL ) );
 }
 
 
@@ -1423,21 +1311,40 @@ Java_com_polygraphene_remoteglass_VrAPI_onSurfaceCreated(JNIEnv *env, jobject in
     }
     window = ANativeWindow_fromSurface(env, surface);
 
+    java.Env = env;
+    env->GetJavaVM(&java.Vm);
     java.ActivityObject = env->NewGlobalRef(activity);
     onVrModeChange(env);
+
+    GLuint textures[1];
+    glGenTextures(1, textures);
+
+    SurfaceTextureID = textures[0];
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, SurfaceTextureID);
+
+    glTexParameterf(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER,
+                    GL_NEAREST);
+    glTexParameterf(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER,
+                    GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S,
+                    GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T,
+                    GL_CLAMP_TO_EDGE);
+
+
 }
 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_remoteglass_VrAPI_onSurfaceDestroyed(JNIEnv *env, jobject instance) {
-
-#if MULTI_THREADED
-    ovrRenderThread_Destroy( &appState.RenderThread );
-#else
     ovrRenderer_Destroy(&Renderer);
-#endif
 
-    ovrScene_Destroy(&Scene);
+    ovrProgram_Destroy(&Program);
+    ovrGeometry_DestroyVAO(&Cube);
+    ovrGeometry_Destroy(&Cube);
+    ovrGeometry_DestroyVAO(&TestMode);
+    ovrGeometry_Destroy(&TestMode);
+    CreatedScene = false;
     //ovrEgl_DestroyContext( &appState.Egl );
 
     vrapi_Shutdown();
@@ -1450,15 +1357,13 @@ Java_com_polygraphene_remoteglass_VrAPI_onSurfaceDestroyed(JNIEnv *env, jobject 
 }
 
 
-double startTime;
-long long FrameIndex = 0;
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_remoteglass_VrAPI_render(JNIEnv *env, jobject instance) {
+Java_com_polygraphene_remoteglass_VrAPI_render(JNIEnv *env, jobject instance, jobject callback) {
 
     double DisplayTime = 0.0;
 
-    if (!ovrScene_IsCreated(&Scene)) {
+    if (!CreatedScene) {
         // Show a loading icon.
         int frameFlags = 0;
         frameFlags |= VRAPI_FRAME_FLAG_FLUSH;
@@ -1487,14 +1392,20 @@ Java_com_polygraphene_remoteglass_VrAPI_render(JNIEnv *env, jobject instance) {
         ovrResult res = vrapi_SubmitFrame2(Ovr, &frameDesc);
         ALOGV("vrapi_SubmitFrame2: %d", res);
 
-        // Create the scene.
-        ovrScene_Create(&Scene, UseMultiview);
+        ovrProgram_Create(&Program, VERTEX_SHADER, FRAGMENT_SHADER, UseMultiview);
+        ovrGeometry_CreateCube(&Cube);
+        ovrGeometry_CreateVAO(&Cube);
+        ovrGeometry_CreateTestMode(&TestMode);
+        ovrGeometry_CreateVAO(&TestMode);
+
+        CreatedScene = true;
 
         startTime = GetTimeInSeconds();
 
     }
     FrameIndex++;
 
+    double currentTime = GetTimeInSeconds();
 
 // Get the HMD pose, predicted for the middle of the time period during which
 // the new eye images will be displayed. The number of frames predicted ahead
@@ -1505,17 +1416,77 @@ Java_com_polygraphene_remoteglass_VrAPI_render(JNIEnv *env, jobject instance) {
 
     DisplayTime = predictedDisplayTime;
 
-// Advance the simulation based on the elapsed time since start of loop till predicted display time.
-    ovrSimulation_Advance(&Simulation, predictedDisplayTime
-                                       - startTime);
-
-
     unsigned long long completionFence = 0;
 
+
+    GL(glActiveTexture(GL_TEXTURE0));
+    GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
+    GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, SurfaceTextureID));
+
+    char *packet;
+    jbyteArray array = env->NewByteArray(2000);
+    packet = (char *) env->GetByteArrayElements(array, 0);
+
+    uint64_t clientTime = getTimestampUs();
+    int pos = 0;
+    int type = 2;
+    memcpy(packet + pos, &type, 4);
+    pos += 4;
+    memcpy(packet + pos, &clientTime, sizeof(uint64_t));
+    pos += sizeof(uint64_t);
+    memcpy(packet + pos, &FrameIndex, sizeof(uint64_t));
+    pos += sizeof(uint64_t);
+    memcpy(packet + pos, &predictedDisplayTime, sizeof(double));
+    pos += sizeof(double);
+    memcpy(packet + pos, &tracking.HeadPose.Pose.Orientation, sizeof(ovrQuatf));
+    pos += sizeof(ovrQuatf);
+    memcpy(packet + pos, &tracking.HeadPose.Pose.Position, sizeof(ovrVector3f));
+    pos += sizeof(ovrVector3f);
+
+    memcpy(packet + pos, &tracking.HeadPose.AngularVelocity, sizeof(ovrVector3f));
+    pos += sizeof(ovrVector3f);
+    memcpy(packet + pos, &tracking.HeadPose.LinearVelocity, sizeof(ovrVector3f));
+    pos += sizeof(ovrVector3f);
+    memcpy(packet + pos, &tracking.HeadPose.AngularAcceleration, sizeof(ovrVector3f));
+    pos += sizeof(ovrVector3f);
+    memcpy(packet + pos, &tracking.HeadPose.LinearAcceleration, sizeof(ovrVector3f));
+    pos += sizeof(ovrVector3f);
+
+    memcpy(packet + pos, &tracking.Eye[0].ProjectionMatrix, sizeof(ovrMatrix4f));
+    pos += sizeof(ovrMatrix4f);
+    memcpy(packet + pos, &tracking.Eye[0].ViewMatrix, sizeof(ovrMatrix4f));
+    pos += sizeof(ovrMatrix4f);
+    memcpy(packet + pos, &tracking.Eye[1].ProjectionMatrix, sizeof(ovrMatrix4f));
+    pos += sizeof(ovrMatrix4f);
+    memcpy(packet + pos, &tracking.Eye[1].ViewMatrix, sizeof(ovrMatrix4f));
+    pos += sizeof(ovrMatrix4f);
+
+    env->ReleaseByteArrayElements(array, (jbyte *) packet, 0);
+
+    jclass clazz = env->GetObjectClass(callback);
+    jmethodID sendTracking = env->GetMethodID(clazz, "onSendTracking", "([BIJ)V");
+
+    env->CallVoidMethod(callback, sendTracking, array, pos, FrameIndex);
+
+    jmethodID waitFrame = env->GetMethodID(clazz, "waitFrame", "()J");
+    uint64_t renderedFrameIndex = 0;
+    for (int i = 0; i < 10; i++) {
+        renderedFrameIndex = env->CallLongMethod(callback, waitFrame);
+        ALOGV("frame %lu %lu %.3f ms delay:%lu", FrameIndex, renderedFrameIndex,
+              (GetTimeInSeconds() - currentTime) * 1000,
+              FrameIndex - renderedFrameIndex);
+        if (FrameIndex == renderedFrameIndex) {
+            break;
+        }
+    }
+
+    GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
+
 // Render eye images and setup the primary layer using ovrTracking2.
-    const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java,
-                                                                   &Scene, &Simulation, &tracking,
-                                                                   Ovr, &completionFence);
+    const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java, &tracking,
+                                                                   Ovr, &completionFence, GetTimeInSeconds() - startTime);
+
+
 
     const ovrLayerHeader2 *layers2[] =
             {
@@ -1528,7 +1499,7 @@ Java_com_polygraphene_remoteglass_VrAPI_render(JNIEnv *env, jobject instance) {
     frameDesc.
             SwapInterval = SwapInterval;
     frameDesc.
-            FrameIndex = FrameIndex;
+            FrameIndex = renderedFrameIndex;
     frameDesc.
             CompletionFence = completionFence;
     frameDesc.
@@ -1539,7 +1510,18 @@ Java_com_polygraphene_remoteglass_VrAPI_render(JNIEnv *env, jobject instance) {
             Layers = layers2;
 
 // Hand over the eye images to the time warp.
-    ovrResult res = vrapi_SubmitFrame2(Ovr, &frameDesc
-    );
-    ALOGV("vrapi_SubmitFrame2 a %d", res);
+    ovrResult res = vrapi_SubmitFrame2(Ovr, &frameDesc);
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_polygraphene_remoteglass_VrAPI_getSurfaceTextureID(JNIEnv *env, jobject instance) {
+    return SurfaceTextureID;
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_remoteglass_VrAPI_onChangeSettings(JNIEnv *env, jobject instance,
+                                                         jint EnableTestMode) {
+    enableTestMode = EnableTestMode;
 }

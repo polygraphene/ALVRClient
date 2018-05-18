@@ -19,7 +19,9 @@ add_library( # Sets the name of the library.
              SHARED
 
              # Provides a relative path to your source file(s).
-             src/main/cpp/native-lib.cpp
+             src/main/cpp/srt.cpp
+             src/main/cpp/udp.cpp
+             src/main/cpp/nal.cpp
              src/main/cpp/vrapi.cpp
               )
 

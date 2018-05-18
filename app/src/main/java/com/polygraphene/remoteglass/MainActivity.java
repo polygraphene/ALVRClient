@@ -1,8 +1,10 @@
 package com.polygraphene.remoteglass;
 
+import android.app.Activity;
+import android.graphics.SurfaceTexture;
+import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Surface;
@@ -24,7 +26,7 @@ import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends Activity {
     private final static String TAG = "MainActivity";
     private SurfaceView mSurfaceView;
     private SurfaceHolder mHolder;
@@ -39,40 +41,138 @@ public class MainActivity extends AppCompatActivity {
 
     private DecoderThread decoderThread;
     //private ReceiverThread receiverThread = new ReceiverThread();
-    private SrtReceiverThread receiverThread;
+    private UdpReceiverThread receiverThread;
+
+    SurfaceTexture surfaceTexture;
+    Surface surface;
+
+    boolean rendered = false;
+    boolean renderRequesed = false;
+    long frameIndex = 0;
+    Object waiter = new Object();
 
     private VrAPI vrAPI = new VrAPI();
 
     public Surface getSurface() {
-        return mHolder.getSurface();
+        return surface;
     }
 
     public boolean isStopped() {
         return stopped;
     }
 
+    public int renderIf(MediaCodec codec, int queuedOutputBuffer, long frameIndex) {
+        //Log.v(TAG, "renderIf " + queuedOutputBuffer);
+        synchronized (waiter) {
+            if (!renderRequesed) {
+                return queuedOutputBuffer;
+            }
+        }
+
+        if(queuedOutputBuffer == -1) {
+            return queuedOutputBuffer;
+        }
+
+        Log.v(TAG, "releaseOutputBuffer " + frameIndex);
+        codec.releaseOutputBuffer(queuedOutputBuffer, true);
+        synchronized (waiter) {
+            //rendered = true;
+            this.frameIndex = frameIndex;
+            //waiter.notifyAll();
+        }
+        return -1;
+    }
+
+    public void onChangeSettings(int enableTestMode) {
+        Log.v(TAG, "onChangeSettings " + enableTestMode);
+        vrAPI.onChangeSettings(enableTestMode);
+    }
+
+    public interface VrFrameCallback {
+        void onSendTracking(byte[] buf, int len, long frame);
+        long waitFrame();
+    }
+
     private class VideoSurface implements SurfaceHolder.Callback {
 
         @Override
         public void surfaceCreated(final SurfaceHolder holder) {
-            Thread th = new Thread(){
+            Thread th = new Thread() {
                 @Override
                 public void run() {
+                    setName("VR-Thread");
 
                     vrAPI.onSurfaceCreated(holder.getSurface(), MainActivity.this);
-                    while(true) {
-                        vrAPI.render();
+                    surfaceTexture = new SurfaceTexture(vrAPI.getSurfaceTextureID());
+                    surfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
+                        @Override
+                        public void onFrameAvailable(SurfaceTexture surfaceTexture) {
+                            Log.v(TAG, "onFrameAvailable " + frameIndex);
+
+                            synchronized (waiter) {
+                                renderRequesed = false;
+                                rendered = true;
+                                waiter.notifyAll();
+                            }
+                        }
+                    });
+                    surface = new Surface(surfaceTexture);
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+
+                            try {
+                                decoderThread.start();
+                                receiverThread.start();
+                            } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                    });
+
+                    while (true) {
+                        vrAPI.render(new VrFrameCallback() {
+                            @Override
+                            public void onSendTracking(byte[] buf, int len, long frame) {
+                                Log.v(TAG, "sending " + len + " fr:" + frame);
+                                receiverThread.send(buf, len);
+                            }
+
+                            @Override
+                            public long waitFrame(){
+                                synchronized (waiter) {
+                                    if(rendered) {
+                                        Log.v(TAG, "updateTexImage(discard)");
+                                        surfaceTexture.updateTexImage();
+                                    }
+                                    Log.v(TAG, "waitFrame Enter");
+                                    renderRequesed = true;
+                                    rendered = false;
+                                }
+                                while(true){
+                                    synchronized (waiter){
+                                        if(rendered){
+                                            Log.v(TAG, "waited:" + frameIndex);
+                                            surfaceTexture.updateTexImage();
+                                            break;
+                                        }
+                                        try {
+                                            Log.v(TAG, "waiting");
+                                            waiter.wait();
+                                        } catch (InterruptedException e) {
+                                            e.printStackTrace();
+                                        }
+                                    }
+                                }
+
+                                return frameIndex;
+                            }
+                        });
                     }
                 }
             };
             th.start();
-            /*
-            try {
-                decoderThread.start();
-                receiverThread.start();
-            } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
-                e.printStackTrace();
-            }*/
+
         }
 
         @Override
@@ -94,7 +194,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Force the screen to stay on, rather than letting it dim and shut off
         // while the user is watching a movie.
-        getWindow().addFlags( WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON );
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
 
@@ -168,12 +268,12 @@ public class MainActivity extends AppCompatActivity {
 
 
         //receiverThread = new ReceiverThread(nalParser, counter, this);
-        receiverThread = new SrtReceiverThread(nalParser, counter, this);
+        receiverThread = new UdpReceiverThread(nalParser, counter, this);
         //receiverThread = new ReplayReceiverThread();
         receiverThread.setHost("10.1.0.2", 9944);
         decoderThread = new DecoderThread(this, receiverThread, AvcCodecInfoes.get(0));
 
-        if(surfaceCreated) {
+        if (surfaceCreated) {
             try {
                 decoderThread.start();
                 receiverThread.start();

@@ -2,9 +2,7 @@ package com.polygraphene.remoteglass;
 
 import android.util.Log;
 
-import java.nio.ByteBuffer;
-
-class SrtReceiverThread extends MainActivity.ReceiverThread {
+class UdpReceiverThread extends MainActivity.ReceiverThread {
     private static final String TAG = "SrtReceiverThread";
 
     static {
@@ -12,7 +10,7 @@ class SrtReceiverThread extends MainActivity.ReceiverThread {
         System.loadLibrary("native-lib");
     }
 
-    SrtReceiverThread(NALParser nalParser, StatisticsCounter counter, MainActivity activity) {
+    UdpReceiverThread(NALParser nalParser, StatisticsCounter counter, MainActivity activity) {
         super(nalParser, counter, activity);
     }
 
@@ -20,12 +18,23 @@ class SrtReceiverThread extends MainActivity.ReceiverThread {
         return mainActivity.isStopped();
     }
 
+    public String getDeviceName() {
+        String manufacturer = android.os.Build.MANUFACTURER;
+        String model = android.os.Build.MODEL;
+        if (model.toLowerCase().startsWith(manufacturer.toLowerCase())) {
+            return model;
+        } else {
+            return manufacturer + " " + model;
+        }
+    }
+
+
     @Override
     public void run() {
         setName(SrtReceiverThread.class.getName());
 
         try {
-            int ret = initializeSocket(host, port);
+            int ret = initializeSocket(host, port, getDeviceName());
             if (ret != 0) {
                 Log.e(TAG, "Error on initialize srt socket. Code=" + ret + ".");
                 return;
@@ -40,7 +49,12 @@ class SrtReceiverThread extends MainActivity.ReceiverThread {
         Log.v(TAG, "SrtReceiverThread stopped.");
     }
 
-    native int initializeSocket(String host, int port);
+    // called from native
+    public void onChangeSettings(int EnableTestMode) {
+        mainActivity.onChangeSettings(EnableTestMode);
+    }
+
+    native int initializeSocket(String host, int port, String deviceName);
 
     native void closeSocket();
 
@@ -50,7 +64,11 @@ class SrtReceiverThread extends MainActivity.ReceiverThread {
 
     native int getNalListSize();
 
+    native NAL waitNal();
+
     native NAL getNal();
+
+    native NAL peekNal();
 
     native void flushNALList();
 }
