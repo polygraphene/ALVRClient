@@ -50,8 +50,8 @@ class UdpReceiverThread extends MainActivity.ReceiverThread {
     }
 
     // called from native
-    public void onChangeSettings(int EnableTestMode) {
-        mainActivity.onChangeSettings(EnableTestMode);
+    public void onChangeSettings(int EnableTestMode, int suspend) {
+        mainActivity.onChangeSettings(EnableTestMode, suspend);
     }
 
     native int initializeSocket(String host, int port, String deviceName);

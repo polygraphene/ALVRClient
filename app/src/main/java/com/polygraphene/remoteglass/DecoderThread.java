@@ -6,6 +6,7 @@ import android.media.MediaFormat;
 import android.support.annotation.NonNull;
 import android.util.Log;
 
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Date;
@@ -34,6 +35,7 @@ class DecoderThread extends Thread {
     class FramePresentationTime {
         public long frameIndex;
         public long presentationTime;
+        public long inputTime;
     }
 
     private List<FramePresentationTime> frameBuf = new LinkedList<>();
@@ -52,6 +54,20 @@ class DecoderThread extends Thread {
 
     void frameLog(String s) {
         Log.v(TAG, s);
+    }
+
+    void pushFramePresentationMap(NAL buf) {
+        FramePresentationTime f = new FramePresentationTime();
+        f.frameIndex = buf.frameIndex;
+        f.presentationTime = buf.presentationTime;
+        f.inputTime = System.nanoTime() / 1000;
+
+        synchronized (frameBuf) {
+            frameBuf.add(f);
+            if (frameBuf.size() > 100) {
+                frameBuf.remove(0);
+            }
+        }
     }
 
     @Override
@@ -77,6 +93,7 @@ class DecoderThread extends Thread {
                 }
             }
 
+            int nalQueueMax = 10;
             int width = 2048;
             int height = 1024;
             String videoFormat = "video/avc";
@@ -98,6 +115,7 @@ class DecoderThread extends Thread {
                 if (mainActivity.isStopped()) {
                     break;
                 }
+                frameLog("Waiting NALU");
                 buf = nalParser.waitNal();
 
                 int NALType = buf.buf[4] & 0x1F;
@@ -117,12 +135,12 @@ class DecoderThread extends Thread {
                         availableInputs.wait();
                     }
                 }
-                frameLog("Uses input index=" + index);
+                frameLog("Uses input index=" + index + " NAL Queue Size=" + nalParser.getNalListSize() + " (Max:" + nalQueueMax + (nalParser.getNalListSize() > nalQueueMax ? " discard)" : ")"));
                 consecutiveStalls = 0;
 
                 ByteBuffer buffer = decoder.getInputBuffer(index);
 
-                if (nalParser.getNalListSize() > 1) {
+                if (nalParser.getNalListSize() > nalQueueMax) {
                     nalParser.flushNALList();
                 }
 
@@ -155,6 +173,13 @@ class DecoderThread extends Thread {
                     buffer.put(buf.buf, 0, buf.len);
                     frameNumber++;
 
+                    pushFramePresentationMap(buf);
+                    FileOutputStream outputStream = new FileOutputStream(mainActivity.getExternalMediaDirs()[0].toString() + "/" + buf.frameIndex + ".h264");
+                    outputStream.write(SPSBuffer.buf, 0, SPSBuffer.len);
+                    outputStream.write(PPSBuffer.buf, 0, PPSBuffer.len);
+                    outputStream.write(buf.buf, 0, buf.len);
+                    outputStream.close();
+
                     decoder.queueInputBuffer(index, 0, buffer.position(), buf.presentationTime, 0);
                     buf = null;
                     //decoder.queueInputBuffer(inIndex, 0, buffer.position(), startTimestamp, 0);
@@ -173,16 +198,8 @@ class DecoderThread extends Thread {
                         decoder.queueInputBuffer(index, 0, 0, buf.presentationTime, 0);
                         buf = null;
                     } else {
-                        FramePresentationTime f = new FramePresentationTime();
-                        f.frameIndex = buf.frameIndex;
-                        f.presentationTime = buf.presentationTime;
+                        pushFramePresentationMap(buf);
 
-                        synchronized (frameBuf) {
-                            frameBuf.add(f);
-                            if (frameBuf.size() > 100) {
-                                frameBuf.remove(0);
-                            }
-                        }
                         frameLog("Feed " + buffer.position() + " bytes " + String.format("%02X", NALType) + " frame " + frameNumber + " fr:" + buf.frameIndex + " pres:" + buf.presentationTime);
                         decoder.queueInputBuffer(index, 0, buffer.position(), buf.presentationTime, 0);
                         buf = null;
@@ -231,22 +248,26 @@ class DecoderThread extends Thread {
             }
             queuedOutputBuffer = index;
             foundFrameIndex = 0;
+            long inputTime = 0;
 
             synchronized (frameBuf) {
                 for (FramePresentationTime f : frameBuf) {
                     if (f.presentationTime == info.presentationTimeUs) {
                         foundFrameIndex = f.frameIndex;
+                        inputTime = f.inputTime;
+                        break;
                     }
                 }
             }
 
-            frameLog("render frame " + "fr:" + foundFrameIndex + " pres:" + info.presentationTimeUs);
+            long decodeLatency = System.nanoTime() / 1000 - inputTime;
+            frameLog("Render frame " + "fr:" + foundFrameIndex + " pres:" + info.presentationTimeUs + " decode latency=" + decodeLatency + " us");
 
             queuedOutputBuffer = mainActivity.renderIf(decoder, queuedOutputBuffer, foundFrameIndex);
             if (queuedOutputBuffer == -1) {
                 frameLog("consumed");
             } else {
-                frameLog("not ready");
+                frameLog("not ready. discard.");
                 decoder.releaseOutputBuffer(queuedOutputBuffer, false);
                 queuedOutputBuffer = -1;
             }

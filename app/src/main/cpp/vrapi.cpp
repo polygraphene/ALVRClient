@@ -14,9 +14,9 @@
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES3/gl3.h>
-#include <GLES3/gl3ext.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
+#include <string>
 
 #define CHECK_GL_ERRORS 1
 #if !defined( EGL_OPENGL_ES3_BIT_KHR )
@@ -96,11 +96,26 @@ ovrMobile *Ovr;
 bool UseMultiview = true;
 GLuint SurfaceTextureID = 0;
 int enableTestMode = 0;
+int suspend = 0;
 
 static double GetTimeInSeconds() {
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
     return (now.tv_sec * 1e9 + now.tv_nsec) * 0.000000001;
+}
+
+static std::string DumpMatrix(const ovrMatrix4f *matrix) {
+    char buf[1000];
+    sprintf(buf, "%.5f, %.5f, %.5f, %.5f\n"
+                    "%.5f, %.5f, %.5f, %.5f\n"
+                    "%.5f, %.5f, %.5f, %.5f\n"
+                    "%.5f, %.5f, %.5f, %.5f\n"
+            , matrix->M[0][0], matrix->M[0][1], matrix->M[0][2], matrix->M[0][3]
+            , matrix->M[1][0], matrix->M[1][1], matrix->M[1][2], matrix->M[1][3]
+            , matrix->M[2][0], matrix->M[2][1], matrix->M[2][2], matrix->M[2][3]
+            , matrix->M[3][0], matrix->M[3][1], matrix->M[3][2], matrix->M[3][3]
+    );
+    return std::string(buf);
 }
 
 /*
@@ -250,14 +265,12 @@ static const char VERTEX_SHADER[] =
                 "in mat4 vertexTransform;\n"
                 "in vec2 vertexUv;\n"
                 "uniform mat4 TestModeMatrix[NUM_VIEWS];\n"
-                "uniform int EnableTestMode;\n"
+                "uniform lowp int EnableTestMode;\n"
                 "out vec4 fragmentColor;\n"
                 "out vec2 uv;\n"
                 "void main()\n"
                 "{\n"
                 "	gl_Position = TestModeMatrix[VIEW_ID] * vec4( vertexPosition, 1.0 );\n"
-                "if(EnableTestMode == 2){"
-                "gl_Position.z=0.5;}\n"
                 "   if(VIEW_ID == uint(0)){\n"
                 "      uv = vec2(vertexUv.x, vertexUv.y);\n"
                 "   }else{\n"
@@ -273,18 +286,14 @@ static const char FRAGMENT_SHADER[] =
                 "in lowp vec4 fragmentColor;\n"
                 "out lowp vec4 outColor;\n"
                 "uniform samplerExternalOES sTexture;\n"
-                "uniform int EnableTestMode;\n"
+                "uniform lowp int EnableTestMode;\n"
                 "void main()\n"
                 "{\n"
-                //"if(uv.x < 0.05 || uv.x > 0.95){outColor=vec4(0.0, 0.0, 1.0, 1.0);}else if(uv.x>0.45 && uv.x < 0.55){outColor=vec4(1.0, 0.0, 0.0, 1.0);}else{"
-                "   if(EnableTestMode == 0){\n"
+                "   if(EnableTestMode % 2 == 0){\n"
                 "	    outColor = texture(sTexture, uv);\n"
-                "   } else if(EnableTestMode <= 0) {\n"
-                "       outColor = texture(sTexture, uv);\n"
                 "   } else {\n"
                 "       outColor = fragmentColor;\n"
                 "   }\n"
-                //"	outColor = vec4(0.5, 0.7, 0.2, 1.0);\n"
                 "}\n";
 
 struct {
@@ -1151,10 +1160,10 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
         GL(glClearColor(1.0f, 1.0f, 1.0f, 1.0f));
         GL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 
-        enableTestMode = 0;
+        //enableTestMode = 0;
         GL(glUniform1i(Program.UniformLocation[UNIFORM_ENABLE_TEST_MODE], enableTestMode));
-        if(enableTestMode) {
-            int N = 20;
+        if(enableTestMode & 1 != 0) {
+            int N = 10;
             for(int i = 0; i < N; i++) {
                 ovrMatrix4f TestModeMatrix[2];
                 TestModeMatrix[0] = ovrMatrix4f_CreateIdentity();
@@ -1177,6 +1186,19 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
                 TestModeMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ProjectionMatrix,
                                                          &TestModeMatrix[1]);
 
+                if(i == 0){
+                    LOG("theta:%f", theta);
+                    LOG("rotate:%f %f %f %f", tracking->HeadPose.Pose.Orientation.x
+                    , tracking->HeadPose.Pose.Orientation.y
+                    , tracking->HeadPose.Pose.Orientation.z
+                    , tracking->HeadPose.Pose.Orientation.w
+                    );
+                    LOG("tran:\n%s", DumpMatrix(&translation).c_str());
+                    LOG("view:\n%s", DumpMatrix(&tracking->Eye[0].ViewMatrix).c_str());
+                    LOG("proj:\n%s", DumpMatrix(&tracking->Eye[0].ProjectionMatrix).c_str());
+                    LOG("mm:\n%s", DumpMatrix(&TestModeMatrix[0]).c_str());
+                }
+
                 GL(glUniformMatrix4fv(Program.UniformLocation[UNIFORM_TEST_MODE_MATRIX], 2, true,
                                       (float *) TestModeMatrix));
                 GL(glBindVertexArray(TestMode.VertexArrayObject));
@@ -1192,6 +1214,8 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
                 GL(glDrawElements(GL_TRIANGLES, TestMode.IndexCount, GL_UNSIGNED_SHORT, NULL));
 
                 //GL(glClearDepthf(0.5));
+
+                //GL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
             }
         }else {
             ovrMatrix4f TestModeMatrix[2];
@@ -1463,6 +1487,8 @@ Java_com_polygraphene_remoteglass_VrAPI_render(JNIEnv *env, jobject instance, jo
 
     env->ReleaseByteArrayElements(array, (jbyte *) packet, 0);
 
+    ALOGV("Sending tracking info. FrameIndex=%lu", FrameIndex);
+
     jclass clazz = env->GetObjectClass(callback);
     jmethodID sendTracking = env->GetMethodID(clazz, "onSendTracking", "([BIJ)V");
 
@@ -1472,10 +1498,13 @@ Java_com_polygraphene_remoteglass_VrAPI_render(JNIEnv *env, jobject instance, jo
     uint64_t renderedFrameIndex = 0;
     for (int i = 0; i < 10; i++) {
         renderedFrameIndex = env->CallLongMethod(callback, waitFrame);
-        ALOGV("frame %lu %lu %.3f ms delay:%lu", FrameIndex, renderedFrameIndex,
+        ALOGV("Got frame for render. wanted FrameIndex=%lu got=%lu waiting=%.3f ms delay=%lu", FrameIndex, renderedFrameIndex,
               (GetTimeInSeconds() - currentTime) * 1000,
               FrameIndex - renderedFrameIndex);
         if (FrameIndex == renderedFrameIndex) {
+            break;
+        }
+        if((enableTestMode & 4) != 0){
             break;
         }
     }
@@ -1511,6 +1540,21 @@ Java_com_polygraphene_remoteglass_VrAPI_render(JNIEnv *env, jobject instance, jo
 
 // Hand over the eye images to the time warp.
     ovrResult res = vrapi_SubmitFrame2(Ovr, &frameDesc);
+
+    ALOGV("vrapi_SubmitFrame2 return=%d rendered FrameIndex=%lu Orientation=(%f, %f, %f, %f)"
+          , res, renderedFrameIndex
+    , tracking.HeadPose.Pose.Orientation.x
+    , tracking.HeadPose.Pose.Orientation.y
+    , tracking.HeadPose.Pose.Orientation.z
+    , tracking.HeadPose.Pose.Orientation.w
+    );
+    if(suspend) {
+        ALOGV("submit enter suspend");
+        while(suspend){
+            usleep(1000 * 10);
+        }
+        ALOGV("submit leave suspend");
+    }
 }
 
 extern "C"
@@ -1522,6 +1566,7 @@ Java_com_polygraphene_remoteglass_VrAPI_getSurfaceTextureID(JNIEnv *env, jobject
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_remoteglass_VrAPI_onChangeSettings(JNIEnv *env, jobject instance,
-                                                         jint EnableTestMode) {
+                                                         jint EnableTestMode, jint Suspend) {
     enableTestMode = EnableTestMode;
+    suspend = Suspend;
 }

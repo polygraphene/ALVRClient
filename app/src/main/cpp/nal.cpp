@@ -246,12 +246,12 @@ jobject waitNal(JNIEnv *env) {
 
     while(true){
         MutexLock lock;
-        pthread_cond_wait(&cond_nonzero, &mutex);
         if (nalList.size() != 0) {
             buf = nalList.front();
             nalList.pop_front();
             break;
         }
+        pthread_cond_wait(&cond_nonzero, &mutex);
     }
     jclass clazz = env->FindClass("com/polygraphene/remoteglass/NAL");
     jmethodID ctor = env->GetMethodID(clazz, "<init>", "()V");

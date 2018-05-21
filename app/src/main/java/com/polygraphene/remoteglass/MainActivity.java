@@ -83,9 +83,9 @@ public class MainActivity extends Activity {
         return -1;
     }
 
-    public void onChangeSettings(int enableTestMode) {
-        Log.v(TAG, "onChangeSettings " + enableTestMode);
-        vrAPI.onChangeSettings(enableTestMode);
+    public void onChangeSettings(int enableTestMode, int suspend) {
+        Log.v(TAG, "onChangeSettings " + enableTestMode + " suspend:" + suspend);
+        vrAPI.onChangeSettings(enableTestMode, suspend);
     }
 
     public interface VrFrameCallback {

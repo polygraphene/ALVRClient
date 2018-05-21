@@ -9,5 +9,5 @@ public class VrAPI {
     native int getSurfaceTextureID();
     native void render(MainActivity.VrFrameCallback runnable);
     native void onSurfaceDestroyed();
-    native void onChangeSettings(int EnableTestMode);
+    native void onChangeSettings(int EnableTestMode, int suspend);
 }

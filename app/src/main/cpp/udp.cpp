@@ -14,6 +14,7 @@
 #include <arpa/inet.h>
 #include <algorithm>
 #include <errno.h>
+#include <sys/ioctl.h>
 #include "nal.h"
 #include "utils.h"
 
@@ -65,6 +66,7 @@ struct TimeSync {
 struct ChangeSettings {
     uint32_t type; // 4
     uint32_t enableTestMode;
+    uint32_t suspend;
 };
 #pragma pack(pop)
 uint64_t lastParsedPresentationTime = 0;
@@ -72,33 +74,39 @@ uint32_t prevSequence = 0;
 
 static void processSequence(uint32_t sequence){
     if (prevSequence + 1 != sequence) {
-        LOG("packet loss %d", sequence - (prevSequence + 1));
+        LOG("packet loss %d (%d -> %d)", sequence - (prevSequence + 1), prevSequence + 1, sequence - 1);
     }
     prevSequence = sequence;
 }
 
-static void processRecv(int sock) {
+static int processRecv(int sock) {
     char buf[MAX_PACKET_SIZE];
     int len = MAX_PACKET_SIZE;
 
     sockaddr_in addr;
     socklen_t socklen = sizeof(addr);
     int ret = recvfrom(sock, (char *) buf, len, 0, (sockaddr *) &addr, &socklen);
-
+    if(ret <= 0) {
+        return ret;
+    }
     uint32_t type = *(uint32_t *) buf;
     if (type == 1) {
         // First packet of a video frame
-        processSequence(*(uint32_t *) (buf + 4));
-
+        uint32_t sequence = *(uint32_t *) (buf + 4);
         uint64_t presentationTime = *(uint64_t *)(buf + 8);
+        uint64_t frameIndex = *(uint64_t *)(buf + 16);
+
+        processSequence(sequence);
         lastParsedPresentationTime = presentationTime;
-        LOG("presentationTime %d delay: %ld us", buf[28] & 0x1F, (int64_t)getTimestampUs() - ((int64_t)presentationTime - TimeDiff));
+
+        LOG("presentationTime NALType=%d frameIndex=%llu delay=%ld us", buf[28] & 0x1F, frameIndex, (int64_t)getTimestampUs() - ((int64_t)presentationTime - TimeDiff));
         bool ret2 = processPacket(env_, (char *) buf, ret);
         if(ret2){
             LOG("presentationTime end delay: %ld us", (int64_t)getTimestampUs() - ((int64_t)lastParsedPresentationTime - TimeDiff));
         }
     } else if (type == 2) {
-        processSequence(*(uint32_t *) (buf + 4));
+        uint32_t sequence = *(uint32_t *) (buf + 4);
+        processSequence(sequence);
 
         // None first packet of a video frame
         bool ret2 = processPacket(env_, (char *) buf, ret);
@@ -108,7 +116,7 @@ static void processRecv(int sock) {
     } else if (type == 3) {
         // Time sync packet
         if (ret < sizeof(TimeSync)) {
-            return;
+            return ret;
         }
         TimeSync *timeSync = (TimeSync *) buf;
         uint64_t Current = getTimestampUs();
@@ -125,17 +133,17 @@ static void processRecv(int sock) {
     } else if (type == 4) {
         // Change settings
         if(ret < sizeof(ChangeSettings)) {
-            return;
+            return ret;
         }
         ChangeSettings *settings = (ChangeSettings *) buf;
 
         jclass clazz = env_->GetObjectClass(instance_);
-        jmethodID method = env_->GetMethodID(clazz, "onChangeSettings", "(I)V");
-        env_->CallVoidMethod(instance_, method, settings->enableTestMode);
+        jmethodID method = env_->GetMethodID(clazz, "onChangeSettings", "(II)V");
+        env_->CallVoidMethod(instance_, method, settings->enableTestMode, settings->suspend);
         env_->DeleteLocalRef(clazz);
     }
 
-    return;
+    return ret;
 }
 
 static void processReadPipe(int pipefd) {
@@ -160,7 +168,7 @@ static void processReadPipe(int pipefd) {
             }
         }
 
-        LOG("Sending tracking packet %d", sendBuffer.len);
+        //LOG("Sending tracking packet %d", sendBuffer.len);
         sendto(sock, sendBuffer.buf, sendBuffer.len, 0, (sockaddr *) &serverAddr,
                sizeof(serverAddr));
     }
@@ -192,6 +200,7 @@ Java_com_polygraphene_remoteglass_UdpReceiverThread_initializeSocket(JNIEnv *env
     const char *host = env->GetStringUTFChars(host_, 0);
     const char *deviceName = env->GetStringUTFChars(deviceName_, 0);
     int ret = 0;
+    int val;
     HelloMessage message = {};
 
     initNAL();
@@ -201,6 +210,8 @@ Java_com_polygraphene_remoteglass_UdpReceiverThread_initializeSocket(JNIEnv *env
         ret = 1;
         goto end;
     }
+    val = 1;
+    ioctl(sock, FIONBIO, &val);
 
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(port);
@@ -321,9 +332,9 @@ Java_com_polygraphene_remoteglass_UdpReceiverThread_runLoop(JNIEnv *env, jobject
         memcpy(&fds, &fds_org, sizeof(fds));
         int ret = select(nfds, &fds, NULL, NULL, &timeout);
 
-        sendTimeSync();
-
         if (ret == 0) {
+            sendTimeSync();
+
             // timeout
             continue;
         }
@@ -335,7 +346,13 @@ Java_com_polygraphene_remoteglass_UdpReceiverThread_runLoop(JNIEnv *env, jobject
 
         if (FD_ISSET(sock, &fds)) {
             //LOG("select sock");
-            processRecv(sock);
+            while(true) {
+                int recv_ret = processRecv(sock);
+                if(recv_ret < 0) {
+                    break;
+                }
+            }
         }
+        sendTimeSync();
     }
 }
