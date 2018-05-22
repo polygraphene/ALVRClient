@@ -102,6 +102,7 @@ int suspend = 0;
 struct TrackingFrame {
     ovrTracking2 tracking;
     uint64_t frameIndex;
+    uint64_t fetchTime;
     double displayTime;
 };
 std::list<std::shared_ptr<TrackingFrame> > trackingFrameList;
@@ -1128,7 +1129,7 @@ static void ovrRenderer_Destroy(ovrRenderer *renderer) {
 
 static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava *java,
                                                    const ovrTracking2 *tracking, ovrMobile *ovr,
-                                                   unsigned long long *completionFence, float time) {
+                                                   unsigned long long *completionFence) {
     ovrTracking2 updatedTracking = *tracking;
 
     ovrLayerProjection2 layer = vrapi_DefaultLayerProjection2();
@@ -1332,13 +1333,13 @@ void onVrModeChange(JNIEnv *env) {
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_remoteglass_VrAPI_init(JNIEnv *env, jobject instance) {
+Java_com_polygraphene_alvr_VrAPI_init(JNIEnv *env, jobject instance) {
     //eglInit();
 }
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_remoteglass_VrAPI_onSurfaceCreated(JNIEnv *env, jobject instance,
+Java_com_polygraphene_alvr_VrAPI_onSurfaceCreated(JNIEnv *env, jobject instance,
                                                          jobject surface, jobject activity) {
     if (window != NULL) {
         ANativeWindow_release(window);
@@ -1370,7 +1371,7 @@ Java_com_polygraphene_remoteglass_VrAPI_onSurfaceCreated(JNIEnv *env, jobject in
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_remoteglass_VrAPI_onSurfaceDestroyed(JNIEnv *env, jobject instance) {
+Java_com_polygraphene_alvr_VrAPI_onSurfaceDestroyed(JNIEnv *env, jobject instance) {
     ovrRenderer_Destroy(&Renderer);
 
     ovrProgram_Destroy(&Program);
@@ -1393,8 +1394,7 @@ Java_com_polygraphene_remoteglass_VrAPI_onSurfaceDestroyed(JNIEnv *env, jobject 
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_remoteglass_VrAPI_render(JNIEnv *env, jobject instance, jobject callback) {
-
+Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject callback) {
     double DisplayTime = 0.0;
 
     if (!CreatedScene) {
@@ -1435,11 +1435,9 @@ Java_com_polygraphene_remoteglass_VrAPI_render(JNIEnv *env, jobject instance, jo
         CreatedScene = true;
 
         startTime = GetTimeInSeconds();
-
     }
 
     double currentTime = GetTimeInSeconds();
-
 
     unsigned long long completionFence = 0;
 
@@ -1476,6 +1474,7 @@ Java_com_polygraphene_remoteglass_VrAPI_render(JNIEnv *env, jobject instance, jo
         LOG("Too old frame has arrived. ignore. FrameIndex=%lu WantedFrameIndex=%lu", renderedFrameIndex, WantedFrameIndex);
         return;
     }
+    LOG("Frame latency is %lu us. FrameIndex=%lu", getTimestampUs() - frame->fetchTime, frame->frameIndex);
 
     GL(glActiveTexture(GL_TEXTURE0));
     GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
@@ -1483,9 +1482,7 @@ Java_com_polygraphene_remoteglass_VrAPI_render(JNIEnv *env, jobject instance, jo
 
 // Render eye images and setup the primary layer using ovrTracking2.
     const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java, &frame->tracking,
-                                                                   Ovr, &completionFence, GetTimeInSeconds() - startTime);
-
-
+                                                                   Ovr, &completionFence);
 
     const ovrLayerHeader2 *layers2[] =
             {
@@ -1581,12 +1578,13 @@ void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTrac
 // Called from TrackingThread
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_remoteglass_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance, jobject callback) {
+Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance, jobject callback) {
     std::shared_ptr<TrackingFrame> frame(new TrackingFrame());
 
     FrameIndex++;
 
     frame->frameIndex = FrameIndex;
+    frame->fetchTime = getTimestampUs();
 
     frame->displayTime = vrapi_GetPredictedDisplayTime(Ovr, FrameIndex);
     frame->tracking = vrapi_GetPredictedTracking2(Ovr, frame->displayTime);
@@ -1604,13 +1602,13 @@ Java_com_polygraphene_remoteglass_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject i
 
 extern "C"
 JNIEXPORT jint JNICALL
-Java_com_polygraphene_remoteglass_VrAPI_getSurfaceTextureID(JNIEnv *env, jobject instance) {
+Java_com_polygraphene_alvr_VrAPI_getSurfaceTextureID(JNIEnv *env, jobject instance) {
     return SurfaceTextureID;
 }
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_remoteglass_VrAPI_onChangeSettings(JNIEnv *env, jobject instance,
+Java_com_polygraphene_alvr_VrAPI_onChangeSettings(JNIEnv *env, jobject instance,
                                                          jint EnableTestMode, jint Suspend) {
     enableTestMode = EnableTestMode;
     suspend = Suspend;

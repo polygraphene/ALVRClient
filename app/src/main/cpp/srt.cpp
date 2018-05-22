@@ -86,7 +86,7 @@ static void process_read_pipe(int pipefd) {
 
 extern "C"
 JNIEXPORT jint JNICALL
-Java_com_polygraphene_remoteglass_SrtReceiverThread_initializeSocket(JNIEnv *env, jobject instance,
+Java_com_polygraphene_alvr_SrtReceiverThread_initializeSocket(JNIEnv *env, jobject instance,
                                                                      jstring host_, jint port) {
     const char *host = env->GetStringUTFChars(host_, 0);
     struct sockaddr_in addr;
@@ -135,7 +135,7 @@ Java_com_polygraphene_remoteglass_SrtReceiverThread_initializeSocket(JNIEnv *env
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_remoteglass_SrtReceiverThread_closeSocket(JNIEnv *env, jobject instance) {
+Java_com_polygraphene_alvr_SrtReceiverThread_closeSocket(JNIEnv *env, jobject instance) {
     if (srtsocket != SRT_INVALID_SOCK) {
         srt_close(srtsocket);
     }
@@ -144,7 +144,7 @@ Java_com_polygraphene_remoteglass_SrtReceiverThread_closeSocket(JNIEnv *env, job
 
 extern "C"
 JNIEXPORT jint JNICALL
-Java_com_polygraphene_remoteglass_SrtReceiverThread_send(JNIEnv *env, jobject instance,
+Java_com_polygraphene_alvr_SrtReceiverThread_send(JNIEnv *env, jobject instance,
                                                          jbyteArray buf_, jint length) {
     jbyte *buf = env->GetByteArrayElements(buf_, NULL);
 
@@ -168,37 +168,37 @@ Java_com_polygraphene_remoteglass_SrtReceiverThread_send(JNIEnv *env, jobject in
 
 extern "C"
 JNIEXPORT jint JNICALL
-Java_com_polygraphene_remoteglass_SrtReceiverThread_getNalListSize(JNIEnv *env, jobject instance) {
+Java_com_polygraphene_alvr_SrtReceiverThread_getNalListSize(JNIEnv *env, jobject instance) {
     return getNalListSize();
 }
 
 extern "C"
 JNIEXPORT jobject JNICALL
-Java_com_polygraphene_remoteglass_UdpReceiverThread_waitNal(JNIEnv *env, jobject instance) {
+Java_com_polygraphene_alvr_UdpReceiverThread_waitNal(JNIEnv *env, jobject instance) {
 return waitNal(env);
 }
 
 extern "C"
 JNIEXPORT jobject JNICALL
-Java_com_polygraphene_remoteglass_SrtReceiverThread_getNal(JNIEnv *env, jobject instance) {
+Java_com_polygraphene_alvr_SrtReceiverThread_getNal(JNIEnv *env, jobject instance) {
     return getNal(env);
 }
 
 extern "C"
 JNIEXPORT jobject JNICALL
-Java_com_polygraphene_remoteglass_UdpReceiverThread_peekNal(JNIEnv *env, jobject instance) {
+Java_com_polygraphene_alvr_UdpReceiverThread_peekNal(JNIEnv *env, jobject instance) {
     return peekNal(env);
 }
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_remoteglass_SrtReceiverThread_flushNALList(JNIEnv *env, jobject instance) {
+Java_com_polygraphene_alvr_SrtReceiverThread_flushNALList(JNIEnv *env, jobject instance) {
     flushNalList(env);
 }
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_remoteglass_SrtReceiverThread_runLoop(JNIEnv *env, jobject instance) {
+Java_com_polygraphene_alvr_SrtReceiverThread_runLoop(JNIEnv *env, jobject instance) {
     int epoll = srt_epoll_create();
     SRTSOCKET read_fds[1];
     SRTSOCKET write_fds[1];

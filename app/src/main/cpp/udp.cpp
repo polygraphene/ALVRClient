@@ -194,7 +194,7 @@ static void sendTimeSync(){
 
 extern "C"
 JNIEXPORT jint JNICALL
-Java_com_polygraphene_remoteglass_UdpReceiverThread_initializeSocket(JNIEnv *env, jobject instance,
+Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobject instance,
                                                                      jstring host_, jint port,
                                                                      jstring deviceName_) {
     const char *host = env->GetStringUTFChars(host_, 0);
@@ -255,7 +255,7 @@ Java_com_polygraphene_remoteglass_UdpReceiverThread_initializeSocket(JNIEnv *env
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_remoteglass_UdpReceiverThread_closeSocket(JNIEnv *env, jobject instance) {
+Java_com_polygraphene_alvr_UdpReceiverThread_closeSocket(JNIEnv *env, jobject instance) {
     if (sock >= 0) {
         close(sock);
     }
@@ -264,7 +264,7 @@ Java_com_polygraphene_remoteglass_UdpReceiverThread_closeSocket(JNIEnv *env, job
 
 extern "C"
 JNIEXPORT jint JNICALL
-Java_com_polygraphene_remoteglass_UdpReceiverThread_send(JNIEnv *env, jobject instance,
+Java_com_polygraphene_alvr_UdpReceiverThread_send(JNIEnv *env, jobject instance,
                                                          jbyteArray buf_, jint length) {
     jbyte *buf = env->GetByteArrayElements(buf_, NULL);
 
@@ -288,25 +288,25 @@ Java_com_polygraphene_remoteglass_UdpReceiverThread_send(JNIEnv *env, jobject in
 
 extern "C"
 JNIEXPORT jint JNICALL
-Java_com_polygraphene_remoteglass_UdpReceiverThread_getNalListSize(JNIEnv *env, jobject instance) {
+Java_com_polygraphene_alvr_UdpReceiverThread_getNalListSize(JNIEnv *env, jobject instance) {
     return getNalListSize();
 }
 
 extern "C"
 JNIEXPORT jobject JNICALL
-Java_com_polygraphene_remoteglass_UdpReceiverThread_getNal(JNIEnv *env, jobject instance) {
+Java_com_polygraphene_alvr_UdpReceiverThread_getNal(JNIEnv *env, jobject instance) {
     return getNal(env);
 }
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_remoteglass_UdpReceiverThread_flushNALList(JNIEnv *env, jobject instance) {
+Java_com_polygraphene_alvr_UdpReceiverThread_flushNALList(JNIEnv *env, jobject instance) {
     flushNalList(env);
 }
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_remoteglass_UdpReceiverThread_runLoop(JNIEnv *env, jobject instance) {
+Java_com_polygraphene_alvr_UdpReceiverThread_runLoop(JNIEnv *env, jobject instance) {
     fd_set fds, fds_org;
 
     FD_ZERO(&fds_org);
