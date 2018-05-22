@@ -7,7 +7,8 @@ public class VrAPI {
     native void init();
     native void onSurfaceCreated(Surface surface, Activity activity);
     native int getSurfaceTextureID();
-    native void render(MainActivity.VrFrameCallback runnable);
+    native void render(MainActivity.VrFrameCallback callback);
+    native void fetchTrackingInfo(MainActivity.OnSendTrackingCallback callback);
     native void onSurfaceDestroyed();
     native void onChangeSettings(int EnableTestMode, int suspend);
 }

@@ -9,7 +9,6 @@ import android.util.Log;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -17,9 +16,10 @@ class DecoderThread extends Thread {
     private static final String TAG = "DecoderThread";
     private final MediaCodecInfo codecInfo;
     private MainActivity mainActivity;
-    private UdpReceiverThread nalParser;
+    private UdpReceiverThread mReceiverThread;
     private MediaCodec decoder = null;
     private int queuedOutputBuffer = -1;
+    private StatisticsCounter mCounter;
 
     NAL buf = null;
 
@@ -46,10 +46,11 @@ class DecoderThread extends Thread {
 
     private List<Integer> availableInputs = new LinkedList<>();
 
-    DecoderThread(MainActivity mainActivity, UdpReceiverThread nalParser, MediaCodecInfo codecInfo) {
+    DecoderThread(MainActivity mainActivity, UdpReceiverThread receiverThread, MediaCodecInfo codecInfo, StatisticsCounter counter) {
         this.mainActivity = mainActivity;
-        this.nalParser = nalParser;
+        this.mReceiverThread = receiverThread;
         this.codecInfo = codecInfo;
+        mCounter = counter;
     }
 
     void frameLog(String s) {
@@ -76,7 +77,7 @@ class DecoderThread extends Thread {
 
         try {
             while (true) {
-                NAL packet = nalParser.getNal();
+                NAL packet = mReceiverThread.getNal();
                 if (packet == null) {
                     Thread.sleep(10);
                     continue;
@@ -116,10 +117,10 @@ class DecoderThread extends Thread {
                     break;
                 }
                 frameLog("Waiting NALU");
-                buf = nalParser.waitNal();
+                buf = mReceiverThread.waitNal();
 
                 int NALType = buf.buf[4] & 0x1F;
-                frameLog("Got NAL TYPE " + NALType + " Len " + buf.len + "  q:" + nalParser.getNalListSize());
+                frameLog("Got NAL TYPE " + NALType + " Len " + buf.len + "  q:" + mReceiverThread.getNalListSize());
 
                 if (frameNumber > 500) {
                     //return;
@@ -135,13 +136,13 @@ class DecoderThread extends Thread {
                         availableInputs.wait();
                     }
                 }
-                frameLog("Uses input index=" + index + " NAL Queue Size=" + nalParser.getNalListSize() + " (Max:" + nalQueueMax + (nalParser.getNalListSize() > nalQueueMax ? " discard)" : ")"));
+                frameLog("Uses input index=" + index + " NAL Queue Size=" + mReceiverThread.getNalListSize() + " (Max:" + nalQueueMax + (mReceiverThread.getNalListSize() > nalQueueMax ? " discard)" : ")"));
                 consecutiveStalls = 0;
 
                 ByteBuffer buffer = decoder.getInputBuffer(index);
 
-                if (nalParser.getNalListSize() > nalQueueMax) {
-                    nalParser.flushNALList();
+                if (mReceiverThread.getNalListSize() > nalQueueMax) {
+                    mReceiverThread.flushNALList();
                 }
 
                 if (NALType == 7) {
@@ -188,7 +189,7 @@ class DecoderThread extends Thread {
 
                     if (NALType == 1) {
                         // PFrame
-                        mainActivity.counter.countPFrame();
+                        mCounter.countPFrame();
                     }
                     frameNumber++;
 
@@ -240,7 +241,7 @@ class DecoderThread extends Thread {
 
         @Override
         public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index, @NonNull MediaCodec.BufferInfo info) {
-            mainActivity.counter.countOutputFrame(1);
+            mCounter.countOutputFrame(1);
 
             if (queuedOutputBuffer != -1) {
                 decoder.releaseOutputBuffer(queuedOutputBuffer, false);

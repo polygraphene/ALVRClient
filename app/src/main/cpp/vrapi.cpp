@@ -17,6 +17,7 @@
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include <string>
+#include <list>
 
 #define CHECK_GL_ERRORS 1
 #if !defined( EGL_OPENGL_ES3_BIT_KHR )
@@ -97,6 +98,14 @@ bool UseMultiview = true;
 GLuint SurfaceTextureID = 0;
 int enableTestMode = 0;
 int suspend = 0;
+
+struct TrackingFrame {
+    ovrTracking2 tracking;
+    uint64_t frameIndex;
+    double displayTime;
+};
+std::list<std::shared_ptr<TrackingFrame> > trackingFrameList;
+Mutex trackingFrameMutex;
 
 static double GetTimeInSeconds() {
     struct timespec now;
@@ -1063,6 +1072,7 @@ ovrGeometry TestMode;
 
 double startTime;
 uint64_t FrameIndex = 0;
+uint64_t WantedFrameIndex = 0;
 
 
 static int MAX_FENCES = 4;
@@ -1162,7 +1172,7 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
 
         //enableTestMode = 0;
         GL(glUniform1i(Program.UniformLocation[UNIFORM_ENABLE_TEST_MODE], enableTestMode));
-        if(enableTestMode & 1 != 0) {
+        if((enableTestMode & 1) != 0) {
             int N = 10;
             for(int i = 0; i < N; i++) {
                 ovrMatrix4f TestModeMatrix[2];
@@ -1171,8 +1181,8 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
                     ovrMatrix4f scale = ovrMatrix4f_CreateScale(10, 10, 10);
                     TestModeMatrix[0] = ovrMatrix4f_Multiply(&scale, &TestModeMatrix[0]);
                 }
-                float theta = 2.0 * M_PI * i / (1.0 * N);
-                ovrMatrix4f translation = ovrMatrix4f_CreateTranslation(5.0 * cos(theta), 0, 5 * sin(theta));
+                double theta = 2.0 * M_PI * i / (1.0 * N);
+                ovrMatrix4f translation = ovrMatrix4f_CreateTranslation(float(5.0 * cos(theta)), 0, float(5 * sin(theta)));
                 TestModeMatrix[0] = ovrMatrix4f_Multiply(&translation, &TestModeMatrix[0]);
 
                 TestModeMatrix[1] = TestModeMatrix[0];
@@ -1427,81 +1437,21 @@ Java_com_polygraphene_remoteglass_VrAPI_render(JNIEnv *env, jobject instance, jo
         startTime = GetTimeInSeconds();
 
     }
-    FrameIndex++;
 
     double currentTime = GetTimeInSeconds();
 
-// Get the HMD pose, predicted for the middle of the time period during which
-// the new eye images will be displayed. The number of frames predicted ahead
-// depends on the pipeline depth of the engine and the synthesis rate.
-// The better the prediction, the less black will be pulled in at the edges.
-    const double predictedDisplayTime = vrapi_GetPredictedDisplayTime(Ovr, FrameIndex);
-    const ovrTracking2 tracking = vrapi_GetPredictedTracking2(Ovr, predictedDisplayTime);
-
-    DisplayTime = predictedDisplayTime;
 
     unsigned long long completionFence = 0;
 
-
-    GL(glActiveTexture(GL_TEXTURE0));
-    GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
-    GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, SurfaceTextureID));
-
-    char *packet;
-    jbyteArray array = env->NewByteArray(2000);
-    packet = (char *) env->GetByteArrayElements(array, 0);
-
-    uint64_t clientTime = getTimestampUs();
-    int pos = 0;
-    int type = 2;
-    memcpy(packet + pos, &type, 4);
-    pos += 4;
-    memcpy(packet + pos, &clientTime, sizeof(uint64_t));
-    pos += sizeof(uint64_t);
-    memcpy(packet + pos, &FrameIndex, sizeof(uint64_t));
-    pos += sizeof(uint64_t);
-    memcpy(packet + pos, &predictedDisplayTime, sizeof(double));
-    pos += sizeof(double);
-    memcpy(packet + pos, &tracking.HeadPose.Pose.Orientation, sizeof(ovrQuatf));
-    pos += sizeof(ovrQuatf);
-    memcpy(packet + pos, &tracking.HeadPose.Pose.Position, sizeof(ovrVector3f));
-    pos += sizeof(ovrVector3f);
-
-    memcpy(packet + pos, &tracking.HeadPose.AngularVelocity, sizeof(ovrVector3f));
-    pos += sizeof(ovrVector3f);
-    memcpy(packet + pos, &tracking.HeadPose.LinearVelocity, sizeof(ovrVector3f));
-    pos += sizeof(ovrVector3f);
-    memcpy(packet + pos, &tracking.HeadPose.AngularAcceleration, sizeof(ovrVector3f));
-    pos += sizeof(ovrVector3f);
-    memcpy(packet + pos, &tracking.HeadPose.LinearAcceleration, sizeof(ovrVector3f));
-    pos += sizeof(ovrVector3f);
-
-    memcpy(packet + pos, &tracking.Eye[0].ProjectionMatrix, sizeof(ovrMatrix4f));
-    pos += sizeof(ovrMatrix4f);
-    memcpy(packet + pos, &tracking.Eye[0].ViewMatrix, sizeof(ovrMatrix4f));
-    pos += sizeof(ovrMatrix4f);
-    memcpy(packet + pos, &tracking.Eye[1].ProjectionMatrix, sizeof(ovrMatrix4f));
-    pos += sizeof(ovrMatrix4f);
-    memcpy(packet + pos, &tracking.Eye[1].ViewMatrix, sizeof(ovrMatrix4f));
-    pos += sizeof(ovrMatrix4f);
-
-    env->ReleaseByteArrayElements(array, (jbyte *) packet, 0);
-
-    ALOGV("Sending tracking info. FrameIndex=%lu", FrameIndex);
-
     jclass clazz = env->GetObjectClass(callback);
-    jmethodID sendTracking = env->GetMethodID(clazz, "onSendTracking", "([BIJ)V");
-
-    env->CallVoidMethod(callback, sendTracking, array, pos, FrameIndex);
-
     jmethodID waitFrame = env->GetMethodID(clazz, "waitFrame", "()J");
     uint64_t renderedFrameIndex = 0;
     for (int i = 0; i < 10; i++) {
         renderedFrameIndex = env->CallLongMethod(callback, waitFrame);
-        ALOGV("Got frame for render. wanted FrameIndex=%lu got=%lu waiting=%.3f ms delay=%lu", FrameIndex, renderedFrameIndex,
+        ALOGV("Got frame for render. wanted FrameIndex=%lu got=%lu waiting=%.3f ms delay=%lu", WantedFrameIndex, renderedFrameIndex,
               (GetTimeInSeconds() - currentTime) * 1000,
-              FrameIndex - renderedFrameIndex);
-        if (FrameIndex == renderedFrameIndex) {
+              WantedFrameIndex - renderedFrameIndex);
+        if (WantedFrameIndex <= renderedFrameIndex) {
             break;
         }
         if((enableTestMode & 4) != 0){
@@ -1509,10 +1459,30 @@ Java_com_polygraphene_remoteglass_VrAPI_render(JNIEnv *env, jobject instance, jo
         }
     }
 
+    std::shared_ptr<TrackingFrame> frame;
+    {
+        MutexLock lock(trackingFrameMutex);
+        int i = 0;
+        for(std::list<std::shared_ptr<TrackingFrame> >::iterator it = trackingFrameList.begin();
+                it != trackingFrameList.end(); ++it, i++){
+            if((*it)->frameIndex == renderedFrameIndex) {
+                frame = *it;
+                break;
+            }
+        }
+    }
+    if(!frame) {
+        // No matching tracking info. Too old frame.
+        LOG("Too old frame has arrived. ignore. FrameIndex=%lu WantedFrameIndex=%lu", renderedFrameIndex, WantedFrameIndex);
+        return;
+    }
+
+    GL(glActiveTexture(GL_TEXTURE0));
     GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
+    GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, SurfaceTextureID));
 
 // Render eye images and setup the primary layer using ovrTracking2.
-    const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java, &tracking,
+    const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java, &frame->tracking,
                                                                    Ovr, &completionFence, GetTimeInSeconds() - startTime);
 
 
@@ -1538,15 +1508,17 @@ Java_com_polygraphene_remoteglass_VrAPI_render(JNIEnv *env, jobject instance, jo
     frameDesc.
             Layers = layers2;
 
+    WantedFrameIndex = renderedFrameIndex + 1;
+
 // Hand over the eye images to the time warp.
     ovrResult res = vrapi_SubmitFrame2(Ovr, &frameDesc);
 
     ALOGV("vrapi_SubmitFrame2 return=%d rendered FrameIndex=%lu Orientation=(%f, %f, %f, %f)"
           , res, renderedFrameIndex
-    , tracking.HeadPose.Pose.Orientation.x
-    , tracking.HeadPose.Pose.Orientation.y
-    , tracking.HeadPose.Pose.Orientation.z
-    , tracking.HeadPose.Pose.Orientation.w
+    , frame->tracking.HeadPose.Pose.Orientation.x
+    , frame->tracking.HeadPose.Pose.Orientation.y
+    , frame->tracking.HeadPose.Pose.Orientation.z
+    , frame->tracking.HeadPose.Pose.Orientation.w
     );
     if(suspend) {
         ALOGV("submit enter suspend");
@@ -1555,6 +1527,79 @@ Java_com_polygraphene_remoteglass_VrAPI_render(JNIEnv *env, jobject instance, jo
         }
         ALOGV("submit leave suspend");
     }
+}
+
+void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTracking2 *tracking){
+    char *packet;
+    jbyteArray array = env->NewByteArray(2000);
+    packet = (char *) env->GetByteArrayElements(array, 0);
+
+    uint64_t clientTime = getTimestampUs();
+    int pos = 0;
+    int type = 2;
+    memcpy(packet + pos, &type, 4);
+    pos += 4;
+    memcpy(packet + pos, &clientTime, sizeof(uint64_t));
+    pos += sizeof(uint64_t);
+    memcpy(packet + pos, &FrameIndex, sizeof(uint64_t));
+    pos += sizeof(uint64_t);
+    memcpy(packet + pos, &displayTime, sizeof(double));
+    pos += sizeof(double);
+    memcpy(packet + pos, &tracking->HeadPose.Pose.Orientation, sizeof(ovrQuatf));
+    pos += sizeof(ovrQuatf);
+    memcpy(packet + pos, &tracking->HeadPose.Pose.Position, sizeof(ovrVector3f));
+    pos += sizeof(ovrVector3f);
+
+    memcpy(packet + pos, &tracking->HeadPose.AngularVelocity, sizeof(ovrVector3f));
+    pos += sizeof(ovrVector3f);
+    memcpy(packet + pos, &tracking->HeadPose.LinearVelocity, sizeof(ovrVector3f));
+    pos += sizeof(ovrVector3f);
+    memcpy(packet + pos, &tracking->HeadPose.AngularAcceleration, sizeof(ovrVector3f));
+    pos += sizeof(ovrVector3f);
+    memcpy(packet + pos, &tracking->HeadPose.LinearAcceleration, sizeof(ovrVector3f));
+    pos += sizeof(ovrVector3f);
+
+    memcpy(packet + pos, &tracking->Eye[0].ProjectionMatrix, sizeof(ovrMatrix4f));
+    pos += sizeof(ovrMatrix4f);
+    memcpy(packet + pos, &tracking->Eye[0].ViewMatrix, sizeof(ovrMatrix4f));
+    pos += sizeof(ovrMatrix4f);
+    memcpy(packet + pos, &tracking->Eye[1].ProjectionMatrix, sizeof(ovrMatrix4f));
+    pos += sizeof(ovrMatrix4f);
+    memcpy(packet + pos, &tracking->Eye[1].ViewMatrix, sizeof(ovrMatrix4f));
+    pos += sizeof(ovrMatrix4f);
+
+    env->ReleaseByteArrayElements(array, (jbyte *) packet, 0);
+
+    ALOGV("Sending tracking info. FrameIndex=%lu", FrameIndex);
+
+    jclass clazz = env->GetObjectClass(callback);
+    jmethodID sendTracking = env->GetMethodID(clazz, "onSendTracking", "([BIJ)V");
+
+    env->CallVoidMethod(callback, sendTracking, array, pos, FrameIndex);
+}
+
+// Called from TrackingThread
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_remoteglass_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance, jobject callback) {
+    std::shared_ptr<TrackingFrame> frame(new TrackingFrame());
+
+    FrameIndex++;
+
+    frame->frameIndex = FrameIndex;
+
+    frame->displayTime = vrapi_GetPredictedDisplayTime(Ovr, FrameIndex);
+    frame->tracking = vrapi_GetPredictedTracking2(Ovr, frame->displayTime);
+
+    {
+        MutexLock lock(trackingFrameMutex);
+        trackingFrameList.push_back(frame);
+        if(trackingFrameList.size() > 100) {
+            trackingFrameList.pop_front();
+        }
+    }
+
+    sendTrackingInfo(env, callback, frame->displayTime, &frame->tracking);
 }
 
 extern "C"

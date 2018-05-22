@@ -4,7 +4,7 @@ import android.util.Log;
 
 import java.nio.ByteBuffer;
 
-class SrtReceiverThread extends MainActivity.ReceiverThread {
+class SrtReceiverThread extends Thread {
     private static final String TAG = "SrtReceiverThread";
 
     static {
@@ -12,12 +12,21 @@ class SrtReceiverThread extends MainActivity.ReceiverThread {
         System.loadLibrary("native-lib");
     }
 
-    SrtReceiverThread(NALParser nalParser, StatisticsCounter counter, MainActivity activity) {
-        super(nalParser, counter, activity);
+    MainActivity mMainActivity;
+    String mHost;
+    int mPort;
+
+    SrtReceiverThread(StatisticsCounter counter, MainActivity activity) {
+        mMainActivity = activity;
     }
 
-    public boolean isStopped(){
-        return mainActivity.isStopped();
+    public boolean isStopped() {
+        return mMainActivity.isStopped();
+    }
+
+    public void setHost(String host, int port) {
+        mHost = host;
+        mPort = port;
     }
 
     @Override
@@ -25,7 +34,7 @@ class SrtReceiverThread extends MainActivity.ReceiverThread {
         setName(SrtReceiverThread.class.getName());
 
         try {
-            int ret = initializeSocket(host, port);
+            int ret = initializeSocket(mHost, mPort);
             if (ret != 0) {
                 Log.e(TAG, "Error on initialize srt socket. Code=" + ret + ".");
                 return;

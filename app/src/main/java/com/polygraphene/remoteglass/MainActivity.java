@@ -13,43 +13,32 @@ import android.view.SurfaceView;
 import android.view.Window;
 import android.view.WindowManager;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.SocketTimeoutException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 
 public class MainActivity extends Activity {
     private final static String TAG = "MainActivity";
+
     private SurfaceView mSurfaceView;
     private SurfaceHolder mHolder;
     private final SurfaceHolder.Callback mCallback = new VideoSurface();
-    private List<MediaCodecInfo> AvcCodecInfoes = new ArrayList<>();
+    private List<MediaCodecInfo> mAvcCodecInfoes = new ArrayList<>();
 
+    private boolean mSurfaceCreated = false;
+    private boolean mStopped = false;
+    StatisticsCounter mCounter = new StatisticsCounter();
 
-    private boolean surfaceCreated = false;
-    private boolean stopped = false;
-    NALParser nalParser;
-    StatisticsCounter counter = new StatisticsCounter();
-
-    private DecoderThread decoderThread;
-    //private ReceiverThread receiverThread = new ReceiverThread();
-    private UdpReceiverThread receiverThread;
+    private DecoderThread mDecoderThread;
+    private UdpReceiverThread mReceiverThread;
+    private TrackingThread mTrackingThread;
 
     SurfaceTexture surfaceTexture;
     Surface surface;
 
     boolean rendered = false;
-    boolean renderRequesed = false;
+    boolean renderRequested = false;
     long frameIndex = 0;
-    Object waiter = new Object();
+    final Object waiter = new Object();
 
     private VrAPI vrAPI = new VrAPI();
 
@@ -58,18 +47,18 @@ public class MainActivity extends Activity {
     }
 
     public boolean isStopped() {
-        return stopped;
+        return mStopped;
     }
 
     public int renderIf(MediaCodec codec, int queuedOutputBuffer, long frameIndex) {
         //Log.v(TAG, "renderIf " + queuedOutputBuffer);
         synchronized (waiter) {
-            if (!renderRequesed) {
+            if (!renderRequested) {
                 return queuedOutputBuffer;
             }
         }
 
-        if(queuedOutputBuffer == -1) {
+        if (queuedOutputBuffer == -1) {
             return queuedOutputBuffer;
         }
 
@@ -88,8 +77,11 @@ public class MainActivity extends Activity {
         vrAPI.onChangeSettings(enableTestMode, suspend);
     }
 
-    public interface VrFrameCallback {
+    public interface OnSendTrackingCallback {
         void onSendTracking(byte[] buf, int len, long frame);
+    }
+
+    public interface VrFrameCallback {
         long waitFrame();
     }
 
@@ -97,82 +89,11 @@ public class MainActivity extends Activity {
 
         @Override
         public void surfaceCreated(final SurfaceHolder holder) {
-            Thread th = new Thread() {
-                @Override
-                public void run() {
-                    setName("VR-Thread");
+            VrThread vrThread = new VrThread();
+            // Start rendering.
+            vrThread.start();
 
-                    vrAPI.onSurfaceCreated(holder.getSurface(), MainActivity.this);
-                    surfaceTexture = new SurfaceTexture(vrAPI.getSurfaceTextureID());
-                    surfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
-                        @Override
-                        public void onFrameAvailable(SurfaceTexture surfaceTexture) {
-                            Log.v(TAG, "onFrameAvailable " + frameIndex);
-
-                            synchronized (waiter) {
-                                renderRequesed = false;
-                                rendered = true;
-                                waiter.notifyAll();
-                            }
-                        }
-                    });
-                    surface = new Surface(surfaceTexture);
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-
-                            try {
-                                decoderThread.start();
-                                receiverThread.start();
-                            } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
-                                e.printStackTrace();
-                            }
-                        }
-                    });
-
-                    while (true) {
-                        vrAPI.render(new VrFrameCallback() {
-                            @Override
-                            public void onSendTracking(byte[] buf, int len, long frame) {
-                                Log.v(TAG, "sending " + len + " fr:" + frame);
-                                receiverThread.send(buf, len);
-                            }
-
-                            @Override
-                            public long waitFrame(){
-                                synchronized (waiter) {
-                                    if(rendered) {
-                                        Log.v(TAG, "updateTexImage(discard)");
-                                        surfaceTexture.updateTexImage();
-                                    }
-                                    Log.v(TAG, "waitFrame Enter");
-                                    renderRequesed = true;
-                                    rendered = false;
-                                }
-                                while(true){
-                                    synchronized (waiter){
-                                        if(rendered){
-                                            Log.v(TAG, "waited:" + frameIndex);
-                                            surfaceTexture.updateTexImage();
-                                            break;
-                                        }
-                                        try {
-                                            Log.v(TAG, "waiting");
-                                            waiter.wait();
-                                        } catch (InterruptedException e) {
-                                            e.printStackTrace();
-                                        }
-                                    }
-                                }
-
-                                return frameIndex;
-                            }
-                        });
-                    }
-                }
-            };
-            th.start();
-
+            mSurfaceCreated = true;
         }
 
         @Override
@@ -191,9 +112,6 @@ public class MainActivity extends Activity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-
-        // Force the screen to stay on, rather than letting it dim and shut off
-        // while the user is watching a movie.
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -217,12 +135,13 @@ public class MainActivity extends Activity {
             }
             if (isAvc && !info.isEncoder()) {
                 MediaCodecInfo.CodecCapabilities capabilitiesForType = info.getCapabilitiesForType("video/avc");
+                /*
                 Log.v(TAG, info.getName());
                 for (MediaCodecInfo.CodecProfileLevel profile : capabilitiesForType.profileLevels) {
                     Log.v(TAG, "profile:" + profile.profile + " level:" + profile.level);
-                }
+                }*/
 
-                AvcCodecInfoes.add(info);
+                mAvcCodecInfoes.add(info);
             }
         }
 
@@ -232,207 +151,158 @@ public class MainActivity extends Activity {
     protected void onStop() {
         super.onStop();
 
-        stopped = true;
-        if (decoderThread != null) {
-            decoderThread.interrupt();
+        mStopped = true;
+        if (mReceiverThread != null) {
+            mReceiverThread.interrupt();
             try {
-                decoderThread.join();
+                mReceiverThread.join();
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
         }
-        if (receiverThread != null) {
-            receiverThread.interrupt();
+        if (mDecoderThread != null) {
+            mDecoderThread.interrupt();
             try {
-                receiverThread.join();
+                mDecoderThread.join();
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
         }
-        decoderThread = null;
-        receiverThread = null;
+        if (mTrackingThread != null) {
+            mTrackingThread.interrupt();
+            try {
+                mTrackingThread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        mReceiverThread = null;
+        mDecoderThread = null;
+        mTrackingThread = null;
     }
 
     @Override
     protected void onResume() {
         super.onResume();
 
-        if (decoderThread != null) {
-            decoderThread.interrupt();
+        if (mReceiverThread != null) {
+            mReceiverThread.interrupt();
         }
-        if (receiverThread != null) {
-            receiverThread.interrupt();
+        if (mDecoderThread != null) {
+            mDecoderThread.interrupt();
+        }
+        if (mTrackingThread != null) {
+            mTrackingThread.interrupt();
         }
 
-        nalParser = new NALParser();
+        mReceiverThread = new UdpReceiverThread(mCounter, this);
+        mReceiverThread.setHost("10.1.0.2", 9944);
+        mDecoderThread = new DecoderThread(this, mReceiverThread, mAvcCodecInfoes.get(0), mCounter);
+        mTrackingThread = new TrackingThread();
 
-
-        //receiverThread = new ReceiverThread(nalParser, counter, this);
-        receiverThread = new UdpReceiverThread(nalParser, counter, this);
-        //receiverThread = new ReplayReceiverThread();
-        receiverThread.setHost("10.1.0.2", 9944);
-        decoderThread = new DecoderThread(this, receiverThread, AvcCodecInfoes.get(0));
-
-        if (surfaceCreated) {
+        if (mSurfaceCreated) {
             try {
-                decoderThread.start();
-                receiverThread.start();
+                mDecoderThread.start();
+                mReceiverThread.start();
             } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
                 e.printStackTrace();
             }
         }
     }
 
-
-    static class ReceiverThread extends Thread {
-        NALParser nalParser;
-        StatisticsCounter counter;
-        String host;
-        int port;
-        MainActivity mainActivity;
-
-        ReceiverThread(NALParser nalParser, StatisticsCounter counter, MainActivity activity) {
-            this.nalParser = nalParser;
-            this.counter = counter;
-            this.mainActivity = activity;
-        }
-
-        public void setHost(String host, int port) {
-            this.host = host;
-            this.port = port;
-        }
-
+    class VrThread extends Thread {
         @Override
         public void run() {
-            try {
-                DatagramSocket socket = new DatagramSocket();
+            setName("VR-Thread");
 
-                final int PACKET_BUFFER = 3000;
-                final int MAX_PACKET_LENGTH = 2000;
+            vrAPI.onSurfaceCreated(mHolder.getSurface(), MainActivity.this);
 
-                byte[][] buffers = new byte[PACKET_BUFFER][];
-                DatagramPacket[] packets = new DatagramPacket[PACKET_BUFFER];
+            surfaceTexture = new SurfaceTexture(vrAPI.getSurfaceTextureID());
+            surfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
+                @Override
+                public void onFrameAvailable(SurfaceTexture surfaceTexture) {
+                    Log.v(TAG, "onFrameAvailable " + frameIndex);
 
-                for (int i = 0; i < PACKET_BUFFER; i++) {
-                    buffers[i] = new byte[MAX_PACKET_LENGTH];
-                    packets[i] = new DatagramPacket(buffers[i], buffers[i].length);
-                }
-
-                InetSocketAddress serverAddress = new InetSocketAddress(host, port);
-
-                socket.send(new DatagramPacket(new byte[1], 1, serverAddress));
-
-                int previousSequence = -1;
-                for (int i = 0; ; i++) {
-                    if (mainActivity.isStopped()) {
-                        break;
-                    }
-
-                    byte[] packetBuffer = buffers[i % PACKET_BUFFER];
-                    DatagramPacket packet = packets[i % PACKET_BUFFER];
-                    socket.receive(packet);
-
-                    int sequence = ByteBuffer.wrap(packetBuffer, 0, 4)
-                            .order(ByteOrder.LITTLE_ENDIAN)
-                            .getInt();
-
-                    if (previousSequence + 1 != sequence) {
-                        Log.v(TAG, "packet Dropped from " + previousSequence + " to " + sequence + " (" + (sequence - (previousSequence + 1)) + ")");
-                    }
-                    previousSequence = sequence;
-
-                    counter.countPacket(packet.getLength() - 4);
-
-                    int queueSize = nalParser.queuePacket(ByteBuffer.wrap(packetBuffer, 4, packet.getLength() - 4));
-                    if (queueSize % 1000 == 0) {
-                        Log.v(TAG, "queueSize " + queueSize);
+                    synchronized (waiter) {
+                        renderRequested = false;
+                        rendered = true;
+                        waiter.notifyAll();
                     }
                 }
+            });
+            surface = new Surface(surfaceTexture);
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        mDecoderThread.start();
+                        if(!mReceiverThread.start()) {
+                            Log.e(TAG, "FATAL: Initialization of ReceiverThread failed.");
+                            return;
+                        }
+                        // TrackingThread relies on ReceiverThread.
+                        mTrackingThread.start();
+                    } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
 
-            } catch (IOException e) {
+            while (!isStopped()) {
+                vrAPI.render(new VrFrameCallback() {
+
+
+                    @Override
+                    public long waitFrame() {
+                        synchronized (waiter) {
+                            if (rendered) {
+                                Log.v(TAG, "updateTexImage(discard)");
+                                surfaceTexture.updateTexImage();
+                            }
+                            Log.v(TAG, "waitFrame Enter");
+                            renderRequested = true;
+                            rendered = false;
+                        }
+                        while (true) {
+                            synchronized (waiter) {
+                                if (rendered) {
+                                    Log.v(TAG, "waited:" + frameIndex);
+                                    surfaceTexture.updateTexImage();
+                                    break;
+                                }
+                                try {
+                                    Log.v(TAG, "waiting");
+                                    waiter.wait();
+                                } catch (InterruptedException e) {
+                                    e.printStackTrace();
+                                }
+                            }
+                        }
+
+                        return frameIndex;
+                    }
+                });
             }
-
-            Log.v(TAG, "ReceiverThread stopped.");
         }
     }
 
-    private class ReplayReceiverThread extends ReceiverThread {
-        ReplayReceiverThread(NALParser nalParser, StatisticsCounter counter, MainActivity activity) {
-            super(nalParser, counter, activity);
-        }
-
+    class TrackingThread extends Thread {
         @Override
         public void run() {
-            ServerSocket socket = null;
-            try {
-                socket = new ServerSocket(9944);
-                socket.setSoTimeout(100);
-                socket.setReuseAddress(true);
-
-                Socket client;
-                while (true) {
-                    if (stopped) {
-                        throw new InterruptedException();
+            while(!isStopped()) {
+                vrAPI.fetchTrackingInfo(new OnSendTrackingCallback() {
+                    @Override
+                    public void onSendTracking(byte[] buf, int len, long frame) {
+                        Log.v(TAG, "sending " + len + " fr:" + frame);
+                        mReceiverThread.send(buf, len);
                     }
-                    try {
-                        client = socket.accept();
-                        break;
-                    } catch (SocketTimeoutException e) {
-                    }
-                }
-                socket.close();
-                socket = null;
-
-                Log.v(TAG, "Accept Replay Socket");
-                InputStream inputStream = client.getInputStream();
-
-                byte[][] buffers = new byte[3000][];
-                for (int i = 0; i < 3000; i++) {
-                    buffers[i] = new byte[2000];
-                }
-                for (int i = 0; ; i++) {
-                    if (stopped) {
-                        break;
-                    }
-
-                    byte[] packetBuffer = buffers[i % 3000];
-
-                    int ret = inputStream.read(packetBuffer);
-                    if (ret == -1) {
-                        break;
-                    }
-                    counter.countPacket(ret);
-
-                    int queueSize = 0;
-                    nalParser.queuePacket(ByteBuffer.wrap(packetBuffer, 0, ret));
-
-                    if (queueSize > 2000) {
-                        Log.e(TAG, "sleep packetQueue");
-                        while (nalParser.getQueueSize() > 2000) {
-                            if (stopped) {
-                                break;
-                            }
-                            Thread.sleep(5);
-                        }
-                    }
-                    if (queueSize % 100 == 0) {
-                        //Log.v(TAG, "queueSize " + queueSize);
-                    }
-                }
-
-            } catch (IOException | InterruptedException e) {
-                e.printStackTrace();
-            }
-
-            if (socket != null) {
+                });
                 try {
-                    socket.close();
-                } catch (IOException e) {
+                    Thread.sleep(16);
+                } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
             }
-
-            Log.v(TAG, "ReplayReceiverThread stopped.");
         }
     }
 }

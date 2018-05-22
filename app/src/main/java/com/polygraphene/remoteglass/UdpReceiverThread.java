@@ -2,7 +2,7 @@ package com.polygraphene.remoteglass;
 
 import android.util.Log;
 
-class UdpReceiverThread extends MainActivity.ReceiverThread {
+class UdpReceiverThread {
     private static final String TAG = "SrtReceiverThread";
 
     static {
@@ -10,12 +10,26 @@ class UdpReceiverThread extends MainActivity.ReceiverThread {
         System.loadLibrary("native-lib");
     }
 
-    UdpReceiverThread(NALParser nalParser, StatisticsCounter counter, MainActivity activity) {
-        super(nalParser, counter, activity);
+    Thread mThread;
+    StatisticsCounter mCounter;
+    MainActivity mMainActivity;
+    String mHost;
+    int mPort;
+    boolean mInitialized = false;
+    boolean mInitializeFailed = false;
+
+    UdpReceiverThread(StatisticsCounter counter, MainActivity activity) {
+        mCounter = counter;
+        mMainActivity = activity;
     }
 
-    public boolean isStopped(){
-        return mainActivity.isStopped();
+    public void setHost(String host, int port) {
+        mHost = host;
+        mPort = port;
+    }
+
+    public boolean isStopped() {
+        return mMainActivity.isStopped();
     }
 
     public String getDeviceName() {
@@ -28,16 +42,44 @@ class UdpReceiverThread extends MainActivity.ReceiverThread {
         }
     }
 
+    public boolean start() {
+        mThread = new Thread() {
+            @Override
+            public void run() {
+                runThread();
+            }
+        };
+        mThread.start();
 
-    @Override
-    public void run() {
-        setName(SrtReceiverThread.class.getName());
+        synchronized (this) {
+            while (!mInitialized && !mInitializeFailed) {
+                try {
+                    wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        return !mInitializeFailed;
+    }
+
+    private void runThread() {
+        mThread.setName(SrtReceiverThread.class.getName());
 
         try {
-            int ret = initializeSocket(host, port, getDeviceName());
+            int ret = initializeSocket(mHost, mPort, getDeviceName());
             if (ret != 0) {
                 Log.e(TAG, "Error on initialize srt socket. Code=" + ret + ".");
+                synchronized (this) {
+                    mInitializeFailed = true;
+                    notifyAll();
+                }
                 return;
+            }
+            synchronized (this) {
+                mInitialized = true;
+                notifyAll();
             }
 
             runLoop();
@@ -49,9 +91,17 @@ class UdpReceiverThread extends MainActivity.ReceiverThread {
         Log.v(TAG, "SrtReceiverThread stopped.");
     }
 
+    public void interrupt() {
+        mThread.interrupt();
+    }
+
+    public void join() throws InterruptedException {
+        mThread.join();
+    }
+
     // called from native
     public void onChangeSettings(int EnableTestMode, int suspend) {
-        mainActivity.onChangeSettings(EnableTestMode, suspend);
+        mMainActivity.onChangeSettings(EnableTestMode, suspend);
     }
 
     native int initializeSocket(String host, int port, String deviceName);
@@ -71,4 +121,5 @@ class UdpReceiverThread extends MainActivity.ReceiverThread {
     native NAL peekNal();
 
     native void flushNALList();
+
 }

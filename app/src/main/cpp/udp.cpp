@@ -99,7 +99,7 @@ static int processRecv(int sock) {
         processSequence(sequence);
         lastParsedPresentationTime = presentationTime;
 
-        LOG("presentationTime NALType=%d frameIndex=%llu delay=%ld us", buf[28] & 0x1F, frameIndex, (int64_t)getTimestampUs() - ((int64_t)presentationTime - TimeDiff));
+        LOG("presentationTime NALType=%d frameIndex=%lu delay=%ld us", buf[28] & 0x1F, frameIndex, (int64_t)getTimestampUs() - ((int64_t)presentationTime - TimeDiff));
         bool ret2 = processPacket(env_, (char *) buf, ret);
         if(ret2){
             LOG("presentationTime end delay: %ld us", (int64_t)getTimestampUs() - ((int64_t)lastParsedPresentationTime - TimeDiff));
@@ -111,7 +111,7 @@ static int processRecv(int sock) {
         // None first packet of a video frame
         bool ret2 = processPacket(env_, (char *) buf, ret);
         if(ret2){
-            LOG("presentationTime end delay: %lld us", (int64_t)getTimestampUs() - ((int64_t)lastParsedPresentationTime - TimeDiff));
+            LOG("presentationTime end delay: %ld us", (int64_t)getTimestampUs() - ((int64_t)lastParsedPresentationTime - TimeDiff));
         }
     } else if (type == 3) {
         // Time sync packet

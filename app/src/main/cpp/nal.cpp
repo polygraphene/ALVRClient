@@ -40,18 +40,9 @@ struct NALBuffer {
     uint64_t frameIndex;
 };
 std::list<NALBuffer> nalList;
+Mutex nalMutex;
 
-// mutex for access to nalList
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-
-class MutexLock {
-public:
-    MutexLock() { pthread_mutex_lock(&mutex); }
-
-    ~MutexLock() { pthread_mutex_unlock(&mutex); }
-};
-
-static static pthread_cond_t cond_nonzero =  PTHREAD_COND_INITIALIZER;
+static pthread_cond_t cond_nonzero =  PTHREAD_COND_INITIALIZER;
 
 static void allocateBuffer(int length) {
     if (currentBuf != NULL) {
@@ -99,7 +90,6 @@ static void append(char c) {
 }
 
 void initNAL() {
-    pthread_mutex_init(&mutex, NULL);
     pthread_cond_init(&cond_nonzero, NULL);
 
     parseState = 0;
@@ -186,7 +176,7 @@ bool processPacket(JNIEnv *env, char *buf, int len) {
                         newNalParsed = true;
 
                         {
-                            MutexLock lock;
+                            MutexLock lock(nalMutex);
 
                             nalList.push_back(buf);
 
@@ -214,7 +204,7 @@ bool processPacket(JNIEnv *env, char *buf, int len) {
                         env_->ReleaseByteArrayElements(currentBuf, (jbyte *) cbuf, 0);
                         currentBuf = NULL;
                         {
-                            MutexLock lock;
+                            MutexLock lock(nalMutex);
 
                             nalList.push_back(buf);
 
@@ -245,13 +235,13 @@ jobject waitNal(JNIEnv *env) {
     NALBuffer buf;
 
     while(true){
-        MutexLock lock;
+        MutexLock lock(nalMutex);
         if (nalList.size() != 0) {
             buf = nalList.front();
             nalList.pop_front();
             break;
         }
-        pthread_cond_wait(&cond_nonzero, &mutex);
+        nalMutex.CondWait(&cond_nonzero);
     }
     jclass clazz = env->FindClass("com/polygraphene/remoteglass/NAL");
     jmethodID ctor = env->GetMethodID(clazz, "<init>", "()V");
@@ -278,7 +268,7 @@ jobject getNal(JNIEnv *env) {
 
     NALBuffer buf;
     {
-        MutexLock lock;
+        MutexLock lock(nalMutex);
         if (nalList.size() == 0) {
             return NULL;
         }
@@ -310,7 +300,7 @@ jobject peekNal(JNIEnv *env) {
 
     NALBuffer buf;
     {
-        MutexLock lock;
+        MutexLock lock(nalMutex);
         if (nalList.size() == 0) {
             return NULL;
         }
@@ -338,7 +328,7 @@ int getNalListSize() {
     if (!initialized) {
         initNAL();
     }
-    MutexLock lock;
+    MutexLock lock(nalMutex);
     return nalList.size();
 }
 
@@ -347,7 +337,7 @@ void flushNalList(JNIEnv *env) {
     if (!initialized) {
         initNAL();
     }
-    MutexLock lock;
+    MutexLock lock(nalMutex);
     for (auto it = nalList.begin();
          it != nalList.end(); ++it) {
         env->DeleteGlobalRef(it->array);
