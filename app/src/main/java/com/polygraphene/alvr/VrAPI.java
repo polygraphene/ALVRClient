@@ -1,4 +1,4 @@
-package com.polygraphene.remoteglass;
+package com.polygraphene.alvr;
 
 import android.app.Activity;
 import android.view.Surface;

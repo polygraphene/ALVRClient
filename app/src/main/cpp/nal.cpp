@@ -243,7 +243,7 @@ jobject waitNal(JNIEnv *env) {
         }
         nalMutex.CondWait(&cond_nonzero);
     }
-    jclass clazz = env->FindClass("com/polygraphene/remoteglass/NAL");
+    jclass clazz = env->FindClass("com/polygraphene/alvr/NAL");
     jmethodID ctor = env->GetMethodID(clazz, "<init>", "()V");
 
     jobject nal = env->NewObject(clazz, ctor);
@@ -275,7 +275,7 @@ jobject getNal(JNIEnv *env) {
         buf = nalList.front();
         nalList.pop_front();
     }
-    jclass clazz = env->FindClass("com/polygraphene/remoteglass/NAL");
+    jclass clazz = env->FindClass("com/polygraphene/alvr/NAL");
     jmethodID ctor = env->GetMethodID(clazz, "<init>", "()V");
 
     jobject nal = env->NewObject(clazz, ctor);
@@ -306,7 +306,7 @@ jobject peekNal(JNIEnv *env) {
         }
         buf = nalList.front();
     }
-    jclass clazz = env->FindClass("com/polygraphene/remoteglass/NAL");
+    jclass clazz = env->FindClass("com/polygraphene/alvr/NAL");
     jmethodID ctor = env->GetMethodID(clazz, "<init>", "()V");
 
     jobject nal = env->NewObject(clazz, ctor);

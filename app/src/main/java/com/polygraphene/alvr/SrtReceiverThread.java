@@ -1,8 +1,6 @@
-package com.polygraphene.remoteglass;
+package com.polygraphene.alvr;
 
 import android.util.Log;
-
-import java.nio.ByteBuffer;
 
 class SrtReceiverThread extends Thread {
     private static final String TAG = "SrtReceiverThread";

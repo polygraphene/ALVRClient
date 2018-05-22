@@ -1,4 +1,4 @@
-package com.polygraphene.remoteglass;
+package com.polygraphene.alvr;
 
 import android.content.Context;
 import android.support.test.InstrumentationRegistry;
@@ -21,6 +21,6 @@ public class ExampleInstrumentedTest {
         // Context of the app under test.
         Context appContext = InstrumentationRegistry.getTargetContext();
 
-        assertEquals("com.polygraphene.remoteglass", appContext.getPackageName());
+        assertEquals("com.polygraphene.alvr", appContext.getPackageName());
     }
 }
