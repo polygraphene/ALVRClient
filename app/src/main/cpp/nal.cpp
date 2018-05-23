@@ -11,7 +11,8 @@
 #include "nal.h"
 #include "utils.h"
 
-bool initialized = false;
+static bool initialized = false;
+static bool stopped = false;
 
 // NAL parser status
 int parseState = 0;
@@ -42,7 +43,22 @@ struct NALBuffer {
 std::list<NALBuffer> nalList;
 Mutex nalMutex;
 
-static pthread_cond_t cond_nonzero =  PTHREAD_COND_INITIALIZER;
+static pthread_cond_t cond_nonzero = PTHREAD_COND_INITIALIZER;
+
+static void clearNalList(JNIEnv *env) {
+    for (auto it = nalList.begin();
+         it != nalList.end(); ++it) {
+        env->DeleteGlobalRef(it->array);
+    }
+    nalList.clear();
+}
+
+static void initializeBuffer(){
+    currentBuf = NULL;
+    cbuf = NULL;
+    bufferLength = 0;
+    bufferPos = 0;
+}
 
 static void allocateBuffer(int length) {
     if (currentBuf != NULL) {
@@ -89,11 +105,30 @@ static void append(char c) {
     cbuf[bufferPos++] = c;
 }
 
+static void destroyBuffer(){
+    if (currentBuf != NULL) {
+        env_->ReleaseByteArrayElements(currentBuf, (jbyte *) cbuf, 0);
+        env_->DeleteGlobalRef(currentBuf);
+        currentBuf = NULL;
+    }
+}
+
 void initNAL() {
     pthread_cond_init(&cond_nonzero, NULL);
 
+    initializeBuffer();
     parseState = 0;
+    parseSubState = 0;
     initialized = true;
+    stopped = false;
+}
+
+void destroyNAL(JNIEnv *env){
+    clearNalList(env);
+    destroyBuffer();
+    stopped = true;
+    pthread_cond_destroy(&cond_nonzero);
+    initialized = false;
 }
 
 bool processPacket(JNIEnv *env, char *buf, int len) {
@@ -110,7 +145,7 @@ bool processPacket(JNIEnv *env, char *buf, int len) {
     uint32_t sequence = *(uint32_t *) (buf + pos);
     pos += sizeof(uint32_t);
 
-    if (type == 1){
+    if (type == 1) {
         presentationTime = *(uint64_t *) (buf + pos);
         pos += sizeof(uint64_t);
         frameIndex = *(uint64_t *) (buf + pos);
@@ -234,8 +269,11 @@ jobject waitNal(JNIEnv *env) {
 
     NALBuffer buf;
 
-    while(true){
+    while (true) {
         MutexLock lock(nalMutex);
+        if (stopped) {
+            return NULL;
+        }
         if (nalList.size() != 0) {
             buf = nalList.front();
             nalList.pop_front();
@@ -338,9 +376,14 @@ void flushNalList(JNIEnv *env) {
         initNAL();
     }
     MutexLock lock(nalMutex);
-    for (auto it = nalList.begin();
-         it != nalList.end(); ++it) {
-        env->DeleteGlobalRef(it->array);
-    }
-    nalList.clear();
+    clearNalList(env);
+}
+
+void notifyNALWaitingThread(JNIEnv *env) {
+    MutexLock lock(nalMutex);
+    clearNalList(env);
+
+    stopped = true;
+
+    pthread_cond_broadcast(&cond_nonzero);
 }

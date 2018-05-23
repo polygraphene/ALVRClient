@@ -2,34 +2,34 @@ package com.polygraphene.alvr;
 
 import android.util.Log;
 
-class UdpReceiverThread {
-    private static final String TAG = "SrtReceiverThread";
+class UdpReceiverThread implements NALParser {
+    private static final String TAG = "UdpReceiverThread";
 
     static {
         System.loadLibrary("srt");
         System.loadLibrary("native-lib");
     }
 
-    Thread mThread;
-    StatisticsCounter mCounter;
-    MainActivity mMainActivity;
-    String mHost;
-    int mPort;
-    boolean mInitialized = false;
-    boolean mInitializeFailed = false;
+    public Thread mThread;
+    public StatisticsCounter mCounter;
+    public String mHost;
+    public int mPort;
+    public boolean mInitialized = false;
+    public boolean mInitializeFailed = false;
 
-    UdpReceiverThread(StatisticsCounter counter, MainActivity activity) {
+    interface OnChangeSettingsCallback {
+        void onChangeSettings(int enableTestMode, int suspend);
+    }
+    OnChangeSettingsCallback mOnChangeSettingsCallback;
+
+    UdpReceiverThread(StatisticsCounter counter, OnChangeSettingsCallback onChangeSettingsCallback) {
         mCounter = counter;
-        mMainActivity = activity;
+        mOnChangeSettingsCallback = onChangeSettingsCallback;
     }
 
     public void setHost(String host, int port) {
         mHost = host;
         mPort = port;
-    }
-
-    public boolean isStopped() {
-        return mMainActivity.isStopped();
     }
 
     public String getDeviceName() {
@@ -70,7 +70,7 @@ class UdpReceiverThread {
         try {
             int ret = initializeSocket(mHost, mPort, getDeviceName());
             if (ret != 0) {
-                Log.e(TAG, "Error on initialize srt socket. Code=" + ret + ".");
+                Log.e(TAG, "Error on initializing socket. Code=" + ret + ".");
                 synchronized (this) {
                     mInitializeFailed = true;
                     notifyAll();
@@ -81,18 +81,14 @@ class UdpReceiverThread {
                 mInitialized = true;
                 notifyAll();
             }
+            Log.v(TAG, "UdpReceiverThread initialized.");
 
             runLoop();
         } finally {
             closeSocket();
         }
 
-
-        Log.v(TAG, "SrtReceiverThread stopped.");
-    }
-
-    public void interrupt() {
-        mThread.interrupt();
+        Log.v(TAG, "UdpReceiverThread stopped.");
     }
 
     public void join() throws InterruptedException {
@@ -100,8 +96,9 @@ class UdpReceiverThread {
     }
 
     // called from native
+    @SuppressWarnings("unused")
     public void onChangeSettings(int EnableTestMode, int suspend) {
-        mMainActivity.onChangeSettings(EnableTestMode, suspend);
+        mOnChangeSettingsCallback.onChangeSettings(EnableTestMode, suspend);
     }
 
     native int initializeSocket(String host, int port, String deviceName);
@@ -110,16 +107,24 @@ class UdpReceiverThread {
 
     native void runLoop();
 
+    native void interrupt();
+
     native int send(byte[] buf, int length);
 
-    native int getNalListSize();
+    //
+    // NALParser interface
+    //
 
-    native NAL waitNal();
-
-    native NAL getNal();
-
-    native NAL peekNal();
-
-    native void flushNALList();
-
+    @Override
+    public native int getNalListSize();
+    @Override
+    public native NAL waitNal();
+    @Override
+    public native NAL getNal();
+    @Override
+    public native NAL peekNal();
+    @Override
+    public native void flushNALList();
+    @Override
+    public native void notifyWaitingThread();
 }

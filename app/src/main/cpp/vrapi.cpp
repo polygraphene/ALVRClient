@@ -98,6 +98,7 @@ bool UseMultiview = true;
 GLuint SurfaceTextureID = 0;
 int enableTestMode = 0;
 int suspend = 0;
+bool Resumed = false;
 
 struct TrackingFrame {
     ovrTracking2 tracking;
@@ -119,11 +120,10 @@ static std::string DumpMatrix(const ovrMatrix4f *matrix) {
     sprintf(buf, "%.5f, %.5f, %.5f, %.5f\n"
                     "%.5f, %.5f, %.5f, %.5f\n"
                     "%.5f, %.5f, %.5f, %.5f\n"
-                    "%.5f, %.5f, %.5f, %.5f\n"
-            , matrix->M[0][0], matrix->M[0][1], matrix->M[0][2], matrix->M[0][3]
-            , matrix->M[1][0], matrix->M[1][1], matrix->M[1][2], matrix->M[1][3]
-            , matrix->M[2][0], matrix->M[2][1], matrix->M[2][2], matrix->M[2][3]
-            , matrix->M[3][0], matrix->M[3][1], matrix->M[3][2], matrix->M[3][3]
+                    "%.5f, %.5f, %.5f, %.5f\n", matrix->M[0][0], matrix->M[0][1], matrix->M[0][2],
+            matrix->M[0][3], matrix->M[1][0], matrix->M[1][1], matrix->M[1][2], matrix->M[1][3],
+            matrix->M[2][0], matrix->M[2][1], matrix->M[2][2], matrix->M[2][3], matrix->M[3][0],
+            matrix->M[3][1], matrix->M[3][2], matrix->M[3][3]
     );
     return std::string(buf);
 }
@@ -752,10 +752,10 @@ static void ovrGeometry_CreateCube(ovrGeometry *geometry) {
             {
                     // positions
                     {
-                            {-1, -1, 0.0, 1}, {1, 1, 0, 1}, {1, -1, 0, 1}, {-1, 1, 0, 1}
+                            {-1, -1, 0.0, 1}, {1,   1, 0, 1}, {1,   -1, 0, 1}, {-1, 1, 0, 1}
                     },
                     // uv
-                    {       {0, 1},       {0.5, 0},       {0.5, 1},       {0, 0}}
+                    {       {0,  1},          {0.5, 0},       {0.5, 1},        {0,  0}}
             };
 
     static const unsigned short cubeIndices[6] =
@@ -793,8 +793,7 @@ static void ovrGeometry_CreateCube(ovrGeometry *geometry) {
 }
 
 static void ovrGeometry_CreateTestMode(ovrGeometry *geometry) {
-    typedef struct
-    {
+    typedef struct {
         float positions[8][4];
         unsigned char colors[8][4];
         float uv[8][2];
@@ -804,29 +803,29 @@ static void ovrGeometry_CreateTestMode(ovrGeometry *geometry) {
             {
                     // positions
                     {
-                            { -0.5, +0.5, -0.5, +0.5 }, { +0.5, +0.5, -0.5, +0.5 }, { +0.5, +0.5, +0.5, +0.5 }, { -0.5, +0.5, +0.5, +0.5 },	// top
-                            { -0.5, -0.5, -0.5, +0.5 }, { -0.5, -0.5, +0.5, +0.5 }, { +0.5, -0.5, +0.5, +0.5 }, { +0.5, -0.5, -0.5, +0.5 }	// bottom
+                            {-0.5, +0.5, -0.5, +0.5}, {+0.5, +0.5, -0.5, +0.5}, {+0.5, +0.5, +0.5, +0.5}, {-0.5, +0.5, +0.5, +0.5},    // top
+                            {-0.5, -0.5, -0.5, +0.5}, {-0.5, -0.5, +0.5, +0.5}, {+0.5, -0.5, +0.5, +0.5}, {+0.5, -0.5, -0.5, +0.5}    // bottom
                     },
                     // colors
                     {
-                            { 255,   0, 255, 255 }, {   0, 255,   0, 255 }, {   0,   0, 255, 255 }, { 255,   0,   0, 255 },
-                            {   0,   0, 255, 255 }, {   0, 255,   0, 255 }, { 255,   0, 255, 255 }, { 255,   0,   0, 255 }
+                            {255,  0,    255,  255},  {0,    255,  0,    255},  {0,    0,    255,  255},  {255,  0,    0,    255},
+                            {0,    0,    255,  255},  {0,    255,  0,    255},  {255,  0,    255,  255},  {255,  0,    0,    255}
                     },
                     // uv
                     {
-                            {0, 1},       {0.5, 0},       {0.5, 1},       {0, 0},
-                            {0, 1},       {0.5, 0},       {0.5, 1},       {0, 0},
+                            {0,    1},                {0.5,  0},                {0.5,  1},                {0,    0},
+                            {0,    1},                {0.5,  0},                {0.5,  1},                {0,    0},
                     }
             };
 
     static const unsigned short cubeIndices[36] =
             {
-                    0, 2, 1, 2, 0, 3,	// top
-                    4, 6, 5, 6, 4, 7,	// bottom
-                    2, 6, 7, 7, 1, 2,	// right
-                    0, 4, 5, 5, 3, 0,	// left
-                    3, 5, 6, 6, 2, 3,	// front
-                    0, 1, 7, 7, 4, 0	// back
+                    0, 2, 1, 2, 0, 3,    // top
+                    4, 6, 5, 6, 4, 7,    // bottom
+                    2, 6, 7, 7, 1, 2,    // right
+                    0, 4, 5, 5, 3, 0,    // left
+                    3, 5, 6, 6, 2, 3,    // front
+                    0, 1, 7, 7, 4, 0    // back
             };
 
     geometry->VertexCount = 8;
@@ -836,15 +835,15 @@ static void ovrGeometry_CreateTestMode(ovrGeometry *geometry) {
     geometry->VertexAttribs[0].Size = 4;
     geometry->VertexAttribs[0].Type = GL_FLOAT;
     geometry->VertexAttribs[0].Normalized = true;
-    geometry->VertexAttribs[0].Stride = sizeof( cubeVertices.positions[0] );
-    geometry->VertexAttribs[0].Pointer = (const GLvoid *)offsetof( ovrCubeVertices, positions );
+    geometry->VertexAttribs[0].Stride = sizeof(cubeVertices.positions[0]);
+    geometry->VertexAttribs[0].Pointer = (const GLvoid *) offsetof(ovrCubeVertices, positions);
 
     geometry->VertexAttribs[1].Index = VERTEX_ATTRIBUTE_LOCATION_COLOR;
     geometry->VertexAttribs[1].Size = 4;
     geometry->VertexAttribs[1].Type = GL_UNSIGNED_BYTE;
     geometry->VertexAttribs[1].Normalized = true;
-    geometry->VertexAttribs[1].Stride = sizeof( cubeVertices.colors[0] );
-    geometry->VertexAttribs[1].Pointer = (const GLvoid *)offsetof( ovrCubeVertices, colors );
+    geometry->VertexAttribs[1].Stride = sizeof(cubeVertices.colors[0]);
+    geometry->VertexAttribs[1].Pointer = (const GLvoid *) offsetof(ovrCubeVertices, colors);
 
     geometry->VertexAttribs[2].Index = VERTEX_ATTRIBUTE_LOCATION_UV;
     geometry->VertexAttribs[2].Size = 2;
@@ -938,9 +937,9 @@ typedef struct {
 
 static ovrUniform ProgramUniforms[] =
         {
-                {UNIFORM_VIEW_ID,        UNIFORM_TYPE_INT,       "ViewID"},
-                {UNIFORM_TEST_MODE_MATRIX,   UNIFORM_TYPE_MATRIX4X4, "TestModeMatrix"},
-                {UNIFORM_ENABLE_TEST_MODE,   UNIFORM_TYPE_INT, "EnableTestMode"},
+                {UNIFORM_VIEW_ID,          UNIFORM_TYPE_INT,       "ViewID"},
+                {UNIFORM_TEST_MODE_MATRIX, UNIFORM_TYPE_MATRIX4X4, "TestModeMatrix"},
+                {UNIFORM_ENABLE_TEST_MODE, UNIFORM_TYPE_INT,       "EnableTestMode"},
         };
 
 static const char *programVersion = "#version 300 es\n";
@@ -1173,17 +1172,18 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
 
         //enableTestMode = 0;
         GL(glUniform1i(Program.UniformLocation[UNIFORM_ENABLE_TEST_MODE], enableTestMode));
-        if((enableTestMode & 1) != 0) {
+        if ((enableTestMode & 1) != 0) {
             int N = 10;
-            for(int i = 0; i < N; i++) {
+            for (int i = 0; i < N; i++) {
                 ovrMatrix4f TestModeMatrix[2];
                 TestModeMatrix[0] = ovrMatrix4f_CreateIdentity();
-                if(i < 0) {
+                if (i < 0) {
                     ovrMatrix4f scale = ovrMatrix4f_CreateScale(10, 10, 10);
                     TestModeMatrix[0] = ovrMatrix4f_Multiply(&scale, &TestModeMatrix[0]);
                 }
                 double theta = 2.0 * M_PI * i / (1.0 * N);
-                ovrMatrix4f translation = ovrMatrix4f_CreateTranslation(float(5.0 * cos(theta)), 0, float(5 * sin(theta)));
+                ovrMatrix4f translation = ovrMatrix4f_CreateTranslation(float(5.0 * cos(theta)), 0,
+                                                                        float(5 * sin(theta)));
                 TestModeMatrix[0] = ovrMatrix4f_Multiply(&translation, &TestModeMatrix[0]);
 
                 TestModeMatrix[1] = TestModeMatrix[0];
@@ -1197,12 +1197,11 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
                 TestModeMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ProjectionMatrix,
                                                          &TestModeMatrix[1]);
 
-                if(i == 0){
+                if (i == 0) {
                     LOG("theta:%f", theta);
-                    LOG("rotate:%f %f %f %f", tracking->HeadPose.Pose.Orientation.x
-                    , tracking->HeadPose.Pose.Orientation.y
-                    , tracking->HeadPose.Pose.Orientation.z
-                    , tracking->HeadPose.Pose.Orientation.w
+                    LOG("rotate:%f %f %f %f", tracking->HeadPose.Pose.Orientation.x,
+                        tracking->HeadPose.Pose.Orientation.y,
+                        tracking->HeadPose.Pose.Orientation.z, tracking->HeadPose.Pose.Orientation.w
                     );
                     LOG("tran:\n%s", DumpMatrix(&translation).c_str());
                     LOG("view:\n%s", DumpMatrix(&tracking->Eye[0].ViewMatrix).c_str());
@@ -1214,10 +1213,10 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
                                       (float *) TestModeMatrix));
                 GL(glBindVertexArray(TestMode.VertexArrayObject));
 
-                if(i < 2){
+                if (i < 2) {
                     GL(glActiveTexture(GL_TEXTURE0));
                     GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, SurfaceTextureID));
-                }else{
+                } else {
                     GL(glActiveTexture(GL_TEXTURE0));
                     GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
                 }
@@ -1228,11 +1227,12 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
 
                 //GL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
             }
-        }else {
+        } else {
             ovrMatrix4f TestModeMatrix[2];
             TestModeMatrix[0] = ovrMatrix4f_CreateIdentity();
             TestModeMatrix[1] = ovrMatrix4f_CreateIdentity();
-            GL(glUniformMatrix4fv(Program.UniformLocation[UNIFORM_TEST_MODE_MATRIX], 2, true, (float *)TestModeMatrix));
+            GL(glUniformMatrix4fv(Program.UniformLocation[UNIFORM_TEST_MODE_MATRIX], 2, true,
+                                  (float *) TestModeMatrix));
 
             GL(glBindVertexArray(Cube.VertexArrayObject));
 
@@ -1283,9 +1283,57 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
 ovrRenderer Renderer;
 
 void onVrModeChange(JNIEnv *env) {
+    if(Resumed && window != NULL) {
+        if(Ovr == NULL) {
+            ALOGV("Entering VR mode.");
+            ovrModeParms parms = vrapi_DefaultModeParms(&java);
+
+            parms.Flags |= VRAPI_MODE_FLAG_RESET_WINDOW_FULLSCREEN;
+
+            parms.Flags |= VRAPI_MODE_FLAG_NATIVE_WINDOW;
+            parms.Display = (size_t) egl.Display;
+            parms.WindowSurface = (size_t) window;
+            parms.ShareContext = (size_t) egl.Context;
+
+            Ovr = vrapi_EnterVrMode(&parms);
+
+            if (Ovr == NULL) {
+                ALOGE("Invalid ANativeWindow");
+                return;
+            }
+
+            int CpuLevel = 2;
+            int GpuLevel = 3;
+            vrapi_SetClockLevels(Ovr, CpuLevel, GpuLevel);
+
+            ALOGV("		vrapi_SetClockLevels( %d, %d )", CpuLevel, GpuLevel);
+
+            vrapi_SetPerfThread(Ovr, VRAPI_PERF_THREAD_TYPE_MAIN, gettid());
+
+            ALOGV("		vrapi_SetPerfThread( MAIN, %d )", gettid());
+
+            //vrapi_SetTrackingTransform( Ovr, vrapi_GetTrackingTransform( Ovr, VRAPI_TRACKING_TRANSFORM_SYSTEM_CENTER_FLOOR_LEVEL ) );
+        }
+    }else {
+        if(Ovr != NULL){
+            ALOGV("Leaving VR mode.");
+            vrapi_LeaveVrMode(Ovr);
+            Ovr = NULL;
+        }
+    }
+}
+
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_VrAPI_initialize(JNIEnv *env, jobject instance, jobject activity) {
     eglInit();
 
     EglInitExtensions();
+
+    java.Env = env;
+    env->GetJavaVM(&java.Vm);
+    java.ActivityObject = env->NewGlobalRef(activity);
 
     const ovrInitParms initParms = vrapi_DefaultInitParms(&java);
     int32_t initResult = vrapi_Initialize(&initParms);
@@ -1301,56 +1349,9 @@ void onVrModeChange(JNIEnv *env) {
 
     ovrRenderer_Create(&Renderer, &java, UseMultiview);
 
-    ovrModeParms parms = vrapi_DefaultModeParms(&java);
-
-    parms.Flags |= VRAPI_MODE_FLAG_RESET_WINDOW_FULLSCREEN;
-
-    parms.Flags |= VRAPI_MODE_FLAG_NATIVE_WINDOW;
-    parms.Display = (size_t) egl.Display;
-    parms.WindowSurface = (size_t) window;
-    parms.ShareContext = (size_t) egl.Context;
-
-    Ovr = vrapi_EnterVrMode(&parms);
-
-    if (Ovr == NULL) {
-        ALOGE("Invalid ANativeWindow");
-        return;
-    }
-
-    int CpuLevel = 2;
-    int GpuLevel = 3;
-    vrapi_SetClockLevels(Ovr, CpuLevel, GpuLevel);
-
-    ALOGV("		vrapi_SetClockLevels( %d, %d )", CpuLevel, GpuLevel);
-
-    vrapi_SetPerfThread(Ovr, VRAPI_PERF_THREAD_TYPE_MAIN, gettid());
-
-    ALOGV("		vrapi_SetPerfThread( MAIN, %d )", gettid());
-
-    //vrapi_SetTrackingTransform( Ovr, vrapi_GetTrackingTransform( Ovr, VRAPI_TRACKING_TRANSFORM_SYSTEM_CENTER_FLOOR_LEVEL ) );
-}
-
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_VrAPI_init(JNIEnv *env, jobject instance) {
-    //eglInit();
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_VrAPI_onSurfaceCreated(JNIEnv *env, jobject instance,
-                                                         jobject surface, jobject activity) {
-    if (window != NULL) {
-        ANativeWindow_release(window);
-    }
-    window = ANativeWindow_fromSurface(env, surface);
-
-    java.Env = env;
-    env->GetJavaVM(&java.Vm);
-    java.ActivityObject = env->NewGlobalRef(activity);
-    onVrModeChange(env);
-
+    //
+    // Generate texture for SurfaceTexture which is output of MediaCodec.
+    //
     GLuint textures[1];
     glGenTextures(1, textures);
 
@@ -1366,12 +1367,11 @@ Java_com_polygraphene_alvr_VrAPI_onSurfaceCreated(JNIEnv *env, jobject instance,
     glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T,
                     GL_CLAMP_TO_EDGE);
 
-
 }
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_VrAPI_onSurfaceDestroyed(JNIEnv *env, jobject instance) {
+Java_com_polygraphene_alvr_VrAPI_destroy(JNIEnv *env, jobject instance) {
     ovrRenderer_Destroy(&Renderer);
 
     ovrProgram_Destroy(&Program);
@@ -1383,12 +1383,6 @@ Java_com_polygraphene_alvr_VrAPI_onSurfaceDestroyed(JNIEnv *env, jobject instanc
     //ovrEgl_DestroyContext( &appState.Egl );
 
     vrapi_Shutdown();
-
-    //(*java.Vm)->DetachCurrentThread( java.Vm );
-
-    if (window != NULL) {
-        ANativeWindow_release(window);
-    }
 }
 
 
@@ -1443,45 +1437,57 @@ Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject c
 
     jclass clazz = env->GetObjectClass(callback);
     jmethodID waitFrame = env->GetMethodID(clazz, "waitFrame", "()J");
-    uint64_t renderedFrameIndex = 0;
+    int64_t renderedFrameIndex = 0;
     for (int i = 0; i < 10; i++) {
         renderedFrameIndex = env->CallLongMethod(callback, waitFrame);
-        ALOGV("Got frame for render. wanted FrameIndex=%lu got=%lu waiting=%.3f ms delay=%lu", WantedFrameIndex, renderedFrameIndex,
+        if(renderedFrameIndex == -1) {
+            // Paused
+            break;
+        }
+        ALOGV("Got frame for render. wanted FrameIndex=%lu got=%lu waiting=%.3f ms delay=%lu",
+              WantedFrameIndex, renderedFrameIndex,
               (GetTimeInSeconds() - currentTime) * 1000,
               WantedFrameIndex - renderedFrameIndex);
         if (WantedFrameIndex <= renderedFrameIndex) {
             break;
         }
-        if((enableTestMode & 4) != 0){
+        if ((enableTestMode & 4) != 0) {
             break;
         }
+    }
+    if(renderedFrameIndex == -1) {
+        // Paused
+        return;
     }
 
     std::shared_ptr<TrackingFrame> frame;
     {
         MutexLock lock(trackingFrameMutex);
         int i = 0;
-        for(std::list<std::shared_ptr<TrackingFrame> >::iterator it = trackingFrameList.begin();
-                it != trackingFrameList.end(); ++it, i++){
-            if((*it)->frameIndex == renderedFrameIndex) {
+        for (std::list<std::shared_ptr<TrackingFrame> >::iterator it = trackingFrameList.begin();
+             it != trackingFrameList.end(); ++it, i++) {
+            if ((*it)->frameIndex == renderedFrameIndex) {
                 frame = *it;
                 break;
             }
         }
     }
-    if(!frame) {
+    if (!frame) {
         // No matching tracking info. Too old frame.
-        LOG("Too old frame has arrived. ignore. FrameIndex=%lu WantedFrameIndex=%lu", renderedFrameIndex, WantedFrameIndex);
+        LOG("Too old frame has arrived. ignore. FrameIndex=%lu WantedFrameIndex=%lu",
+            renderedFrameIndex, WantedFrameIndex);
         return;
     }
-    LOG("Frame latency is %lu us. FrameIndex=%lu", getTimestampUs() - frame->fetchTime, frame->frameIndex);
+    LOG("Frame latency is %lu us. FrameIndex=%lu", getTimestampUs() - frame->fetchTime,
+        frame->frameIndex);
 
     GL(glActiveTexture(GL_TEXTURE0));
     GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
     GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, SurfaceTextureID));
 
 // Render eye images and setup the primary layer using ovrTracking2.
-    const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java, &frame->tracking,
+    const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java,
+                                                                   &frame->tracking,
                                                                    Ovr, &completionFence);
 
     const ovrLayerHeader2 *layers2[] =
@@ -1510,23 +1516,21 @@ Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject c
 // Hand over the eye images to the time warp.
     ovrResult res = vrapi_SubmitFrame2(Ovr, &frameDesc);
 
-    ALOGV("vrapi_SubmitFrame2 return=%d rendered FrameIndex=%lu Orientation=(%f, %f, %f, %f)"
-          , res, renderedFrameIndex
-    , frame->tracking.HeadPose.Pose.Orientation.x
-    , frame->tracking.HeadPose.Pose.Orientation.y
-    , frame->tracking.HeadPose.Pose.Orientation.z
-    , frame->tracking.HeadPose.Pose.Orientation.w
+    ALOGV("vrapi_SubmitFrame2 return=%d rendered FrameIndex=%lu Orientation=(%f, %f, %f, %f)", res,
+          renderedFrameIndex, frame->tracking.HeadPose.Pose.Orientation.x,
+          frame->tracking.HeadPose.Pose.Orientation.y, frame->tracking.HeadPose.Pose.Orientation.z,
+          frame->tracking.HeadPose.Pose.Orientation.w
     );
-    if(suspend) {
+    if (suspend) {
         ALOGV("submit enter suspend");
-        while(suspend){
+        while (suspend) {
             usleep(1000 * 10);
         }
         ALOGV("submit leave suspend");
     }
 }
 
-void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTracking2 *tracking){
+void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTracking2 *tracking) {
     char *packet;
     jbyteArray array = env->NewByteArray(2000);
     packet = (char *) env->GetByteArrayElements(array, 0);
@@ -1578,7 +1582,8 @@ void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTrac
 // Called from TrackingThread
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance, jobject callback) {
+Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance,
+                                                   jobject callback) {
     std::shared_ptr<TrackingFrame> frame(new TrackingFrame());
 
     FrameIndex++;
@@ -1592,7 +1597,7 @@ Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance
     {
         MutexLock lock(trackingFrameMutex);
         trackingFrameList.push_back(frame);
-        if(trackingFrameList.size() > 100) {
+        if (trackingFrameList.size() > 100) {
             trackingFrameList.pop_front();
         }
     }
@@ -1609,7 +1614,69 @@ Java_com_polygraphene_alvr_VrAPI_getSurfaceTextureID(JNIEnv *env, jobject instan
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_VrAPI_onChangeSettings(JNIEnv *env, jobject instance,
-                                                         jint EnableTestMode, jint Suspend) {
+                                                  jint EnableTestMode, jint Suspend) {
     enableTestMode = EnableTestMode;
     suspend = Suspend;
+}
+
+//
+// Life cycle management.
+//
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_VrAPI_onSurfaceCreated(JNIEnv *env, jobject instance,
+                                                  jobject surface) {
+    window = ANativeWindow_fromSurface(env, surface);
+
+    onVrModeChange(env);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_VrAPI_onSurfaceDestroyed(JNIEnv *env, jobject instance) {
+    if (window != NULL) {
+        ANativeWindow_release(window);
+    }
+    window = NULL;
+
+    onVrModeChange(env);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_VrAPI_onSurfaceChanged(JNIEnv *env, jobject instance, jobject surface) {
+    ANativeWindow *newWindow = ANativeWindow_fromSurface(env, surface);
+    if(newWindow != window) {
+        ANativeWindow_release(window);
+        window = NULL;
+        onVrModeChange(env);
+
+        window = newWindow;
+        if(window != NULL) {
+            onVrModeChange(env);
+        }
+    }else if(newWindow != NULL) {
+        ANativeWindow_release(newWindow);
+    }
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_VrAPI_onResume(JNIEnv *env, jobject instance) {
+    Resumed = true;
+    onVrModeChange(env);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_VrAPI_onPause(JNIEnv *env, jobject instance) {
+    Resumed = false;
+    onVrModeChange(env);
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_polygraphene_alvr_VrAPI_isVrMode(JNIEnv *env, jobject instance) {
+    return Ovr != NULL;
 }

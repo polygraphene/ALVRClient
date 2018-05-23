@@ -27,6 +27,7 @@ static int notify_pipe[2];
 static time_t prevSentSync = 0;
 static int64_t TimeDiff;
 static uint64_t timeSyncSequence = (uint64_t) -1;
+static bool stopped = false;
 
 static JNIEnv *env_;
 static jobject instance_;
@@ -37,6 +38,7 @@ static pthread_mutex_t pipeMutex = PTHREAD_MUTEX_INITIALIZER;
 class PipeLock {
 public:
     PipeLock() { pthread_mutex_lock(&pipeMutex); }
+
     ~PipeLock() { pthread_mutex_unlock(&pipeMutex); }
 };
 
@@ -72,9 +74,10 @@ struct ChangeSettings {
 uint64_t lastParsedPresentationTime = 0;
 uint32_t prevSequence = 0;
 
-static void processSequence(uint32_t sequence){
+static void processSequence(uint32_t sequence) {
     if (prevSequence + 1 != sequence) {
-        LOG("packet loss %d (%d -> %d)", sequence - (prevSequence + 1), prevSequence + 1, sequence - 1);
+        LOG("packet loss %d (%d -> %d)", sequence - (prevSequence + 1), prevSequence + 1,
+            sequence - 1);
     }
     prevSequence = sequence;
 }
@@ -86,23 +89,25 @@ static int processRecv(int sock) {
     sockaddr_in addr;
     socklen_t socklen = sizeof(addr);
     int ret = recvfrom(sock, (char *) buf, len, 0, (sockaddr *) &addr, &socklen);
-    if(ret <= 0) {
+    if (ret <= 0) {
         return ret;
     }
     uint32_t type = *(uint32_t *) buf;
     if (type == 1) {
         // First packet of a video frame
         uint32_t sequence = *(uint32_t *) (buf + 4);
-        uint64_t presentationTime = *(uint64_t *)(buf + 8);
-        uint64_t frameIndex = *(uint64_t *)(buf + 16);
+        uint64_t presentationTime = *(uint64_t *) (buf + 8);
+        uint64_t frameIndex = *(uint64_t *) (buf + 16);
 
         processSequence(sequence);
         lastParsedPresentationTime = presentationTime;
 
-        LOG("presentationTime NALType=%d frameIndex=%lu delay=%ld us", buf[28] & 0x1F, frameIndex, (int64_t)getTimestampUs() - ((int64_t)presentationTime - TimeDiff));
+        LOG("presentationTime NALType=%d frameIndex=%lu delay=%ld us", buf[28] & 0x1F, frameIndex,
+            (int64_t) getTimestampUs() - ((int64_t) presentationTime - TimeDiff));
         bool ret2 = processPacket(env_, (char *) buf, ret);
-        if(ret2){
-            LOG("presentationTime end delay: %ld us", (int64_t)getTimestampUs() - ((int64_t)lastParsedPresentationTime - TimeDiff));
+        if (ret2) {
+            LOG("presentationTime end delay: %ld us",
+                (int64_t) getTimestampUs() - ((int64_t) lastParsedPresentationTime - TimeDiff));
         }
     } else if (type == 2) {
         uint32_t sequence = *(uint32_t *) (buf + 4);
@@ -110,8 +115,9 @@ static int processRecv(int sock) {
 
         // None first packet of a video frame
         bool ret2 = processPacket(env_, (char *) buf, ret);
-        if(ret2){
-            LOG("presentationTime end delay: %ld us", (int64_t)getTimestampUs() - ((int64_t)lastParsedPresentationTime - TimeDiff));
+        if (ret2) {
+            LOG("presentationTime end delay: %ld us",
+                (int64_t) getTimestampUs() - ((int64_t) lastParsedPresentationTime - TimeDiff));
         }
     } else if (type == 3) {
         // Time sync packet
@@ -120,19 +126,20 @@ static int processRecv(int sock) {
         }
         TimeSync *timeSync = (TimeSync *) buf;
         uint64_t Current = getTimestampUs();
-        if(timeSync->mode == 1){
+        if (timeSync->mode == 1) {
             uint64_t RTT = Current - timeSync->clientTime;
-            TimeDiff = ((int64_t)timeSync->serverTime + (int64_t)RTT / 2) - (int64_t)Current;
+            TimeDiff = ((int64_t) timeSync->serverTime + (int64_t) RTT / 2) - (int64_t) Current;
             LOG("TimeSync: server - client = %ld us RTT = %lu us", TimeDiff, RTT);
 
             TimeSync sendBuf = *timeSync;
             sendBuf.mode = 2;
             sendBuf.clientTime = Current;
-            sendto(sock, &sendBuf, sizeof(sendBuf), 0, (sockaddr *)&serverAddr, sizeof(serverAddr));
+            sendto(sock, &sendBuf, sizeof(sendBuf), 0, (sockaddr *) &serverAddr,
+                   sizeof(serverAddr));
         }
     } else if (type == 4) {
         // Change settings
-        if(ret < sizeof(ChangeSettings)) {
+        if (ret < sizeof(ChangeSettings)) {
             return ret;
         }
         ChangeSettings *settings = (ChangeSettings *) buf;
@@ -167,6 +174,9 @@ static void processReadPipe(int pipefd) {
                 sendQueue.pop_front();
             }
         }
+        if (stopped) {
+            return;
+        }
 
         //LOG("Sending tracking packet %d", sendBuffer.len);
         sendto(sock, sendBuffer.buf, sendBuffer.len, 0, (sockaddr *) &serverAddr,
@@ -176,9 +186,9 @@ static void processReadPipe(int pipefd) {
     return;
 }
 
-static void sendTimeSync(){
+static void sendTimeSync() {
     time_t current = time(NULL);
-    if(prevSentSync != current){
+    if (prevSentSync != current) {
         TimeSync timeSync = {};
         timeSync.type = 3;
         timeSync.mode = 0;
@@ -195,13 +205,15 @@ static void sendTimeSync(){
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobject instance,
-                                                                     jstring host_, jint port,
-                                                                     jstring deviceName_) {
+                                                              jstring host_, jint port,
+                                                              jstring deviceName_) {
     const char *host = env->GetStringUTFChars(host_, 0);
     const char *deviceName = env->GetStringUTFChars(deviceName_, 0);
     int ret = 0;
     int val;
     HelloMessage message = {};
+
+    stopped = false;
 
     initNAL();
 
@@ -259,13 +271,18 @@ Java_com_polygraphene_alvr_UdpReceiverThread_closeSocket(JNIEnv *env, jobject in
     if (sock >= 0) {
         close(sock);
     }
+    destroyNAL(env);
+    sendQueue.clear();
 }
 
 
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_send(JNIEnv *env, jobject instance,
-                                                         jbyteArray buf_, jint length) {
+                                                  jbyteArray buf_, jint length) {
+    if (stopped) {
+        return 0;
+    }
     jbyte *buf = env->GetByteArrayElements(buf_, NULL);
 
     SendBuffer sendBuffer;
@@ -317,15 +334,7 @@ Java_com_polygraphene_alvr_UdpReceiverThread_runLoop(JNIEnv *env, jobject instan
     env_ = env;
     instance_ = instance;
 
-    jclass clazz = env->GetObjectClass(instance);
-    jmethodID id = env->GetMethodID(clazz, "isStopped", "()Z");
-
-
-    while (1) {
-        if (env->CallBooleanMethod(instance, id)) {
-            LOG("select loop stopped");
-            break;
-        }
+    while (!stopped) {
         timeval timeout;
         timeout.tv_sec = 0;
         timeout.tv_usec = 10 * 1000;
@@ -346,13 +355,33 @@ Java_com_polygraphene_alvr_UdpReceiverThread_runLoop(JNIEnv *env, jobject instan
 
         if (FD_ISSET(sock, &fds)) {
             //LOG("select sock");
-            while(true) {
+            while (true) {
                 int recv_ret = processRecv(sock);
-                if(recv_ret < 0) {
+                if (recv_ret < 0) {
                     break;
                 }
             }
         }
         sendTimeSync();
     }
+
+    LOG("Exiting UdpReceiverThread runLoop");
+
+    return;
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_interrupt(JNIEnv *env, jobject instance) {
+    stopped = true;
+
+    // Notify stop to loop thread.
+    write(notify_pipe[1], "", 1);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_notifyWaitingThread(JNIEnv *env, jobject instance) {
+    // Notify NAL waiting thread
+    notifyNALWaitingThread(env);
 }

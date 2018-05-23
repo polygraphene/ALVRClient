@@ -19,7 +19,7 @@ class SrtReceiverThread extends Thread {
     }
 
     public boolean isStopped() {
-        return mMainActivity.isStopped();
+        return false;
     }
 
     public void setHost(String host, int port) {

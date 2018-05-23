@@ -26,6 +26,7 @@ static pthread_mutex_t pipeMutex = PTHREAD_MUTEX_INITIALIZER;
 static class PipeLock {
 public:
     PipeLock() { pthread_mutex_lock(&pipeMutex); }
+
     ~PipeLock() { pthread_mutex_unlock(&pipeMutex); }
 };
 
@@ -57,19 +58,18 @@ static void process_read_pipe(int pipefd) {
     int len = 1;
 
     int ret = read(pipefd, buf, len);
-    if(ret <= 0){
+    if (ret <= 0) {
         return;
     }
 
     SendBuffer sendBuffer;
-    while(1)
-    {
+    while (1) {
         {
             PipeLock lock;
 
-            if(sendQueue.empty()){
+            if (sendQueue.empty()) {
                 break;
-            }else {
+            } else {
                 sendBuffer = sendQueue.front();
                 sendQueue.pop_front();
             }
@@ -83,11 +83,10 @@ static void process_read_pipe(int pipefd) {
 }
 
 
-
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_polygraphene_alvr_SrtReceiverThread_initializeSocket(JNIEnv *env, jobject instance,
-                                                                     jstring host_, jint port) {
+                                                              jstring host_, jint port) {
     const char *host = env->GetStringUTFChars(host_, 0);
     struct sockaddr_in addr;
     int ret = 0;
@@ -145,7 +144,7 @@ Java_com_polygraphene_alvr_SrtReceiverThread_closeSocket(JNIEnv *env, jobject in
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_polygraphene_alvr_SrtReceiverThread_send(JNIEnv *env, jobject instance,
-                                                         jbyteArray buf_, jint length) {
+                                                  jbyteArray buf_, jint length) {
     jbyte *buf = env->GetByteArrayElements(buf_, NULL);
 
     SendBuffer sendBuffer;
@@ -175,7 +174,7 @@ Java_com_polygraphene_alvr_SrtReceiverThread_getNalListSize(JNIEnv *env, jobject
 extern "C"
 JNIEXPORT jobject JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_waitNal(JNIEnv *env, jobject instance) {
-return waitNal(env);
+    return waitNal(env);
 }
 
 extern "C"
@@ -227,16 +226,16 @@ Java_com_polygraphene_alvr_SrtReceiverThread_runLoop(JNIEnv *env, jobject instan
     fcntl(notify_pipe[1], F_SETFL, flags2 | O_NONBLOCK);
 
     while (1) {
-        if(env->CallBooleanMethod(instance, id)){
+        if (env->CallBooleanMethod(instance, id)) {
             LOG("epoll stop");
             break;
         }
         int ret = srt_epoll_wait(epoll, read_fds, &read_n, write_fds, &write_n, 10, read_sysfds,
-                             &read_sysn, write_sysfds, &write_sysn);
+                                 &read_sysn, write_sysfds, &write_sysn);
 
         process_read_pipe(notify_pipe[0]);
-        if(ret < 0){
-            if(srt_getlasterror(NULL) == SRT_ETIMEOUT) {
+        if (ret < 0) {
+            if (srt_getlasterror(NULL) == SRT_ETIMEOUT) {
                 continue;
             }
             LOG("epoll error:%d %d %s", ret, srt_getlasterror(NULL), srt_getlasterror_str());
@@ -244,16 +243,16 @@ Java_com_polygraphene_alvr_SrtReceiverThread_runLoop(JNIEnv *env, jobject instan
         }
         SRT_SOCKSTATUS status = srt_getsockstate(srtsocket);
         //LOG("status: %d", status);
-        if(ret == 0){
+        if (ret == 0) {
             usleep(10 * 1000);
             continue;
         }
         //LOG("epoll ok %d %d %d %d %d", ret, read_n, read_sysn, write_n, write_sysn);
 
-        if(read_n >= 1){
+        if (read_n >= 1) {
             process_read_srt(read_fds[0]);
         }
-        if(read_sysn >= 1){
+        if (read_sysn >= 1) {
             //LOG("pip:%d %d,%d", read_sysfds[0], notify_pipe[0], notify_pipe[1]);
             process_read_pipe(read_sysfds[0]);
         }
