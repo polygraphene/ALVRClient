@@ -405,5 +405,5 @@ Java_com_polygraphene_alvr_UdpReceiverThread_notifyWaitingThread(JNIEnv *env, jo
 extern "C"
 JNIEXPORT jboolean JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_isConnected(JNIEnv *env, jobject instance) {
-    return (uint8_t )(lastReceived + 10 * 1000 * 1000 > getTimestampUs());
+    return (uint8_t )(lastReceived + 3 * 1000 * 1000 > getTimestampUs());
 }

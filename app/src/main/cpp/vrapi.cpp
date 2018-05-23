@@ -100,6 +100,10 @@ int enableTestMode = 0;
 int suspend = 0;
 bool Resumed = false;
 
+uint64_t FrameIndex = 0;
+uint64_t WantedFrameIndex = 0;
+
+
 struct TrackingFrame {
     ovrTracking2 tracking;
     uint64_t frameIndex;
@@ -1070,10 +1074,6 @@ ovrProgram Program;
 ovrGeometry Cube;
 ovrGeometry TestMode;
 
-double startTime;
-uint64_t FrameIndex = 0;
-uint64_t WantedFrameIndex = 0;
-
 
 static int MAX_FENCES = 4;
 
@@ -1427,8 +1427,6 @@ Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject c
         ovrGeometry_CreateVAO(&TestMode);
 
         CreatedScene = true;
-
-        startTime = GetTimeInSeconds();
     }
 
     double currentTime = GetTimeInSeconds();
@@ -1441,8 +1439,8 @@ Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject c
     for (int i = 0; i < 10; i++) {
         renderedFrameIndex = env->CallLongMethod(callback, waitFrame);
         if(renderedFrameIndex == -1) {
-            // Paused
-            break;
+            // Activity has Paused or connection becomes idle
+            return;
         }
         ALOGV("Got frame for render. wanted FrameIndex=%lu got=%lu waiting=%.3f ms delay=%lu",
               WantedFrameIndex, renderedFrameIndex,
@@ -1454,10 +1452,6 @@ Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject c
         if ((enableTestMode & 4) != 0) {
             break;
         }
-    }
-    if(renderedFrameIndex == -1) {
-        // Paused
-        return;
     }
 
     std::shared_ptr<TrackingFrame> frame;
@@ -1533,7 +1527,7 @@ Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject c
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_VrAPI_renderLoading(JNIEnv *env, jobject instance) {
-    double DisplayTime = 0.0;
+    double DisplayTime = GetTimeInSeconds();
 
     // Show a loading icon.
     uint32_t frameFlags = 0;
@@ -1555,7 +1549,7 @@ Java_com_polygraphene_alvr_VrAPI_renderLoading(JNIEnv *env, jobject instance) {
     ovrSubmitFrameDescription2 frameDesc = {};
     frameDesc.Flags = frameFlags;
     frameDesc.SwapInterval = 1;
-    frameDesc.FrameIndex = FrameIndex;
+    frameDesc.FrameIndex = FrameIndex++;
     frameDesc.DisplayTime = DisplayTime;
     frameDesc.LayerCount = 2;
     frameDesc.Layers = layers;
