@@ -20,12 +20,12 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             ndk {
-                abiFilters "arm64-v8a"
+                abiFilters "arm64-v8a", "armeabi-v7a"
             }
         }
         debug {
             ndk {
-                abiFilters "arm64-v8a"
+                abiFilters "arm64-v8a", "armeabi-v7a"
             }
         }
     }

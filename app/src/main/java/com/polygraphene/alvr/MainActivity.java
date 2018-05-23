@@ -1,6 +1,7 @@
 package com.polygraphene.alvr;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.os.Bundle;
@@ -17,7 +18,6 @@ public class MainActivity extends Activity {
     private final static String TAG = "MainActivity";
 
     static {
-        System.loadLibrary("srt");
         System.loadLibrary("native-lib");
     }
 
@@ -82,6 +82,12 @@ public class MainActivity extends Activity {
                 mAvcCodecInfoes.add(info);
             }
         }
+        if(mAvcCodecInfoes.size() == 0) {
+            // TODO: Show error message for a user. How to?
+            Log.e(TAG, "Suitable codec is not found.");
+            finish();
+            return;
+        }
 
         Log.v(TAG, "onCreate: Starting VrThread");
         mVrThread = new VrThread(this);
@@ -92,14 +98,18 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
 
-        mVrThread.onResume();
+        if(mVrThread != null) {
+            mVrThread.onResume();
+        }
     }
 
     @Override
     protected void onPause() {
         super.onPause();
 
-        mVrThread.onPause();
+        if(mVrThread != null) {
+            mVrThread.onPause();
+        }
     }
 
     @Override
@@ -107,11 +117,13 @@ public class MainActivity extends Activity {
         super.onDestroy();
 
         Log.v(TAG, "onDestroy: Stopping VrThread.");
-        mVrThread.interrupt();
-        try {
-            mVrThread.join();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+        if(mVrThread != null) {
+            mVrThread.interrupt();
+            try {
+                mVrThread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
         Log.v(TAG, "onDestroy: VrThread has stopped.");
     }

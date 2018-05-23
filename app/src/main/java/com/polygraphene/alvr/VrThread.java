@@ -253,40 +253,44 @@ class VrThread extends Thread {
     MessageQueue.IdleHandler idleHandler = new MessageQueue.IdleHandler() {
         @Override
         public boolean queueIdle() {
-            vrAPI.render(new VrFrameCallback() {
-                @Override
-                public long waitFrame() {
-                    synchronized (waiter) {
-                        if (rendered) {
-                            Log.v(TAG, "updateTexImage(discard)");
-                            surfaceTexture.updateTexImage();
-                        }
-                        Log.v(TAG, "waitFrame Enter");
-                        renderRequested = true;
-                        rendered = false;
-                    }
-                    while (true) {
+            if (mReceiverThread.isConnected()) {
+                vrAPI.render(new VrFrameCallback() {
+                    @Override
+                    public long waitFrame() {
                         synchronized (waiter) {
-                            if (!mResumed) {
-                                return -1;
-                            }
                             if (rendered) {
-                                Log.v(TAG, "waited:" + frameIndex);
+                                Log.v(TAG, "updateTexImage(discard)");
                                 surfaceTexture.updateTexImage();
-                                break;
                             }
-                            try {
-                                Log.v(TAG, "waiting");
-                                waiter.wait();
-                            } catch (InterruptedException e) {
-                                e.printStackTrace();
+                            Log.v(TAG, "waitFrame Enter");
+                            renderRequested = true;
+                            rendered = false;
+                        }
+                        while (true) {
+                            synchronized (waiter) {
+                                if (!mResumed) {
+                                    return -1;
+                                }
+                                if (rendered) {
+                                    Log.v(TAG, "waited:" + frameIndex);
+                                    surfaceTexture.updateTexImage();
+                                    break;
+                                }
+                                try {
+                                    Log.v(TAG, "waiting");
+                                    waiter.wait();
+                                } catch (InterruptedException e) {
+                                    e.printStackTrace();
+                                }
                             }
                         }
-                    }
 
-                    return frameIndex;
-                }
-            });
+                        return frameIndex;
+                    }
+                });
+            } else {
+                vrAPI.renderLoading();
+            }
             return true;
         }
     };

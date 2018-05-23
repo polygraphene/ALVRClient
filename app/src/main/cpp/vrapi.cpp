@@ -1530,6 +1530,49 @@ Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject c
     }
 }
 
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_VrAPI_renderLoading(JNIEnv *env, jobject instance) {
+    double DisplayTime = 0.0;
+
+    // Show a loading icon.
+    uint32_t frameFlags = 0;
+    frameFlags |= VRAPI_FRAME_FLAG_FLUSH;
+
+    ovrLayerProjection2 blackLayer = vrapi_DefaultLayerBlackProjection2();
+    blackLayer.Header.Flags |= VRAPI_FRAME_LAYER_FLAG_INHIBIT_SRGB_FRAMEBUFFER;
+
+    ovrLayerLoadingIcon2 iconLayer = vrapi_DefaultLayerLoadingIcon2();
+    iconLayer.Header.Flags |= VRAPI_FRAME_LAYER_FLAG_INHIBIT_SRGB_FRAMEBUFFER;
+
+    const ovrLayerHeader2 *layers[] =
+            {
+                    &blackLayer.Header,
+                    &iconLayer.Header,
+            };
+
+
+    ovrSubmitFrameDescription2 frameDesc = {};
+    frameDesc.Flags = frameFlags;
+    frameDesc.SwapInterval = 1;
+    frameDesc.FrameIndex = FrameIndex;
+    frameDesc.DisplayTime = DisplayTime;
+    frameDesc.LayerCount = 2;
+    frameDesc.Layers = layers;
+
+    vrapi_SubmitFrame2(Ovr, &frameDesc);
+
+    if (!CreatedScene) {
+        ovrProgram_Create(&Program, VERTEX_SHADER, FRAGMENT_SHADER, UseMultiview);
+        ovrGeometry_CreateCube(&Cube);
+        ovrGeometry_CreateVAO(&Cube);
+        ovrGeometry_CreateTestMode(&TestMode);
+        ovrGeometry_CreateVAO(&TestMode);
+
+        CreatedScene = true;
+    }
+}
+
 void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTracking2 *tracking) {
     char *packet;
     jbyteArray array = env->NewByteArray(2000);

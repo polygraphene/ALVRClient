@@ -19,7 +19,6 @@ add_library( # Sets the name of the library.
              SHARED
 
              # Provides a relative path to your source file(s).
-             src/main/cpp/srt.cpp
              src/main/cpp/udp.cpp
              src/main/cpp/nal.cpp
              src/main/cpp/vrapi.cpp
@@ -52,8 +51,6 @@ target_link_libraries( # Specifies the target library.
                        # included in the NDK.
                        ${log-lib}
 
-                       srt
-                       c++_shared
                        vrapi
                        GLESv3
                        EGL

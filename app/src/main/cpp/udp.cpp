@@ -28,6 +28,7 @@ static time_t prevSentSync = 0;
 static int64_t TimeDiff;
 static uint64_t timeSyncSequence = (uint64_t) -1;
 static bool stopped = false;
+static uint64_t lastReceived = 0;
 
 static JNIEnv *env_;
 static jobject instance_;
@@ -92,6 +93,8 @@ static int processRecv(int sock) {
     if (ret <= 0) {
         return ret;
     }
+    lastReceived = getTimestampUs();
+
     uint32_t type = *(uint32_t *) buf;
     if (type == 1) {
         // First packet of a video frame
@@ -214,6 +217,7 @@ Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobje
     HelloMessage message = {};
 
     stopped = false;
+    lastReceived = 0;
 
     initNAL();
 
@@ -251,7 +255,7 @@ Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobje
 
     end:
 
-    LOG("udp socket initialized");
+    LOG("Udp socket initialized.");
 
     env->ReleaseStringUTFChars(host_, host);
     env->ReleaseStringUTFChars(deviceName_, deviceName);
@@ -311,8 +315,20 @@ Java_com_polygraphene_alvr_UdpReceiverThread_getNalListSize(JNIEnv *env, jobject
 
 extern "C"
 JNIEXPORT jobject JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_waitNal(JNIEnv *env, jobject instance) {
+    return waitNal(env);
+}
+
+extern "C"
+JNIEXPORT jobject JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_getNal(JNIEnv *env, jobject instance) {
     return getNal(env);
+}
+
+extern "C"
+JNIEXPORT jobject JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_peekNal(JNIEnv *env, jobject instance) {
+    return peekNal(env);
 }
 
 extern "C"
@@ -384,4 +400,10 @@ JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_notifyWaitingThread(JNIEnv *env, jobject instance) {
     // Notify NAL waiting thread
     notifyNALWaitingThread(env);
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_isConnected(JNIEnv *env, jobject instance) {
+    return (uint8_t )(lastReceived + 10 * 1000 * 1000 > getTimestampUs());
 }

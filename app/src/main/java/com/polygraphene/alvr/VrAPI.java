@@ -4,6 +4,11 @@ import android.app.Activity;
 import android.view.Surface;
 
 public class VrAPI {
+
+    static {
+        System.loadLibrary("native-lib");
+    }
+
     native void initialize(Activity activity);
     native void destroy();
 
@@ -15,6 +20,7 @@ public class VrAPI {
     native void onSurfaceDestroyed();
     native int getSurfaceTextureID();
     native void render(VrThread.VrFrameCallback callback);
+    native void renderLoading();
     native void fetchTrackingInfo(VrThread.OnSendTrackingCallback callback);
     native void onChangeSettings(int EnableTestMode, int suspend);
 

@@ -6,16 +6,17 @@ class UdpReceiverThread implements NALParser {
     private static final String TAG = "UdpReceiverThread";
 
     static {
-        System.loadLibrary("srt");
         System.loadLibrary("native-lib");
     }
 
-    public Thread mThread;
-    public StatisticsCounter mCounter;
-    public String mHost;
-    public int mPort;
-    public boolean mInitialized = false;
-    public boolean mInitializeFailed = false;
+    private Thread mThread;
+    private StatisticsCounter mCounter;
+    private String mHost;
+    private int mPort;
+    private boolean mInitialized = false;
+    private boolean mInitializeFailed = false;
+
+    public native boolean isConnected();
 
     interface OnChangeSettingsCallback {
         void onChangeSettings(int enableTestMode, int suspend);
@@ -65,7 +66,7 @@ class UdpReceiverThread implements NALParser {
     }
 
     private void runThread() {
-        mThread.setName(SrtReceiverThread.class.getName());
+        mThread.setName(UdpReceiverThread.class.getName());
 
         try {
             int ret = initializeSocket(mHost, mPort, getDeviceName());
