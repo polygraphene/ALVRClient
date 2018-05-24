@@ -2,6 +2,8 @@ package com.polygraphene.alvr;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.os.Bundle;
@@ -126,5 +128,16 @@ public class MainActivity extends Activity {
             }
         }
         Log.v(TAG, "onDestroy: VrThread has stopped.");
+    }
+
+    public String getVersionName(){
+        try {
+            PackageInfo pInfo = this.getPackageManager().getPackageInfo(getPackageName(), 0);
+            String version = pInfo.versionName;
+            return getString(R.string.app_name) + " v" + version;
+        } catch (PackageManager.NameNotFoundException e) {
+            e.printStackTrace();
+            return getString(R.string.app_name) + "Unknown version";
+        }
     }
 }

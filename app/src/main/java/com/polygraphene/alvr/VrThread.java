@@ -222,7 +222,7 @@ class VrThread extends Thread {
         surface = new Surface(surfaceTexture);
 
         mLoadingTexture.initializeMessageCanvas(vrAPI.createLoadingTexture());
-        mLoadingTexture.drawMessage("Loading...");
+        mLoadingTexture.drawMessage(mainActivity.getVersionName() + "\nLoading...");
 
         Log.v(TAG, "Start loop of VrThread.");
         while(mQueue.waitIdle()) {
@@ -280,8 +280,7 @@ class VrThread extends Thread {
                 }
             });
         } else {
-            String text = "Waiting for connection...";
-            mLoadingTexture.drawMessage(text);
+            mLoadingTexture.drawMessage(mainActivity.getVersionName() + "\n \nPress CONNECT button\non ALVR server.");
             vrAPI.renderLoading();
         }
     }

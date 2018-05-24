@@ -1,9 +1,5 @@
-//
-// Created by lll on 2018/05/14.
-//
-
-#ifndef REMOTEGLASS_UTILS_H
-#define REMOTEGLASS_UTILS_H
+#ifndef ALVRCLIENT_UTILS_H
+#define ALVRCLIENT_UTILS_H
 
 #include <stdint.h>
 #include <time.h>
@@ -53,4 +49,4 @@ public:
 };
 
 
-#endif //REMOTEGLASS_UTILS_H
+#endif //ALVRCLIENT_UTILS_H

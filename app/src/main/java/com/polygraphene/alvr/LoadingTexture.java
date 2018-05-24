@@ -23,7 +23,7 @@ public class LoadingTexture {
         mCanvas = new Canvas(mBitmap);
 
         mPaint = new Paint();
-        mPaint.setTextSize(96);
+        mPaint.setTextSize(80);
         mPaint.setAntiAlias(true);
         mPaint.setARGB(0xff, 0xe0, 0xe0, 0xe0);
 
@@ -42,11 +42,16 @@ public class LoadingTexture {
         int cWidth = r.width();
 
         mPaint.setTextAlign(Paint.Align.LEFT);
-        mPaint.getTextBounds(text, 0, text.length(), r);
 
-        float x = cWidth / 2f - r.width() / 2f - r.left;
-        float y = cHeight / 2f + r.height() / 2f - r.bottom;
-        mCanvas.drawText(text, x, y, mPaint);
+        float y = cHeight / 2f;
+        for(String line : text.split("\n")) {
+            mPaint.getTextBounds(text, 0, line.length(), r);
+
+            float x = cWidth / 2f - r.width() / 2f - r.left;
+            mCanvas.drawText(line, x, y + r.height() / 2f - r.bottom, mPaint);
+
+            y += r.height() * 1.5;
+        }
 
         // Note that gl context has created on vrAPI.initialize.
         GLES20.glBindTexture(GL10.GL_TEXTURE_2D, mTexture);

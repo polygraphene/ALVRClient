@@ -1,5 +1,5 @@
-#ifndef REMOTEGLASS_NAL_H
-#define REMOTEGLASS_NAL_H
+#ifndef ALVRCLIENT_NAL_H
+#define ALVRCLIENT_NAL_H
 #include <jni.h>
 
 void initNAL();
@@ -13,4 +13,4 @@ int getNalListSize();
 void flushNalList(JNIEnv *env);
 void notifyNALWaitingThread(JNIEnv *env);
 
-#endif //REMOTEGLASS_NAL_H
+#endif //ALVRCLIENT_NAL_H
