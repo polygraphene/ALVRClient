@@ -2,9 +2,6 @@ package com.polygraphene.alvr;
 
 import android.graphics.SurfaceTexture;
 import android.media.MediaCodec;
-import android.os.Handler;
-import android.os.Looper;
-import android.os.MessageQueue;
 import android.util.Log;
 import android.view.Surface;
 
@@ -24,6 +21,8 @@ class VrThread extends Thread {
     private boolean renderRequested = false;
     private long frameIndex = 0;
     private final Object waiter = new Object();
+
+    private LoadingTexture mLoadingTexture = new LoadingTexture();
 
     // Worker threads
     private TrackingThread mTrackingThread;
@@ -63,6 +62,7 @@ class VrThread extends Thread {
         post(new Runnable() {
             @Override
             public void run() {
+                mLoadingTexture.destroyTexture();
                 vrAPI.onSurfaceDestroyed();
             }
         });
@@ -221,6 +221,9 @@ class VrThread extends Thread {
         });
         surface = new Surface(surfaceTexture);
 
+        mLoadingTexture.initializeMessageCanvas(vrAPI.createLoadingTexture());
+        mLoadingTexture.drawMessage("Loading...");
+
         Log.v(TAG, "Start loop of VrThread.");
         while(mQueue.waitIdle()) {
             if(!vrAPI.isVrMode()) {
@@ -277,6 +280,8 @@ class VrThread extends Thread {
                 }
             });
         } else {
+            String text = "Waiting for connection...";
+            mLoadingTexture.drawMessage(text);
             vrAPI.renderLoading();
         }
     }

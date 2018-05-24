@@ -96,6 +96,7 @@ ANativeWindow *window = NULL;
 ovrMobile *Ovr;
 bool UseMultiview = true;
 GLuint SurfaceTextureID = 0;
+GLuint loadingTexture = 0;
 int enableTestMode = 0;
 int suspend = 0;
 bool Resumed = false;
@@ -278,13 +279,13 @@ static const char VERTEX_SHADER[] =
                 "in vec4 vertexColor;\n"
                 "in mat4 vertexTransform;\n"
                 "in vec2 vertexUv;\n"
-                "uniform mat4 TestModeMatrix[NUM_VIEWS];\n"
+                "uniform mat4 mvpMatrix[NUM_VIEWS];\n"
                 "uniform lowp int EnableTestMode;\n"
                 "out vec4 fragmentColor;\n"
                 "out vec2 uv;\n"
                 "void main()\n"
                 "{\n"
-                "	gl_Position = TestModeMatrix[VIEW_ID] * vec4( vertexPosition, 1.0 );\n"
+                "	gl_Position = mvpMatrix[VIEW_ID] * vec4( vertexPosition, 1.0 );\n"
                 "   if(VIEW_ID == uint(0)){\n"
                 "      uv = vec2(vertexUv.x, vertexUv.y);\n"
                 "   }else{\n"
@@ -300,6 +301,49 @@ static const char FRAGMENT_SHADER[] =
                 "in lowp vec4 fragmentColor;\n"
                 "out lowp vec4 outColor;\n"
                 "uniform samplerExternalOES sTexture;\n"
+                "uniform lowp int EnableTestMode;\n"
+                "void main()\n"
+                "{\n"
+                "   if(EnableTestMode % 2 == 0){\n"
+                "	    outColor = texture(sTexture, uv);\n"
+                "   } else {\n"
+                "       outColor = fragmentColor;\n"
+                "   }\n"
+                "}\n";
+
+static const char VERTEX_SHADER_LOADING[] =
+        "#ifndef DISABLE_MULTIVIEW\n"
+                "	#define DISABLE_MULTIVIEW 0\n"
+                "#endif\n"
+                "#define NUM_VIEWS 2\n"
+                "#if defined( GL_OVR_multiview2 ) && ! DISABLE_MULTIVIEW\n"
+                "	#extension GL_OVR_multiview2 : enable\n"
+                "	layout(num_views=NUM_VIEWS) in;\n"
+                "	#define VIEW_ID gl_ViewID_OVR\n"
+                "#else\n"
+                "	uniform lowp int ViewID;\n"
+                "	#define VIEW_ID ViewID\n"
+                "#endif\n"
+                "in vec3 vertexPosition;\n"
+                "in vec4 vertexColor;\n"
+                "in mat4 vertexTransform;\n"
+                "in vec2 vertexUv;\n"
+                "uniform mat4 mvpMatrix[NUM_VIEWS];\n"
+                "uniform lowp int EnableTestMode;\n"
+                "out vec4 fragmentColor;\n"
+                "out vec2 uv;\n"
+                "void main()\n"
+                "{\n"
+                "	gl_Position = mvpMatrix[VIEW_ID] * vec4( vertexPosition, 1.0 );\n"
+                "   uv = vec2(vertexUv.x * 2.0, vertexUv.y);\n"
+                "   fragmentColor = vertexColor;\n"
+                "}\n";
+
+static const char FRAGMENT_SHADER_LOADING[] =
+        "in lowp vec2 uv;\n"
+                "in lowp vec4 fragmentColor;\n"
+                "out lowp vec4 outColor;\n"
+                "uniform sampler2D sTexture;\n"
                 "uniform lowp int EnableTestMode;\n"
                 "void main()\n"
                 "{\n"
@@ -411,6 +455,46 @@ void eglInit() {
         return;
     }
 }
+
+static void eglDestroy()
+{
+    if ( egl.Display != 0 )
+    {
+        ALOGE( "        eglMakeCurrent( Display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT )" );
+        if ( eglMakeCurrent( egl.Display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT ) == EGL_FALSE )
+        {
+            ALOGE( "        eglMakeCurrent() failed: %s", EglErrorString( eglGetError() ) );
+        }
+    }
+    if ( egl.Context != EGL_NO_CONTEXT )
+    {
+        ALOGE( "        eglDestroyContext( Display, Context )" );
+        if ( eglDestroyContext( egl.Display, egl.Context ) == EGL_FALSE )
+        {
+            ALOGE( "        eglDestroyContext() failed: %s", EglErrorString( eglGetError() ) );
+        }
+        egl.Context = EGL_NO_CONTEXT;
+    }
+    if ( egl.TinySurface != EGL_NO_SURFACE )
+    {
+        ALOGE( "        eglDestroySurface( Display, TinySurface )" );
+        if ( eglDestroySurface( egl.Display, egl.TinySurface ) == EGL_FALSE )
+        {
+            ALOGE( "        eglDestroySurface() failed: %s", EglErrorString( eglGetError() ) );
+        }
+        egl.TinySurface = EGL_NO_SURFACE;
+    }
+    if ( egl.Display != 0 )
+    {
+        ALOGE( "        eglTerminate( Display )" );
+        if ( eglTerminate( egl.Display ) == EGL_FALSE )
+        {
+            ALOGE( "        eglTerminate() failed: %s", EglErrorString( eglGetError() ) );
+        }
+        egl.Display = 0;
+    }
+}
+
 
 const int NUM_ROTATIONS = 2;
 const int NUM_INSTANCES = 100;
@@ -746,7 +830,7 @@ static void ovrGeometry_Clear(ovrGeometry *geometry) {
     }
 }
 
-static void ovrGeometry_CreateCube(ovrGeometry *geometry) {
+static void ovrGeometry_CreatePanel(ovrGeometry *geometry) {
     typedef struct {
         float positions[4][4];
         float uv[4][2];
@@ -756,10 +840,10 @@ static void ovrGeometry_CreateCube(ovrGeometry *geometry) {
             {
                     // positions
                     {
-                            {-1, -1, 0.0, 1}, {1,   1, 0, 1}, {1,   -1, 0, 1}, {-1, 1, 0, 1}
+                            {-1, -1, 0, 1}, {1,   1, 0, 1}, {1,   -1, 0, 1}, {-1, 1, 0, 1}
                     },
                     // uv
-                    {       {0,  1},          {0.5, 0},       {0.5, 1},        {0,  0}}
+                    {       {0,  1},        {0.5, 0},       {0.5, 1},        {0,  0}}
             };
 
     static const unsigned short cubeIndices[6] =
@@ -924,7 +1008,7 @@ typedef struct {
 
 enum E1test {
     UNIFORM_VIEW_ID,
-    UNIFORM_TEST_MODE_MATRIX,
+    UNIFORM_MVP_MATRIX,
     UNIFORM_ENABLE_TEST_MODE,
 };
 enum E2test {
@@ -942,7 +1026,7 @@ typedef struct {
 static ovrUniform ProgramUniforms[] =
         {
                 {UNIFORM_VIEW_ID,          UNIFORM_TYPE_INT,       "ViewID"},
-                {UNIFORM_TEST_MODE_MATRIX, UNIFORM_TYPE_MATRIX4X4, "TestModeMatrix"},
+                {UNIFORM_MVP_MATRIX,       UNIFORM_TYPE_MATRIX4X4, "mvpMatrix"},
                 {UNIFORM_ENABLE_TEST_MODE, UNIFORM_TYPE_INT,       "EnableTestMode"},
         };
 
@@ -1071,7 +1155,8 @@ ovrJava java;
 int SwapInterval = 1;
 bool CreatedScene = false;
 ovrProgram Program;
-ovrGeometry Cube;
+ovrProgram ProgramLoading;
+ovrGeometry Panel;
 ovrGeometry TestMode;
 
 
@@ -1128,7 +1213,8 @@ static void ovrRenderer_Destroy(ovrRenderer *renderer) {
 
 static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava *java,
                                                    const ovrTracking2 *tracking, ovrMobile *ovr,
-                                                   unsigned long long *completionFence) {
+                                                   unsigned long long *completionFence,
+                                                   bool loading) {
     ovrTracking2 updatedTracking = *tracking;
 
     ovrLayerProjection2 layer = vrapi_DefaultLayerProjection2();
@@ -1153,7 +1239,11 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
         ovrFramebuffer *frameBuffer = &renderer->FrameBuffer[eye];
         ovrFramebuffer_SetCurrent(frameBuffer);
 
-        GL(glUseProgram(Program.Program));
+        if (loading) {
+            GL(glUseProgram(ProgramLoading.Program));
+        } else {
+            GL(glUseProgram(Program.Program));
+        }
         if (Program.UniformLocation[UNIFORM_VIEW_ID] >=
             0)  // NOTE: will not be present when multiview path is enabled.
         {
@@ -1167,7 +1257,7 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
         GL(glCullFace(GL_BACK));
         GL(glViewport(0, 0, frameBuffer->Width, frameBuffer->Height));
         GL(glScissor(0, 0, frameBuffer->Width, frameBuffer->Height));
-        GL(glClearColor(1.0f, 1.0f, 1.0f, 1.0f));
+        GL(glClearColor(0.0f, 0.0f, 0.0f, 1.0f));
         GL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 
         //enableTestMode = 0;
@@ -1209,7 +1299,7 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
                     LOG("mm:\n%s", DumpMatrix(&TestModeMatrix[0]).c_str());
                 }
 
-                GL(glUniformMatrix4fv(Program.UniformLocation[UNIFORM_TEST_MODE_MATRIX], 2, true,
+                GL(glUniformMatrix4fv(Program.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
                                       (float *) TestModeMatrix));
                 GL(glBindVertexArray(TestMode.VertexArrayObject));
 
@@ -1222,27 +1312,69 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
                 }
 
                 GL(glDrawElements(GL_TRIANGLES, TestMode.IndexCount, GL_UNSIGNED_SHORT, NULL));
+            }
+        } else if (loading) {
+            LOG("Using texture %d", loadingTexture);
 
-                //GL(glClearDepthf(0.5));
+            GL(glBindVertexArray(Panel.VertexArrayObject));
+            GL(glActiveTexture(GL_TEXTURE0));
+            GL(glBindTexture(GL_TEXTURE_2D, loadingTexture));
 
-                //GL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
+            // Display information message on front and back of user.
+            for (int i = 0; i < 2; i++) {
+                ovrMatrix4f mvpMatrix[2];
+                mvpMatrix[0] = ovrMatrix4f_CreateIdentity();
+                mvpMatrix[1] = ovrMatrix4f_CreateIdentity();
+
+                if (i == 0) {
+                    ovrMatrix4f translation = ovrMatrix4f_CreateTranslation(0, 0, -3);
+                    mvpMatrix[0] = ovrMatrix4f_Multiply(&translation, &mvpMatrix[0]);
+                } else {
+                    ovrMatrix4f rotation = ovrMatrix4f_CreateRotation(0, (float)M_PI, 0);
+                    mvpMatrix[0] = ovrMatrix4f_Multiply(&rotation, &mvpMatrix[0]);
+
+                    ovrMatrix4f translation = ovrMatrix4f_CreateTranslation(0, 0, 3);
+                    mvpMatrix[0] = ovrMatrix4f_Multiply(&translation, &mvpMatrix[0]);
+                }
+
+                mvpMatrix[1] = mvpMatrix[0];
+
+                mvpMatrix[0] = ovrMatrix4f_Multiply(&tracking->Eye[0].ViewMatrix,
+                                                    &mvpMatrix[0]);
+                mvpMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ViewMatrix,
+                                                    &mvpMatrix[1]);
+                mvpMatrix[0] = ovrMatrix4f_Multiply(&tracking->Eye[0].ProjectionMatrix,
+                                                    &mvpMatrix[0]);
+                mvpMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ProjectionMatrix,
+                                                    &mvpMatrix[1]);
+
+                GL(glUniformMatrix4fv(Program.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
+                                      (float *) mvpMatrix));
+
+                GL(glDrawElements(GL_TRIANGLES, Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
             }
         } else {
-            ovrMatrix4f TestModeMatrix[2];
-            TestModeMatrix[0] = ovrMatrix4f_CreateIdentity();
-            TestModeMatrix[1] = ovrMatrix4f_CreateIdentity();
-            GL(glUniformMatrix4fv(Program.UniformLocation[UNIFORM_TEST_MODE_MATRIX], 2, true,
-                                  (float *) TestModeMatrix));
+            ovrMatrix4f mvpMatrix[2];
+            mvpMatrix[0] = ovrMatrix4f_CreateIdentity();
+            mvpMatrix[1] = ovrMatrix4f_CreateIdentity();
 
-            GL(glBindVertexArray(Cube.VertexArrayObject));
+            GL(glBindVertexArray(Panel.VertexArrayObject));
 
             GL(glActiveTexture(GL_TEXTURE0));
             GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, SurfaceTextureID));
 
-            GL(glDrawElements(GL_TRIANGLES, Cube.IndexCount, GL_UNSIGNED_SHORT, NULL));
+            GL(glUniformMatrix4fv(Program.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
+                                  (float *) mvpMatrix));
+
+            GL(glDrawElements(GL_TRIANGLES, Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
         }
+
         GL(glBindVertexArray(0));
-        GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
+        if (loading) {
+            GL(glBindTexture(GL_TEXTURE_2D, 0));
+        } else {
+            GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
+        }
         GL(glUseProgram(0));
 
         // Explicitly clear the border texels to black when GL_CLAMP_TO_BORDER is not available.
@@ -1283,8 +1415,8 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
 ovrRenderer Renderer;
 
 void onVrModeChange(JNIEnv *env) {
-    if(Resumed && window != NULL) {
-        if(Ovr == NULL) {
+    if (Resumed && window != NULL) {
+        if (Ovr == NULL) {
             ALOGV("Entering VR mode.");
             ovrModeParms parms = vrapi_DefaultModeParms(&java);
 
@@ -1314,12 +1446,56 @@ void onVrModeChange(JNIEnv *env) {
 
             //vrapi_SetTrackingTransform( Ovr, vrapi_GetTrackingTransform( Ovr, VRAPI_TRACKING_TRANSFORM_SYSTEM_CENTER_FLOOR_LEVEL ) );
         }
-    }else {
-        if(Ovr != NULL){
+    } else {
+        if (Ovr != NULL) {
             ALOGV("Leaving VR mode.");
             vrapi_LeaveVrMode(Ovr);
             Ovr = NULL;
         }
+    }
+}
+
+void renderLoadingScene() {
+    double DisplayTime = GetTimeInSeconds();
+
+    // Show a loading icon.
+    FrameIndex++;
+
+    double displayTime = vrapi_GetPredictedDisplayTime(Ovr, FrameIndex);
+    ovrTracking2 tracking = vrapi_GetPredictedTracking2(Ovr, displayTime);
+
+    unsigned long long completionFence = 0;
+
+    const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java,
+                                                                   &tracking,
+                                                                   Ovr, &completionFence, true);
+
+    const ovrLayerHeader2 *layers[] =
+            {
+                    &worldLayer.Header
+            };
+
+
+    ovrSubmitFrameDescription2 frameDesc = {};
+    frameDesc.Flags = 0;
+    frameDesc.SwapInterval = 1;
+    frameDesc.FrameIndex = FrameIndex++;
+    frameDesc.DisplayTime = DisplayTime;
+    frameDesc.LayerCount = 1;
+    frameDesc.Layers = layers;
+
+    vrapi_SubmitFrame2(Ovr, &frameDesc);
+
+    if (!CreatedScene) {
+        ovrProgram_Create(&Program, VERTEX_SHADER, FRAGMENT_SHADER, UseMultiview);
+        ovrProgram_Create(&ProgramLoading, VERTEX_SHADER_LOADING, FRAGMENT_SHADER_LOADING,
+                          UseMultiview);
+        ovrGeometry_CreatePanel(&Panel);
+        ovrGeometry_CreateVAO(&Panel);
+        ovrGeometry_CreateTestMode(&TestMode);
+        ovrGeometry_CreateVAO(&TestMode);
+
+        CreatedScene = true;
     }
 }
 
@@ -1338,7 +1514,7 @@ Java_com_polygraphene_alvr_VrAPI_initialize(JNIEnv *env, jobject instance, jobje
     const ovrInitParms initParms = vrapi_DefaultInitParms(&java);
     int32_t initResult = vrapi_Initialize(&initParms);
     if (initResult != VRAPI_INITIALIZE_SUCCESS) {
-        // If intialization failed, vrapi_* function calls will not be available.
+        // If initialization failed, vrapi_* function calls will not be available.
         ALOGE("vrapi_Initialize failed");
         return;
     }
@@ -1352,10 +1528,12 @@ Java_com_polygraphene_alvr_VrAPI_initialize(JNIEnv *env, jobject instance, jobje
     //
     // Generate texture for SurfaceTexture which is output of MediaCodec.
     //
-    GLuint textures[1];
-    glGenTextures(1, textures);
+    GLuint textures[2];
+    glGenTextures(2, textures);
 
     SurfaceTextureID = textures[0];
+    loadingTexture = textures[1];
+
     glBindTexture(GL_TEXTURE_EXTERNAL_OES, SurfaceTextureID);
 
     glTexParameterf(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER,
@@ -1366,7 +1544,6 @@ Java_com_polygraphene_alvr_VrAPI_initialize(JNIEnv *env, jobject instance, jobje
                     GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T,
                     GL_CLAMP_TO_EDGE);
-
 }
 
 extern "C"
@@ -1375,58 +1552,34 @@ Java_com_polygraphene_alvr_VrAPI_destroy(JNIEnv *env, jobject instance) {
     ovrRenderer_Destroy(&Renderer);
 
     ovrProgram_Destroy(&Program);
-    ovrGeometry_DestroyVAO(&Cube);
-    ovrGeometry_Destroy(&Cube);
+    ovrProgram_Destroy(&ProgramLoading);
+    ovrGeometry_DestroyVAO(&Panel);
+    ovrGeometry_Destroy(&Panel);
     ovrGeometry_DestroyVAO(&TestMode);
     ovrGeometry_Destroy(&TestMode);
+
+    GLuint textures[2] = {SurfaceTextureID, loadingTexture};
+    glDeleteTextures(2, textures);
+
     CreatedScene = false;
-    //ovrEgl_DestroyContext( &appState.Egl );
+    eglDestroy();
 
     vrapi_Shutdown();
 }
 
 
 extern "C"
+JNIEXPORT jint JNICALL
+Java_com_polygraphene_alvr_VrAPI_createLoadingTexture(JNIEnv *env, jobject instance) {
+    return loadingTexture;
+}
+
+extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject callback) {
-    double DisplayTime = 0.0;
-
     if (!CreatedScene) {
-        // Show a loading icon.
-        int frameFlags = 0;
-        frameFlags |= VRAPI_FRAME_FLAG_FLUSH;
-
-        ovrLayerProjection2 blackLayer = vrapi_DefaultLayerBlackProjection2();
-        blackLayer.Header.Flags |= VRAPI_FRAME_LAYER_FLAG_INHIBIT_SRGB_FRAMEBUFFER;
-
-        ovrLayerLoadingIcon2 iconLayer = vrapi_DefaultLayerLoadingIcon2();
-        iconLayer.Header.Flags |= VRAPI_FRAME_LAYER_FLAG_INHIBIT_SRGB_FRAMEBUFFER;
-
-        const ovrLayerHeader2 *layers[] =
-                {
-                        &blackLayer.Header,
-                        &iconLayer.Header,
-                };
-
-
-        ovrSubmitFrameDescription2 frameDesc = {};
-        frameDesc.Flags = frameFlags;
-        frameDesc.SwapInterval = 1;
-        frameDesc.FrameIndex = FrameIndex;
-        frameDesc.DisplayTime = DisplayTime;
-        frameDesc.LayerCount = 2;
-        frameDesc.Layers = layers;
-
-        ovrResult res = vrapi_SubmitFrame2(Ovr, &frameDesc);
-        ALOGV("vrapi_SubmitFrame2: %d", res);
-
-        ovrProgram_Create(&Program, VERTEX_SHADER, FRAGMENT_SHADER, UseMultiview);
-        ovrGeometry_CreateCube(&Cube);
-        ovrGeometry_CreateVAO(&Cube);
-        ovrGeometry_CreateTestMode(&TestMode);
-        ovrGeometry_CreateVAO(&TestMode);
-
-        CreatedScene = true;
+        // Show a loading message.
+        renderLoadingScene();
     }
 
     double currentTime = GetTimeInSeconds();
@@ -1438,7 +1591,7 @@ Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject c
     int64_t renderedFrameIndex = 0;
     for (int i = 0; i < 10; i++) {
         renderedFrameIndex = env->CallLongMethod(callback, waitFrame);
-        if(renderedFrameIndex == -1) {
+        if (renderedFrameIndex == -1) {
             // Activity has Paused or connection becomes idle
             return;
         }
@@ -1475,19 +1628,18 @@ Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject c
     LOG("Frame latency is %lu us. FrameIndex=%lu", getTimestampUs() - frame->fetchTime,
         frame->frameIndex);
 
-    GL(glActiveTexture(GL_TEXTURE0));
-    GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
-    GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, SurfaceTextureID));
-
 // Render eye images and setup the primary layer using ovrTracking2.
     const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java,
                                                                    &frame->tracking,
-                                                                   Ovr, &completionFence);
+                                                                   Ovr, &completionFence, false);
 
     const ovrLayerHeader2 *layers2[] =
             {
                     &worldLayer.Header
             };
+
+    // TODO
+    double DisplayTime = 0.0;
 
     ovrSubmitFrameDescription2 frameDesc = {};
     frameDesc.
@@ -1527,44 +1679,7 @@ Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject c
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_VrAPI_renderLoading(JNIEnv *env, jobject instance) {
-    double DisplayTime = GetTimeInSeconds();
-
-    // Show a loading icon.
-    uint32_t frameFlags = 0;
-    frameFlags |= VRAPI_FRAME_FLAG_FLUSH;
-
-    ovrLayerProjection2 blackLayer = vrapi_DefaultLayerBlackProjection2();
-    blackLayer.Header.Flags |= VRAPI_FRAME_LAYER_FLAG_INHIBIT_SRGB_FRAMEBUFFER;
-
-    ovrLayerLoadingIcon2 iconLayer = vrapi_DefaultLayerLoadingIcon2();
-    iconLayer.Header.Flags |= VRAPI_FRAME_LAYER_FLAG_INHIBIT_SRGB_FRAMEBUFFER;
-
-    const ovrLayerHeader2 *layers[] =
-            {
-                    &blackLayer.Header,
-                    &iconLayer.Header,
-            };
-
-
-    ovrSubmitFrameDescription2 frameDesc = {};
-    frameDesc.Flags = frameFlags;
-    frameDesc.SwapInterval = 1;
-    frameDesc.FrameIndex = FrameIndex++;
-    frameDesc.DisplayTime = DisplayTime;
-    frameDesc.LayerCount = 2;
-    frameDesc.Layers = layers;
-
-    vrapi_SubmitFrame2(Ovr, &frameDesc);
-
-    if (!CreatedScene) {
-        ovrProgram_Create(&Program, VERTEX_SHADER, FRAGMENT_SHADER, UseMultiview);
-        ovrGeometry_CreateCube(&Cube);
-        ovrGeometry_CreateVAO(&Cube);
-        ovrGeometry_CreateTestMode(&TestMode);
-        ovrGeometry_CreateVAO(&TestMode);
-
-        CreatedScene = true;
-    }
+    renderLoadingScene();
 }
 
 void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTracking2 *tracking) {
@@ -1684,16 +1799,16 @@ extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_VrAPI_onSurfaceChanged(JNIEnv *env, jobject instance, jobject surface) {
     ANativeWindow *newWindow = ANativeWindow_fromSurface(env, surface);
-    if(newWindow != window) {
+    if (newWindow != window) {
         ANativeWindow_release(window);
         window = NULL;
         onVrModeChange(env);
 
         window = newWindow;
-        if(window != NULL) {
+        if (window != NULL) {
             onVrModeChange(env);
         }
-    }else if(newWindow != NULL) {
+    } else if (newWindow != NULL) {
         ANativeWindow_release(newWindow);
     }
 }

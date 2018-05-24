@@ -12,6 +12,8 @@ public class VrAPI {
     native void initialize(Activity activity);
     native void destroy();
 
+    native int createLoadingTexture();
+
     native void onResume();
     native void onPause();
 
