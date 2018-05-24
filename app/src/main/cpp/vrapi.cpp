@@ -1314,8 +1314,6 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
                 GL(glDrawElements(GL_TRIANGLES, TestMode.IndexCount, GL_UNSIGNED_SHORT, NULL));
             }
         } else if (loading) {
-            LOG("Using texture %d", loadingTexture);
-
             GL(glBindVertexArray(Panel.VertexArrayObject));
             GL(glActiveTexture(GL_TEXTURE0));
             GL(glBindTexture(GL_TEXTURE_2D, loadingTexture));
@@ -1479,7 +1477,7 @@ void renderLoadingScene() {
     ovrSubmitFrameDescription2 frameDesc = {};
     frameDesc.Flags = 0;
     frameDesc.SwapInterval = 1;
-    frameDesc.FrameIndex = FrameIndex++;
+    frameDesc.FrameIndex = FrameIndex;
     frameDesc.DisplayTime = DisplayTime;
     frameDesc.LayerCount = 1;
     frameDesc.Layers = layers;

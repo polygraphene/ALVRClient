@@ -9,9 +9,10 @@ class UdpReceiverThread implements NALParser {
         System.loadLibrary("native-lib");
     }
 
+    private static final String BROADCAST_ADDRESS = "255.255.255.255";
+
     private Thread mThread;
     private StatisticsCounter mCounter;
-    private String mHost;
     private int mPort;
     private boolean mInitialized = false;
     private boolean mInitializeFailed = false;
@@ -21,19 +22,18 @@ class UdpReceiverThread implements NALParser {
     interface OnChangeSettingsCallback {
         void onChangeSettings(int enableTestMode, int suspend);
     }
-    OnChangeSettingsCallback mOnChangeSettingsCallback;
+    private OnChangeSettingsCallback mOnChangeSettingsCallback;
 
     UdpReceiverThread(StatisticsCounter counter, OnChangeSettingsCallback onChangeSettingsCallback) {
         mCounter = counter;
         mOnChangeSettingsCallback = onChangeSettingsCallback;
     }
 
-    public void setHost(String host, int port) {
-        mHost = host;
+    public void setPort(int port) {
         mPort = port;
     }
 
-    public String getDeviceName() {
+    private String getDeviceName() {
         String manufacturer = android.os.Build.MANUFACTURER;
         String model = android.os.Build.MODEL;
         if (model.toLowerCase().startsWith(manufacturer.toLowerCase())) {
@@ -69,7 +69,7 @@ class UdpReceiverThread implements NALParser {
         mThread.setName(UdpReceiverThread.class.getName());
 
         try {
-            int ret = initializeSocket(mHost, mPort, getDeviceName());
+            int ret = initializeSocket(mPort, getDeviceName(), BROADCAST_ADDRESS);
             if (ret != 0) {
                 Log.e(TAG, "Error on initializing socket. Code=" + ret + ".");
                 synchronized (this) {
@@ -102,7 +102,7 @@ class UdpReceiverThread implements NALParser {
         mOnChangeSettingsCallback.onChangeSettings(EnableTestMode, suspend);
     }
 
-    native int initializeSocket(String host, int port, String deviceName);
+    native int initializeSocket(int port, String deviceName, String broardcastAddr);
 
     native void closeSocket();
 

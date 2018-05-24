@@ -17,18 +17,25 @@
 #include <sys/ioctl.h>
 #include "nal.h"
 #include "utils.h"
+#include "packet_types.h"
 
 // Maximum UDP packet size
 static const int MAX_PACKET_SIZE = 2000;
+// Connection has lost when elapsed 3 seconds from last packet.
+static const uint64_t CONNECTION_TIMEOUT = 3 * 1000 * 1000;
 
 static int sock = -1;
 static sockaddr_in serverAddr;
+static sockaddr_in broadcastAddr;
 static int notify_pipe[2];
 static time_t prevSentSync = 0;
+static time_t prevSentBroadcast = 0;
 static int64_t TimeDiff;
 static uint64_t timeSyncSequence = (uint64_t) -1;
 static bool stopped = false;
+static bool connected = false;
 static uint64_t lastReceived = 0;
+static std::string deviceName;
 
 static JNIEnv *env_;
 static jobject instance_;
@@ -50,28 +57,7 @@ struct SendBuffer {
 };
 static std::list<SendBuffer> sendQueue;
 
-#pragma pack(push, 1)
-// hello message
-struct HelloMessage {
-    int type; // 1
-    char device_name[32]; // null-terminated
-};
-// Client >----(mode 0)----> Server
-// Client <----(mode 1)----< Server
-// Client >----(mode 2)----> Server
-struct TimeSync {
-    uint32_t type; // 3
-    uint32_t mode; // 0,1,2
-    uint64_t sequence;
-    uint64_t serverTime;
-    uint64_t clientTime;
-};
-struct ChangeSettings {
-    uint32_t type; // 4
-    uint32_t enableTestMode;
-    uint32_t suspend;
-};
-#pragma pack(pop)
+
 uint64_t lastParsedPresentationTime = 0;
 uint32_t prevSequence = 0;
 
@@ -86,6 +72,7 @@ static void processSequence(uint32_t sequence) {
 static int processRecv(int sock) {
     char buf[MAX_PACKET_SIZE];
     int len = MAX_PACKET_SIZE;
+    char str[1000];
 
     sockaddr_in addr;
     socklen_t socklen = sizeof(addr);
@@ -93,66 +80,107 @@ static int processRecv(int sock) {
     if (ret <= 0) {
         return ret;
     }
-    lastReceived = getTimestampUs();
 
-    uint32_t type = *(uint32_t *) buf;
-    if (type == 1) {
-        // First packet of a video frame
-        uint32_t sequence = *(uint32_t *) (buf + 4);
-        uint64_t presentationTime = *(uint64_t *) (buf + 8);
-        uint64_t frameIndex = *(uint64_t *) (buf + 16);
-
-        processSequence(sequence);
-        lastParsedPresentationTime = presentationTime;
-
-        LOG("presentationTime NALType=%d frameIndex=%lu delay=%ld us", buf[28] & 0x1F, frameIndex,
-            (int64_t) getTimestampUs() - ((int64_t) presentationTime - TimeDiff));
-        bool ret2 = processPacket(env_, (char *) buf, ret);
-        if (ret2) {
-            LOG("presentationTime end delay: %ld us",
-                (int64_t) getTimestampUs() - ((int64_t) lastParsedPresentationTime - TimeDiff));
+    if (connected) {
+        if (addr.sin_port != serverAddr.sin_port ||
+            addr.sin_addr.s_addr != serverAddr.sin_addr.s_addr) {
+            // Invalid source address. Ignore.
+            inet_ntop(addr.sin_family, &addr.sin_addr, str, sizeof(str));
+            LOG("Received packet from invalid source address. Address=%s:%d", str,
+                htons(addr.sin_port));
+            return 1;
         }
-    } else if (type == 2) {
-        uint32_t sequence = *(uint32_t *) (buf + 4);
-        processSequence(sequence);
+        lastReceived = getTimestampUs();
 
-        // None first packet of a video frame
-        bool ret2 = processPacket(env_, (char *) buf, ret);
-        if (ret2) {
-            LOG("presentationTime end delay: %ld us",
-                (int64_t) getTimestampUs() - ((int64_t) lastParsedPresentationTime - TimeDiff));
-        }
-    } else if (type == 3) {
-        // Time sync packet
-        if (ret < sizeof(TimeSync)) {
-            return ret;
-        }
-        TimeSync *timeSync = (TimeSync *) buf;
-        uint64_t Current = getTimestampUs();
-        if (timeSync->mode == 1) {
-            uint64_t RTT = Current - timeSync->clientTime;
-            TimeDiff = ((int64_t) timeSync->serverTime + (int64_t) RTT / 2) - (int64_t) Current;
-            LOG("TimeSync: server - client = %ld us RTT = %lu us", TimeDiff, RTT);
+        uint32_t type = *(uint32_t *) buf;
+        if (type == 1) {
+            // First packet of a video frame
+            uint32_t sequence = *(uint32_t *) (buf + 4);
+            uint64_t presentationTime = *(uint64_t *) (buf + 8);
+            uint64_t frameIndex = *(uint64_t *) (buf + 16);
 
-            TimeSync sendBuf = *timeSync;
-            sendBuf.mode = 2;
-            sendBuf.clientTime = Current;
-            sendto(sock, &sendBuf, sizeof(sendBuf), 0, (sockaddr *) &serverAddr,
-                   sizeof(serverAddr));
-        }
-    } else if (type == 4) {
-        // Change settings
-        if (ret < sizeof(ChangeSettings)) {
-            return ret;
-        }
-        ChangeSettings *settings = (ChangeSettings *) buf;
+            processSequence(sequence);
+            lastParsedPresentationTime = presentationTime;
 
-        jclass clazz = env_->GetObjectClass(instance_);
-        jmethodID method = env_->GetMethodID(clazz, "onChangeSettings", "(II)V");
-        env_->CallVoidMethod(instance_, method, settings->enableTestMode, settings->suspend);
-        env_->DeleteLocalRef(clazz);
+            uint64_t currentTime = getTimestampUs();
+            LOG("presentationTime NALType=%d frameIndex=%lu delay=%ld us", buf[28] & 0x1F,
+                frameIndex,
+                (int64_t) getTimestampUs() - ((int64_t) presentationTime - TimeDiff));
+            bool ret2 = processPacket(env_, (char *) buf, ret);
+            LOG("processPacket1 len=%d time=%lu us", ret, getTimestampUs() - currentTime);
+            if (ret2) {
+                LOG("presentationTime end delay: %ld us",
+                    (int64_t) getTimestampUs() - ((int64_t) lastParsedPresentationTime - TimeDiff));
+            }
+        } else if (type == 2) {
+            uint32_t sequence = *(uint32_t *) (buf + 4);
+            processSequence(sequence);
+
+            uint64_t currentTime = getTimestampUs();
+            // None first packet of a video frame
+            bool ret2 = processPacket(env_, (char *) buf, ret);
+            LOG("processPacket2 len=%d time=%lu us", ret, getTimestampUs() - currentTime);
+            if (ret2) {
+                LOG("presentationTime end delay: %ld us",
+                    (int64_t) getTimestampUs() - ((int64_t) lastParsedPresentationTime - TimeDiff));
+            }
+        } else if (type == 3) {
+            // Time sync packet
+            if (ret < sizeof(TimeSync)) {
+                return ret;
+            }
+            TimeSync *timeSync = (TimeSync *) buf;
+            uint64_t Current = getTimestampUs();
+            if (timeSync->mode == 1) {
+                uint64_t RTT = Current - timeSync->clientTime;
+                TimeDiff = ((int64_t) timeSync->serverTime + (int64_t) RTT / 2) - (int64_t) Current;
+                LOG("TimeSync: server - client = %ld us RTT = %lu us", TimeDiff, RTT);
+
+                TimeSync sendBuf = *timeSync;
+                sendBuf.mode = 2;
+                sendBuf.clientTime = Current;
+                sendto(sock, &sendBuf, sizeof(sendBuf), 0, (sockaddr *) &serverAddr,
+                       sizeof(serverAddr));
+            }
+        } else if (type == 4) {
+            // Change settings
+            if (ret < sizeof(ChangeSettings)) {
+                return ret;
+            }
+            ChangeSettings *settings = (ChangeSettings *) buf;
+
+            jclass clazz = env_->GetObjectClass(instance_);
+            jmethodID method = env_->GetMethodID(clazz, "onChangeSettings", "(II)V");
+            env_->CallVoidMethod(instance_, method, settings->enableTestMode, settings->suspend);
+            env_->DeleteLocalRef(clazz);
+        }
+    } else {
+        uint32_t type = *(uint32_t *) buf;
+        if (type == 5) {
+            inet_ntop(addr.sin_family, &addr.sin_addr, str, sizeof(str));
+            LOG("Received broadcast packet from %s:%d.", str, htons(addr.sin_port));
+
+            // Respond with hello message.
+            HelloMessage message = {};
+            message.type = 1;
+            memcpy(message.deviceName, deviceName.c_str(),
+                   std::min(deviceName.length(), sizeof(message.deviceName)));
+            sendto(sock, &message, sizeof(message), 0, (sockaddr *) &addr, sizeof(addr));
+        } else if (type == 6) {
+            inet_ntop(addr.sin_family, &addr.sin_addr, str, sizeof(str));
+            LOG("Received connection request packet from %s:%d.", str, htons(addr.sin_port));
+
+            serverAddr = addr;
+            connected = true;
+            lastReceived = getTimestampUs();
+
+            // Start stream.
+            StreamControlMessage message = {};
+            message.type = 7;
+            message.mode = 1;
+            sendto(sock, &message, sizeof(message), 0, (sockaddr *) &serverAddr, sizeof(serverAddr));
+        }
     }
-
     return ret;
 }
 
@@ -191,7 +219,9 @@ static void processReadPipe(int pipefd) {
 
 static void sendTimeSync() {
     time_t current = time(NULL);
-    if (prevSentSync != current) {
+    if (prevSentSync != current && connected) {
+        LOG("Sending timesync.");
+
         TimeSync timeSync = {};
         timeSync.type = 3;
         timeSync.mode = 0;
@@ -204,20 +234,63 @@ static void sendTimeSync() {
     prevSentSync = current;
 }
 
+static void sendBroadcast() {
+    time_t current = time(NULL);
+    if (prevSentBroadcast != current && !connected) {
+        LOG("Sending broadcast hello.");
+
+        HelloMessage helloMessage = {};
+        helloMessage.type = 1;
+        memcpy(helloMessage.deviceName, deviceName.c_str(),
+               std::min(deviceName.length(), sizeof(helloMessage.deviceName)));
+
+        sendto(sock, &helloMessage, sizeof(helloMessage), 0, (sockaddr *) &broadcastAddr,
+               sizeof(broadcastAddr));
+    }
+    prevSentBroadcast = current;
+}
+
+static void checkConnection() {
+    if(connected) {
+        if(lastReceived + CONNECTION_TIMEOUT < getTimestampUs()) {
+            // Timeout
+            LOG("Connection timeout.");
+            connected = false;
+            memset(&serverAddr, 0, sizeof(serverAddr));
+        }
+    }
+}
+
+static void doPeriodicWork() {
+    sendTimeSync();
+    sendBroadcast();
+    checkConnection();
+}
 
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobject instance,
-                                                              jstring host_, jint port,
-                                                              jstring deviceName_) {
-    const char *host = env->GetStringUTFChars(host_, 0);
-    const char *deviceName = env->GetStringUTFChars(deviceName_, 0);
+                                                              jint port,
+                                                              jstring deviceName_,
+                                                              jstring broadcastAddrStr_) {
     int ret = 0;
-    int val;
-    HelloMessage message = {};
+    int val, val2;
+    socklen_t vallen = 0;
+
+    const char *deviceName_c = env->GetStringUTFChars(deviceName_, 0);
+    deviceName = deviceName_c;
+    env->ReleaseStringUTFChars(deviceName_, deviceName_c);
+
+    const char *broadcastAddrStr_c = env->GetStringUTFChars(broadcastAddrStr_, 0);
+    std::string broadcastAddrStr = broadcastAddrStr_c;
+    env->ReleaseStringUTFChars(broadcastAddrStr_, broadcastAddrStr_c);
 
     stopped = false;
     lastReceived = 0;
+    prevSentSync = 0;
+    prevSentBroadcast = 0;
+    prevSequence = 0;
+    connected = false;
 
     initNAL();
 
@@ -229,17 +302,36 @@ Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobje
     val = 1;
     ioctl(sock, FIONBIO, &val);
 
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(port);
-    inet_pton(serverAddr.sin_family, host, &serverAddr.sin_addr);
+    val = 1;
+    setsockopt(sock, SOL_SOCKET, SO_BROADCAST, (char *) &val, sizeof(val));
+
+    // Set socket recv buffer
+
+    val2 = -1;
+    while(true) {
+        vallen = sizeof(val);
+        getsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &val, &vallen);
+        if (val2 == val) {
+            break;
+        }
+        val2 = val;
+        val *= 2;
+        setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &val, sizeof(val));
+    }
+    LOG("Socket recv buffer: %d bytes", val);
 
     sockaddr_in addr;
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(33450);
+    addr.sin_port = htons(port);
     addr.sin_addr.s_addr = INADDR_ANY;
     if (bind(sock, (sockaddr *) &addr, sizeof(addr)) < 0) {
         LOG("bind error : %d %s", errno, strerror(errno));
     }
+
+    memset(&broadcastAddr, 0, sizeof(broadcastAddr));
+    broadcastAddr.sin_family = AF_INET;
+    broadcastAddr.sin_port = htons(port);
+    inet_pton(broadcastAddr.sin_family, broadcastAddrStr.c_str(), &broadcastAddr.sin_addr);
 
     pthread_mutex_init(&pipeMutex, NULL);
 
@@ -248,17 +340,9 @@ Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobje
         goto end;
     }
 
-    message.type = 1;
-    memcpy(message.device_name, deviceName,
-           std::min(strlen(deviceName), sizeof(message.device_name)));
-    sendto(sock, &message, sizeof(message), 0, (sockaddr *) &serverAddr, sizeof(serverAddr));
-
     end:
 
     LOG("Udp socket initialized.");
-
-    env->ReleaseStringUTFChars(host_, host);
-    env->ReleaseStringUTFChars(deviceName_, deviceName);
 
     if (ret != 0) {
         if (sock >= 0) {
@@ -358,7 +442,7 @@ Java_com_polygraphene_alvr_UdpReceiverThread_runLoop(JNIEnv *env, jobject instan
         int ret = select(nfds, &fds, NULL, NULL, &timeout);
 
         if (ret == 0) {
-            sendTimeSync();
+            doPeriodicWork();
 
             // timeout
             continue;
@@ -378,7 +462,15 @@ Java_com_polygraphene_alvr_UdpReceiverThread_runLoop(JNIEnv *env, jobject instan
                 }
             }
         }
-        sendTimeSync();
+        doPeriodicWork();
+    }
+
+    if(connected) {
+        // Stop stream.
+        StreamControlMessage message = {};
+        message.type = 7;
+        message.mode = 2;
+        sendto(sock, &message, sizeof(message), 0, (sockaddr *) &serverAddr, sizeof(serverAddr));
     }
 
     LOG("Exiting UdpReceiverThread runLoop");
@@ -405,5 +497,6 @@ Java_com_polygraphene_alvr_UdpReceiverThread_notifyWaitingThread(JNIEnv *env, jo
 extern "C"
 JNIEXPORT jboolean JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_isConnected(JNIEnv *env, jobject instance) {
-    return (uint8_t )(lastReceived + 3 * 1000 * 1000 > getTimestampUs());
+    checkConnection();
+    return (uint8_t)connected;
 }

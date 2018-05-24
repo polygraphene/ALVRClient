@@ -100,7 +100,7 @@ class VrThread extends Thread {
 
         Log.v(TAG, "VrThread.onResume: Starting worker threads.");
         mReceiverThread = new UdpReceiverThread(mCounter, mOnChangeSettingsCallback);
-        mReceiverThread.setHost("10.1.0.2", 9944);
+        mReceiverThread.setPort(9944);
         mDecoderThread = new DecoderThread(mReceiverThread
                 , mainActivity.getAvcCodecInfoes().get(0), mCounter, mRenderCallback);
         mTrackingThread = new TrackingThread();
@@ -339,7 +339,7 @@ class VrThread extends Thread {
         @Override
         public void run() {
             while (!mStopped) {
-                if (vrAPI.isVrMode()) {
+                if (vrAPI.isVrMode() && mReceiverThread.isConnected()) {
                     vrAPI.fetchTrackingInfo(mOnSendTrackingCallback);
                 }
                 try {
