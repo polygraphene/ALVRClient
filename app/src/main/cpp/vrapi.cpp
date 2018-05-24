@@ -87,8 +87,8 @@ PFNEGLGETSYNCATTRIBKHRPROC eglGetSyncAttribKHR;
 #endif
 
 
-#define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, "RemoteGlass Native", __VA_ARGS__)
-#define ALOGV(...) __android_log_print(ANDROID_LOG_VERBOSE, "RemoteGlass Native", __VA_ARGS__)
+#define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, "ALVR Native", __VA_ARGS__)
+#define ALOGV(...) __android_log_print(ANDROID_LOG_VERBOSE, "ALVR Native", __VA_ARGS__)
 
 static const int NUM_MULTI_SAMPLES = 4;
 

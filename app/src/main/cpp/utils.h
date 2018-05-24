@@ -10,7 +10,7 @@
 #include <android/log.h>
 #include <pthread.h>
 
-#define LOG(...) __android_log_print(ANDROID_LOG_DEBUG, "Native", __VA_ARGS__)
+#define LOG(...) __android_log_print(ANDROID_LOG_DEBUG, "ALVR Native", __VA_ARGS__)
 
 inline uint64_t getTimestampUs(){
     timeval tv;
