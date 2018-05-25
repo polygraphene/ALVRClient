@@ -10,6 +10,7 @@
 #include <pthread.h>
 #include "nal.h"
 #include "utils.h"
+#include "packet_types.h"
 
 static bool initialized = false;
 static bool stopped = false;
@@ -30,6 +31,7 @@ int bufferPos = 0;
 // Current NAL meta data from packet
 uint64_t presentationTime;
 uint64_t frameIndex;
+uint32_t frameByteSize;
 
 static JNIEnv *env_;
 
@@ -105,6 +107,21 @@ static void append(char c) {
     cbuf[bufferPos++] = c;
 }
 
+static void push(char *buf, int len) {
+    if (bufferPos + len >= bufferLength) {
+        expandBuffer();
+    }
+    memcpy(cbuf + bufferPos, buf, len);
+    bufferPos += len;
+}
+
+static void releaseBuffer(){
+    if (currentBuf != NULL) {
+        env_->ReleaseByteArrayElements(currentBuf, (jbyte *) cbuf, 0);
+        currentBuf = NULL;
+    }
+}
+
 static void destroyBuffer(){
     if (currentBuf != NULL) {
         env_->ReleaseByteArrayElements(currentBuf, (jbyte *) cbuf, 0);
@@ -131,133 +148,111 @@ void destroyNAL(JNIEnv *env){
     initialized = false;
 }
 
+static void putNAL(int len) {
+    NALBuffer buf;
+    buf.len = len;
+    buf.array = currentBuf;
+    buf.presentationTime = presentationTime;
+    buf.frameIndex = frameIndex;
+
+    releaseBuffer();
+
+    {
+        MutexLock lock(nalMutex);
+
+        nalList.push_back(buf);
+
+        pthread_cond_broadcast(&cond_nonzero);
+    }
+}
+
 bool processPacket(JNIEnv *env, char *buf, int len) {
     if (!initialized) {
         initNAL();
     }
 
     bool newNalParsed = false;
+    int pos = 0;
 
     env_ = env;
 
     uint32_t type = *(uint32_t *) buf;
-    int pos = sizeof(uint32_t);
-    uint32_t sequence = *(uint32_t *) (buf + pos);
-    pos += sizeof(uint32_t);
 
-    if (type == 1) {
-        presentationTime = *(uint64_t *) (buf + pos);
-        pos += sizeof(uint64_t);
-        frameIndex = *(uint64_t *) (buf + pos);
-        pos += sizeof(uint64_t);
-    }
+    if (type == ALVR_PACKET_TYPE_VIDEO_FRAME_START) {
+        VideoFrameStart *header = (VideoFrameStart *)buf;
+        presentationTime = header->presentationTime;
+        frameIndex = header->frameIndex;
 
-    for (; pos < len; pos++) {
-        char c = buf[pos];
-        switch (parseState) {
-            case 0:
-                if (c == 0) {
-                    parseState = 1;
-                    allocateBuffer(INITIAL_LENGTH);
-                    append(c);
-                } else {
-                    // Ignore until valid NAL appeared
-                }
-                break;
-            case 1:
-                if (c == 0) {
-                    parseState = 2;
-                    append(c);
-                } else {
-                    // Invalid NAL header
-                    parseState = 0;
-                }
-                break;
-            case 2:
-                if (c == 0) {
-                    parseState = 3;
-                    append(c);
-                } else {
-                    // Invalid NAL header
-                    parseState = 0;
-                }
-                break;
-            case 3:
-                if (c == 1) {
-                    parseState = 4;
-                    append(c);
-                    parseSubState = 0;
-                } else {
-                    // Invalid NAL header
-                    parseState = 0;
-                }
-                break;
-            case 4:
-                // NAL body
-                if (c == 0) {
-                    parseSubState++;
-                } else if (c == 1) {
-                    if (parseSubState == 2) {
-                        // Convert 00 00 01 to 00 00 00 01 for android H.264 decoder
-                        //append(0);
-                    } else if (parseSubState == 3) {
-                        // End of NAL
-                        NALBuffer buf;
-                        buf.len = bufferPos - 3;
-                        buf.array = currentBuf;
-                        buf.presentationTime = presentationTime;
-                        buf.frameIndex = frameIndex;
-                        currentBuf = NULL;
-                        newNalParsed = true;
+        pos = sizeof(VideoFrameStart);
 
-                        {
-                            MutexLock lock(nalMutex);
+        uint8_t NALType = buf[pos + 4] & 0x1F;
+        if(NALType == 7) {
+            // SPS NAL
 
-                            nalList.push_back(buf);
+            // This frame contains SPS + PPS + IDR on NVENC H.264 stream.
+            // SPS + PPS has short size (8bytes + 28bytes in some environment), so we can assume SPS + PPS is contained in first fragment.
 
-                            pthread_cond_broadcast(&cond_nonzero);
+            int zeroes = 0;
+            bool parsingSPS = true;
+            int SPSEnd = -1;
+            int PPSEnd = -1;
+            for(int i = pos + 4; i < len; i++) {
+                if(buf[i] == 0) {
+                    zeroes++;
+                }else if(buf[i] == 1) {
+                    if (zeroes == 3) {
+                        if (parsingSPS) {
+                            parsingSPS = false;
+                            SPSEnd = i - 3;
+                        }else{
+                            PPSEnd = i - 3;
+                            break;
                         }
-
-                        parseState = 4;
-                        allocateBuffer(INITIAL_LENGTH);
-                        append(0);
-                        append(0);
-                        append(0);
                     }
-                    parseSubState = 0;
-                } else if (c == 2) {
-                    // Detect padding
-                    if (parseSubState == 3) {
-                        // End of NAL
-                        NALBuffer buf;
-                        buf.len = bufferPos - 3;
-                        buf.array = currentBuf;
-                        buf.presentationTime = presentationTime;
-                        buf.frameIndex = frameIndex;
-                        newNalParsed = true;
-
-                        env_->ReleaseByteArrayElements(currentBuf, (jbyte *) cbuf, 0);
-                        currentBuf = NULL;
-                        {
-                            MutexLock lock(nalMutex);
-
-                            nalList.push_back(buf);
-
-                            pthread_cond_broadcast(&cond_nonzero);
-                        }
-
-                        parseSubState = 0;
-                        parseState = 0;
-                        break;
-                    }
-                    parseSubState = 0;
-                } else {
-                    parseSubState = 0;
+                    zeroes = 0;
+                }else {
+                    zeroes = 0;
                 }
-                append(c);
-                break;
+            }
+            if(SPSEnd == -1 || PPSEnd == -1) {
+                // Invalid frame.
+                LOG("Got invalid frame. Too large SPS or PPS?");
+                return false;
+            }
+            allocateBuffer(SPSEnd - pos);
+            push(buf + pos, SPSEnd - pos);
+            putNAL(SPSEnd - pos);
+
+            pos = SPSEnd;
+
+            allocateBuffer(PPSEnd - pos);
+            push(buf + pos, PPSEnd - pos);
+
+            putNAL(PPSEnd - pos);
+
+            pos = PPSEnd;
+
+            // Allocate IDR frame buffer
+            allocateBuffer(header->frameByteSize - (PPSEnd - sizeof(VideoFrameStart)));
+            frameByteSize = header->frameByteSize - (PPSEnd - sizeof(VideoFrameStart));
+            // Note that if previous frame packet has lost, we dispose that incomplete buffer implicitly here.
+        }else {
+            // Allocate P-frame buffer
+            allocateBuffer(header->frameByteSize);
+            frameByteSize = header->frameByteSize;
+            // Note that if previous frame packet has lost, we dispose that incomplete buffer implicitly here.
         }
+    }else {
+        pos = sizeof(VideoFrame);
     }
+
+    push(buf + pos, len - pos);
+    if(bufferPos >= frameByteSize) {
+        // End of frame.
+        putNAL(bufferPos);
+        newNalParsed = true;
+    }
+
     return newNalParsed;
 }
 

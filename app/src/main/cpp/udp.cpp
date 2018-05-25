@@ -93,34 +93,33 @@ static int processRecv(int sock) {
         lastReceived = getTimestampUs();
 
         uint32_t type = *(uint32_t *) buf;
-        if (type == 1) {
+        if (type == ALVR_PACKET_TYPE_VIDEO_FRAME_START) {
             // First packet of a video frame
-            uint32_t sequence = *(uint32_t *) (buf + 4);
-            uint64_t presentationTime = *(uint64_t *) (buf + 8);
-            uint64_t frameIndex = *(uint64_t *) (buf + 16);
+            VideoFrameStart *header = (VideoFrameStart *)buf;
 
-            processSequence(sequence);
-            lastParsedPresentationTime = presentationTime;
+            processSequence(header->packetCounter);
+            lastParsedPresentationTime = header->presentationTime;
 
             LOG("presentationTime NALType=%d frameIndex=%lu delay=%ld us", buf[28] & 0x1F,
-                frameIndex,
-                (int64_t) getTimestampUs() - ((int64_t) presentationTime - TimeDiff));
+                header->frameIndex,
+                (int64_t) getTimestampUs() - ((int64_t) header->presentationTime - TimeDiff));
             bool ret2 = processPacket(env_, (char *) buf, ret);
             if (ret2) {
                 LOG("presentationTime end delay: %ld us",
                     (int64_t) getTimestampUs() - ((int64_t) lastParsedPresentationTime - TimeDiff));
             }
-        } else if (type == 2) {
-            uint32_t sequence = *(uint32_t *) (buf + 4);
-            processSequence(sequence);
+        } else if (type == ALVR_PACKET_TYPE_VIDEO_FRAME) {
+            VideoFrame *header = (VideoFrame *)buf;
 
-            // None first packet of a video frame
+            processSequence(header->packetCounter);
+
+            // Following packets of a video frame
             bool ret2 = processPacket(env_, (char *) buf, ret);
             if (ret2) {
                 LOG("presentationTime end delay: %ld us",
                     (int64_t) getTimestampUs() - ((int64_t) lastParsedPresentationTime - TimeDiff));
             }
-        } else if (type == 3) {
+        } else if (type == ALVR_PACKET_TYPE_TIME_SYNC) {
             // Time sync packet
             if (ret < sizeof(TimeSync)) {
                 return ret;
@@ -138,7 +137,7 @@ static int processRecv(int sock) {
                 sendto(sock, &sendBuf, sizeof(sendBuf), 0, (sockaddr *) &serverAddr,
                        sizeof(serverAddr));
             }
-        } else if (type == 4) {
+        } else if (type == ALVR_PACKET_TYPE_CHANGE_SETTINGS) {
             // Change settings
             if (ret < sizeof(ChangeSettings)) {
                 return ret;
@@ -152,17 +151,17 @@ static int processRecv(int sock) {
         }
     } else {
         uint32_t type = *(uint32_t *) buf;
-        if (type == 5) {
+        if (type == ALVR_PACKET_TYPE_BROADCAST_REQUEST_MESSAGE) {
             inet_ntop(addr.sin_family, &addr.sin_addr, str, sizeof(str));
             LOG("Received broadcast packet from %s:%d.", str, htons(addr.sin_port));
 
             // Respond with hello message.
             HelloMessage message = {};
-            message.type = 1;
+            message.type = ALVR_PACKET_TYPE_HELLO_MESSAGE;
             memcpy(message.deviceName, deviceName.c_str(),
                    std::min(deviceName.length(), sizeof(message.deviceName)));
             sendto(sock, &message, sizeof(message), 0, (sockaddr *) &addr, sizeof(addr));
-        } else if (type == 6) {
+        } else if (type == ALVR_PACKET_TYPE_CONNECTION_MESSAGE) {
             inet_ntop(addr.sin_family, &addr.sin_addr, str, sizeof(str));
             LOG("Received connection request packet from %s:%d.", str, htons(addr.sin_port));
 
@@ -172,7 +171,7 @@ static int processRecv(int sock) {
 
             // Start stream.
             StreamControlMessage message = {};
-            message.type = 7;
+            message.type = ALVR_PACKET_TYPE_STREAM_CONTROL_MESSAGE;
             message.mode = 1;
             sendto(sock, &message, sizeof(message), 0, (sockaddr *) &serverAddr, sizeof(serverAddr));
         }
