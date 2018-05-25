@@ -199,7 +199,7 @@ bool processPacket(JNIEnv *env, char *buf, int len) {
                 } else if (c == 1) {
                     if (parseSubState == 2) {
                         // Convert 00 00 01 to 00 00 00 01 for android H.264 decoder
-                        append(0);
+                        //append(0);
                     } else if (parseSubState == 3) {
                         // End of NAL
                         NALBuffer buf;
