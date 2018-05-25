@@ -102,7 +102,7 @@ class VrThread extends Thread {
         mReceiverThread = new UdpReceiverThread(mCounter, mOnChangeSettingsCallback);
         mReceiverThread.setPort(9944);
         mDecoderThread = new DecoderThread(mReceiverThread
-                , mainActivity.getAvcCodecInfoes().get(0), mCounter, mRenderCallback);
+                , mainActivity.getAvcCodecInfoes().get(0), mCounter, mRenderCallback, mainActivity);
         mTrackingThread = new TrackingThread();
 
         try {
@@ -314,9 +314,9 @@ class VrThread extends Thread {
             Log.v(TAG, "releaseOutputBuffer " + frameIndex);
             codec.releaseOutputBuffer(queuedOutputBuffer, true);
             synchronized (waiter) {
-                rendered = true;
+                //rendered = true;
                 VrThread.this.frameIndex = frameIndex;
-                waiter.notifyAll();
+                //waiter.notifyAll();
             }
             return -1;
         }
