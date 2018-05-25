@@ -7,6 +7,8 @@ import android.support.annotation.NonNull;
 import android.util.Log;
 import android.view.Surface;
 
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.LinkedList;
@@ -28,6 +30,8 @@ class DecoderThread extends Thread {
     private boolean mStopped = false;
 
     private long foundFrameIndex = 0;
+
+    private MainActivity mMainActivity = null;
 
     private class FramePresentationTime {
         public long frameIndex;
@@ -51,11 +55,12 @@ class DecoderThread extends Thread {
 
     private RenderCallback mRenderCallback;
 
-    DecoderThread(NALParser nalParser, MediaCodecInfo codecInfo, StatisticsCounter counter, RenderCallback renderCallback) {
+    DecoderThread(NALParser nalParser, MediaCodecInfo codecInfo, StatisticsCounter counter, RenderCallback renderCallback, MainActivity mainActivity) {
         mNalParser = nalParser;
         mCodecInfo = codecInfo;
         mCounter = counter;
         mRenderCallback = renderCallback;
+        mMainActivity = mainActivity;
     }
 
     private void frameLog(String s) {
@@ -190,6 +195,8 @@ class DecoderThread extends Thread {
                     buffer.put(buf.buf, 0, buf.len);
                     frameNumber++;
 
+                    debugIDRFrame(buf, SPSBuffer, PPSBuffer);
+
                     pushFramePresentationMap(buf);
 
                     decoder.queueInputBuffer(index, 0, buffer.position(), buf.presentationTime, 0);
@@ -232,6 +239,19 @@ class DecoderThread extends Thread {
             }
         }
         Log.v(TAG, "DecoderThread stopped.");
+    }
+
+    private void debugIDRFrame(NAL buf, NAL spsBuffer, NAL ppsBuffer) {
+        /*
+        try {
+            FileOutputStream stream = new FileOutputStream(mMainActivity.getExternalMediaDirs()[0].getAbsolutePath() + "/" + buf.frameIndex + ".h264");
+            stream.write(spsBuffer.buf, 0, spsBuffer.len);
+            stream.write(ppsBuffer.buf, 0, ppsBuffer.len);
+            stream.write(buf.buf, 0, buf.len);
+            stream.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }*/
     }
 
     class Callback extends MediaCodec.Callback {
