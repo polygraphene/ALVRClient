@@ -263,6 +263,26 @@ static void doPeriodicWork() {
     checkConnection();
 }
 
+static void setMaxSocketBuffer(){
+    int val2 = -1;
+    int val = 0;
+
+    LOG("Finding the maximum socket buffer.");
+    while(true) {
+        socklen_t len = sizeof(val);
+        getsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &val, &len);
+        if (val2 == val) {
+            LOG("Maximum buffer is %d bytes", val);
+            break;
+        }
+        val2 = val;
+
+        val *= 2;
+        LOG("Test buffer size. size=%d bytes.", val);
+        setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &val, sizeof(val));
+    }
+}
+
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobject instance,
@@ -270,8 +290,8 @@ Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobje
                                                               jstring deviceName_,
                                                               jstring broadcastAddrStr_) {
     int ret = 0;
-    int val, val2;
-    socklen_t vallen = 0;
+    int val;
+    socklen_t len;
 
     const char *deviceName_c = env->GetStringUTFChars(deviceName_, 0);
     deviceName = deviceName_c;
@@ -303,18 +323,16 @@ Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobje
 
     // Set socket recv buffer
 
-    val2 = -1;
-    while(true) {
-        vallen = sizeof(val);
-        getsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &val, &vallen);
-        if (val2 == val) {
-            break;
-        }
-        val2 = val;
-        val *= 2;
-        setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &val, sizeof(val));
-    }
-    LOG("Socket recv buffer: %d bytes", val);
+    //setMaxSocketBuffer();
+    // 30Mbps 50ms buffer
+    getsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &val, &len);
+    LOG("Default socket recv buffer is %d bytes", val);
+
+    val = 30 * 1000 * 50 / 8;
+    setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &val, sizeof(val));
+    len = sizeof(val);
+    getsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &val, &len);
+    LOG("Current socket recv buffer is %d bytes", val);
 
     sockaddr_in addr;
     addr.sin_family = AF_INET;
