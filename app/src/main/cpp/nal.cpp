@@ -15,13 +15,6 @@
 static bool initialized = false;
 static bool stopped = false;
 
-// NAL parser status
-int parseState = 0;
-int parseSubState = 0;
-
-// Initial length of NAL buffer
-const int INITIAL_LENGTH = 30000;
-
 // NAL buffer
 jbyteArray currentBuf = NULL;
 char *cbuf = NULL;
@@ -134,8 +127,6 @@ void initNAL() {
     pthread_cond_init(&cond_nonzero, NULL);
 
     initializeBuffer();
-    parseState = 0;
-    parseSubState = 0;
     initialized = true;
     stopped = false;
 }

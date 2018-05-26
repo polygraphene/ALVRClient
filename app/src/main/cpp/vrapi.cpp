@@ -10,6 +10,7 @@
 #include <VrApi_Helpers.h>
 #include <VrApi_SystemUtils.h>
 #include "utils.h"
+#include "packet_types.h"
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -1681,43 +1682,28 @@ Java_com_polygraphene_alvr_VrAPI_renderLoading(JNIEnv *env, jobject instance) {
 }
 
 void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTracking2 *tracking) {
-    char *packet;
-    jbyteArray array = env->NewByteArray(2000);
-    packet = (char *) env->GetByteArrayElements(array, 0);
+    jbyteArray array = env->NewByteArray(sizeof(TrackingInfo));
+    TrackingInfo *packet = (TrackingInfo *) env->GetByteArrayElements(array, 0);
 
     uint64_t clientTime = getTimestampUs();
-    int pos = 0;
-    int type = 2;
-    memcpy(packet + pos, &type, 4);
-    pos += 4;
-    memcpy(packet + pos, &clientTime, sizeof(uint64_t));
-    pos += sizeof(uint64_t);
-    memcpy(packet + pos, &FrameIndex, sizeof(uint64_t));
-    pos += sizeof(uint64_t);
-    memcpy(packet + pos, &displayTime, sizeof(double));
-    pos += sizeof(double);
-    memcpy(packet + pos, &tracking->HeadPose.Pose.Orientation, sizeof(ovrQuatf));
-    pos += sizeof(ovrQuatf);
-    memcpy(packet + pos, &tracking->HeadPose.Pose.Position, sizeof(ovrVector3f));
-    pos += sizeof(ovrVector3f);
 
-    memcpy(packet + pos, &tracking->HeadPose.AngularVelocity, sizeof(ovrVector3f));
-    pos += sizeof(ovrVector3f);
-    memcpy(packet + pos, &tracking->HeadPose.LinearVelocity, sizeof(ovrVector3f));
-    pos += sizeof(ovrVector3f);
-    memcpy(packet + pos, &tracking->HeadPose.AngularAcceleration, sizeof(ovrVector3f));
-    pos += sizeof(ovrVector3f);
-    memcpy(packet + pos, &tracking->HeadPose.LinearAcceleration, sizeof(ovrVector3f));
-    pos += sizeof(ovrVector3f);
+    packet->type = ALVR_PACKET_TYPE_TRACKING_INFO;
+    packet->clientTime = clientTime;
+    packet->FrameIndex = FrameIndex;
+    packet->predictedDisplayTime = displayTime;
 
-    memcpy(packet + pos, &tracking->Eye[0].ProjectionMatrix, sizeof(ovrMatrix4f));
-    pos += sizeof(ovrMatrix4f);
-    memcpy(packet + pos, &tracking->Eye[0].ViewMatrix, sizeof(ovrMatrix4f));
-    pos += sizeof(ovrMatrix4f);
-    memcpy(packet + pos, &tracking->Eye[1].ProjectionMatrix, sizeof(ovrMatrix4f));
-    pos += sizeof(ovrMatrix4f);
-    memcpy(packet + pos, &tracking->Eye[1].ViewMatrix, sizeof(ovrMatrix4f));
-    pos += sizeof(ovrMatrix4f);
+    memcpy(&packet->HeadPose_Pose_Orientation, &tracking->HeadPose.Pose.Orientation, sizeof(ovrQuatf));
+    memcpy(&packet->HeadPose_Pose_Position, &tracking->HeadPose.Pose.Position, sizeof(ovrVector3f));
+
+    memcpy(&packet->HeadPose_AngularVelocity, &tracking->HeadPose.AngularVelocity, sizeof(ovrVector3f));
+    memcpy(&packet->HeadPose_LinearVelocity, &tracking->HeadPose.LinearVelocity, sizeof(ovrVector3f));
+    memcpy(&packet->HeadPose_AngularAcceleration, &tracking->HeadPose.AngularAcceleration, sizeof(ovrVector3f));
+    memcpy(&packet->HeadPose_LinearAcceleration, &tracking->HeadPose.LinearAcceleration, sizeof(ovrVector3f));
+
+    memcpy(&packet->Eye[0].ProjectionMatrix, &tracking->Eye[0].ProjectionMatrix, sizeof(ovrMatrix4f));
+    memcpy(&packet->Eye[0].ViewMatrix, &tracking->Eye[0].ViewMatrix, sizeof(ovrMatrix4f));
+    memcpy(&packet->Eye[1].ProjectionMatrix, &tracking->Eye[1].ProjectionMatrix, sizeof(ovrMatrix4f));
+    memcpy(&packet->Eye[1].ViewMatrix, &tracking->Eye[1].ViewMatrix, sizeof(ovrMatrix4f));
 
     env->ReleaseByteArrayElements(array, (jbyte *) packet, 0);
 
@@ -1726,7 +1712,7 @@ void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTrac
     jclass clazz = env->GetObjectClass(callback);
     jmethodID sendTracking = env->GetMethodID(clazz, "onSendTracking", "([BIJ)V");
 
-    env->CallVoidMethod(callback, sendTracking, array, pos, FrameIndex);
+    env->CallVoidMethod(callback, sendTracking, array, sizeof(TrackingInfo), FrameIndex);
 }
 
 // Called from TrackingThread

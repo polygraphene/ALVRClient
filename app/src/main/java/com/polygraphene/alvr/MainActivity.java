@@ -23,12 +23,12 @@ public class MainActivity extends Activity {
         System.loadLibrary("native-lib");
     }
 
-    private List<MediaCodecInfo> mAvcCodecInfoes = new ArrayList<>();
+    private List<MediaCodecInfo> mAvcDecoderList;
 
     private VrThread mVrThread = null;
 
-    public List<MediaCodecInfo> getAvcCodecInfoes() {
-        return mAvcCodecInfoes;
+    public MediaCodecInfo getAvcDecoder() {
+        return mAvcDecoderList.get(0);
     }
 
     private final SurfaceHolder.Callback mCallback = new SurfaceHolder.Callback() {
@@ -62,29 +62,8 @@ public class MainActivity extends Activity {
         SurfaceHolder holder = surfaceView.getHolder();
         holder.addCallback(mCallback);
 
-        MediaCodecList mcl = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
-
-        for (MediaCodecInfo info : mcl.getCodecInfos()) {
-            boolean isAvc = false;
-
-            for (String type : info.getSupportedTypes()) {
-                if (type.equals("video/avc")) {
-                    isAvc = true;
-                    break;
-                }
-            }
-            if (isAvc && !info.isEncoder()) {
-                MediaCodecInfo.CodecCapabilities capabilitiesForType = info.getCapabilitiesForType("video/avc");
-                /*
-                Log.v(TAG, info.getName());
-                for (MediaCodecInfo.CodecProfileLevel profile : capabilitiesForType.profileLevels) {
-                    Log.v(TAG, "profile:" + profile.profile + " level:" + profile.level);
-                }*/
-
-                mAvcCodecInfoes.add(info);
-            }
-        }
-        if(mAvcCodecInfoes.size() == 0) {
+        mAvcDecoderList = findAvcDecoder();
+        if(mAvcDecoderList.size() == 0) {
             // TODO: Show error message for a user. How to?
             Log.e(TAG, "Suitable codec is not found.");
             finish();
@@ -130,6 +109,34 @@ public class MainActivity extends Activity {
         Log.v(TAG, "onDestroy: VrThread has stopped.");
     }
 
+    private List<MediaCodecInfo> findAvcDecoder(){
+        List<MediaCodecInfo> codecList = new ArrayList<>();
+
+        MediaCodecList mcl = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
+
+        for (MediaCodecInfo info : mcl.getCodecInfos()) {
+            boolean isAvc = false;
+
+            for (String type : info.getSupportedTypes()) {
+                if (type.equals("video/avc")) {
+                    isAvc = true;
+                    break;
+                }
+            }
+            if (isAvc && !info.isEncoder()) {
+                //MediaCodecInfo.CodecCapabilities capabilitiesForType = info.getCapabilitiesForType("video/avc");
+
+                //Log.v(TAG, info.getName());
+                //for (MediaCodecInfo.CodecProfileLevel profile : capabilitiesForType.profileLevels) {
+                //    Log.v(TAG, "profile:" + profile.profile + " level:" + profile.level);
+                //}
+
+                codecList.add(info);
+            }
+        }
+        return codecList;
+    }
+
     public String getVersionName(){
         try {
             PackageInfo pInfo = this.getPackageManager().getPackageInfo(getPackageName(), 0);
@@ -137,7 +144,7 @@ public class MainActivity extends Activity {
             return getString(R.string.app_name) + " v" + version;
         } catch (PackageManager.NameNotFoundException e) {
             e.printStackTrace();
-            return getString(R.string.app_name) + "Unknown version";
+            return getString(R.string.app_name) + " Unknown version";
         }
     }
 }

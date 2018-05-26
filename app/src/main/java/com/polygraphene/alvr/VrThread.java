@@ -8,19 +8,21 @@ import android.view.Surface;
 class VrThread extends Thread {
     private static final String TAG = "VrThread";
 
-    private MainActivity mainActivity;
+    private static final int PORT = 9944;
 
-    private VrAPI vrAPI = new VrAPI();
+    private MainActivity mMainActivity;
+
+    private VrAPI mVrAPI = new VrAPI();
     private ThreadQueue mQueue = null;
     private boolean mResumed = false;
 
-    private SurfaceTexture surfaceTexture;
-    private Surface surface;
+    private SurfaceTexture mSurfaceTexture;
+    private Surface mSurface;
 
-    private boolean rendered = false;
-    private boolean renderRequested = false;
-    private long frameIndex = 0;
-    private final Object waiter = new Object();
+    private boolean mRendered = false;
+    private boolean mRenderRequested = false;
+    private long mFrameIndex = 0;
+    private final Object mWaiter = new Object();
 
     private LoadingTexture mLoadingTexture = new LoadingTexture();
 
@@ -31,20 +33,21 @@ class VrThread extends Thread {
 
     private StatisticsCounter mCounter = new StatisticsCounter();
 
+    // Called from native
     public interface VrFrameCallback {
         @SuppressWarnings("unused")
         long waitFrame();
     }
 
     public VrThread(MainActivity mainActivity) {
-        this.mainActivity = mainActivity;
+        this.mMainActivity = mainActivity;
     }
 
     public void onSurfaceCreated(final Surface surface) {
         post(new Runnable() {
             @Override
             public void run() {
-                vrAPI.onSurfaceCreated(surface);
+                mVrAPI.onSurfaceCreated(surface);
             }
         });
     }
@@ -53,7 +56,7 @@ class VrThread extends Thread {
         post(new Runnable() {
             @Override
             public void run() {
-                vrAPI.onSurfaceChanged(surface);
+                mVrAPI.onSurfaceChanged(surface);
             }
         });
     }
@@ -63,15 +66,15 @@ class VrThread extends Thread {
             @Override
             public void run() {
                 mLoadingTexture.destroyTexture();
-                vrAPI.onSurfaceDestroyed();
+                mVrAPI.onSurfaceDestroyed();
             }
         });
     }
 
     public void onResume() {
-        synchronized (waiter) {
+        synchronized (mWaiter) {
             mResumed = true;
-            waiter.notifyAll();
+            mWaiter.notifyAll();
         }
         if (mReceiverThread != null) {
             mReceiverThread.interrupt();
@@ -100,9 +103,9 @@ class VrThread extends Thread {
 
         Log.v(TAG, "VrThread.onResume: Starting worker threads.");
         mReceiverThread = new UdpReceiverThread(mCounter, mOnChangeSettingsCallback);
-        mReceiverThread.setPort(9944);
+        mReceiverThread.setPort(PORT);
         mDecoderThread = new DecoderThread(mReceiverThread
-                , mainActivity.getAvcCodecInfoes().get(0), mCounter, mRenderCallback, mainActivity);
+                , mMainActivity.getAvcDecoder(), mCounter, mRenderCallback, mMainActivity);
         mTrackingThread = new TrackingThread();
 
         try {
@@ -122,16 +125,16 @@ class VrThread extends Thread {
         post(new Runnable() {
             @Override
             public void run() {
-                vrAPI.onResume();
+                mVrAPI.onResume();
             }
         });
     }
 
     public void onPause() {
         Log.v(TAG, "VrThread.onPause: Stopping worker threads.");
-        synchronized (waiter) {
+        synchronized (mWaiter) {
             mResumed = false;
-            waiter.notifyAll();
+            mWaiter.notifyAll();
         }
         // DecoderThread must be stopped before ReceiverThread
         if (mDecoderThread != null) {
@@ -163,7 +166,7 @@ class VrThread extends Thread {
         post(new Runnable() {
             @Override
             public void run() {
-                vrAPI.onPause();
+                mVrAPI.onPause();
             }
         });
     }
@@ -204,29 +207,29 @@ class VrThread extends Thread {
             notifyAll();
         }
 
-        vrAPI.initialize(mainActivity);
+        mVrAPI.initialize(mMainActivity);
 
-        surfaceTexture = new SurfaceTexture(vrAPI.getSurfaceTextureID());
-        surfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
+        mSurfaceTexture = new SurfaceTexture(mVrAPI.getSurfaceTextureID());
+        mSurfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
             @Override
             public void onFrameAvailable(SurfaceTexture surfaceTexture) {
-                Log.v(TAG, "onFrameAvailable " + frameIndex);
+                Log.v(TAG, "onFrameAvailable " + mFrameIndex);
 
-                synchronized (waiter) {
-                    renderRequested = false;
-                    rendered = true;
-                    waiter.notifyAll();
+                synchronized (mWaiter) {
+                    mRenderRequested = false;
+                    mRendered = true;
+                    mWaiter.notifyAll();
                 }
             }
         });
-        surface = new Surface(surfaceTexture);
+        mSurface = new Surface(mSurfaceTexture);
 
-        mLoadingTexture.initializeMessageCanvas(vrAPI.createLoadingTexture());
-        mLoadingTexture.drawMessage(mainActivity.getVersionName() + "\nLoading...");
+        mLoadingTexture.initializeMessageCanvas(mVrAPI.createLoadingTexture());
+        mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\nLoading...");
 
         Log.v(TAG, "Start loop of VrThread.");
         while(mQueue.waitIdle()) {
-            if(!vrAPI.isVrMode()) {
+            if(!mVrAPI.isVrMode()) {
                 mQueue.waitNext();
                 continue;
             }
@@ -234,33 +237,33 @@ class VrThread extends Thread {
         }
 
         Log.v(TAG, "Destroying vrapi state.");
-        vrAPI.destroy();
+        mVrAPI.destroy();
     }
 
     private void render(){
         if (mReceiverThread.isConnected()) {
             Log.v(TAG, "Render received texture.");
-            vrAPI.render(new VrFrameCallback() {
+            mVrAPI.render(new VrFrameCallback() {
                 @Override
                 public long waitFrame() {
                     long startTime = System.nanoTime();
-                    synchronized (waiter) {
-                        if (rendered) {
+                    synchronized (mWaiter) {
+                        if (mRendered) {
                             Log.v(TAG, "updateTexImage(discard)");
-                            surfaceTexture.updateTexImage();
+                            mSurfaceTexture.updateTexImage();
                         }
                         Log.v(TAG, "waitFrame Enter");
-                        renderRequested = true;
-                        rendered = false;
+                        mRenderRequested = true;
+                        mRendered = false;
                     }
                     while (true) {
-                        synchronized (waiter) {
+                        synchronized (mWaiter) {
                             if (!mResumed) {
                                 return -1;
                             }
-                            if (rendered) {
-                                Log.v(TAG, "waited:" + frameIndex);
-                                surfaceTexture.updateTexImage();
+                            if (mRendered) {
+                                Log.v(TAG, "waited:" + mFrameIndex);
+                                mSurfaceTexture.updateTexImage();
                                 break;
                             }
                             if(System.nanoTime() - startTime > 1000 * 1000 * 1000L) {
@@ -269,40 +272,45 @@ class VrThread extends Thread {
                             }
                             try {
                                 Log.v(TAG, "waiting");
-                                waiter.wait(100);
+                                mWaiter.wait(100);
                             } catch (InterruptedException e) {
                                 e.printStackTrace();
                             }
                         }
                     }
 
-                    return frameIndex;
+                    return mFrameIndex;
                 }
             });
         } else {
-            mLoadingTexture.drawMessage(mainActivity.getVersionName() + "\n \nPress CONNECT button\non ALVR server.");
-            vrAPI.renderLoading();
+            mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \nPress CONNECT button\non ALVR server.");
+            mVrAPI.renderLoading();
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
     }
 
     private UdpReceiverThread.OnChangeSettingsCallback mOnChangeSettingsCallback = new UdpReceiverThread.OnChangeSettingsCallback() {
         @Override
         public void onChangeSettings(int enableTestMode, int suspend) {
-            vrAPI.onChangeSettings(enableTestMode, suspend);
+            mVrAPI.onChangeSettings(enableTestMode, suspend);
         }
     };
 
     private DecoderThread.RenderCallback mRenderCallback = new DecoderThread.RenderCallback() {
         @Override
         public Surface getSurface() {
-            return surface;
+            return mSurface;
         }
 
         @Override
         public int renderIf(MediaCodec codec, int queuedOutputBuffer, long frameIndex) {
             //Log.v(TAG, "renderIf " + queuedOutputBuffer);
-            synchronized (waiter) {
-                if (!renderRequested) {
+            synchronized (mWaiter) {
+                if (!mRenderRequested) {
                     return queuedOutputBuffer;
                 }
             }
@@ -313,17 +321,19 @@ class VrThread extends Thread {
 
             Log.v(TAG, "releaseOutputBuffer " + frameIndex);
             codec.releaseOutputBuffer(queuedOutputBuffer, true);
-            synchronized (waiter) {
-                //rendered = true;
-                VrThread.this.frameIndex = frameIndex;
+            synchronized (mWaiter) {
+                //mRendered = true;
+                mFrameIndex = frameIndex;
                 //waiter.notifyAll();
             }
             return -1;
         }
     };
 
+    // Called from native
     interface OnSendTrackingCallback {
-        void onSendTracking(byte[] buf, int len, long frame);
+        @SuppressWarnings("unused")
+        void onSendTracking(byte[] buf, int len, long frameIndex);
     }
 
     class TrackingThread extends Thread {
@@ -338,8 +348,8 @@ class VrThread extends Thread {
         @Override
         public void run() {
             while (!mStopped) {
-                if (vrAPI.isVrMode() && mReceiverThread.isConnected()) {
-                    vrAPI.fetchTrackingInfo(mOnSendTrackingCallback);
+                if (mVrAPI.isVrMode() && mReceiverThread.isConnected()) {
+                    mVrAPI.fetchTrackingInfo(mOnSendTrackingCallback);
                 }
                 try {
                     Thread.sleep(16);
@@ -353,8 +363,7 @@ class VrThread extends Thread {
 
     private OnSendTrackingCallback mOnSendTrackingCallback = new OnSendTrackingCallback() {
         @Override
-        public void onSendTracking(byte[] buf, int len, long frame) {
-            Log.v(TAG, "sending " + len + " fr:" + frame);
+        public void onSendTracking(byte[] buf, int len, long frameIndex) {
             mReceiverThread.send(buf, len);
         }
     };
