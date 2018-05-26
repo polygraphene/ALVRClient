@@ -327,7 +327,7 @@ Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobje
     getsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &val, &len);
     LOG("Default socket recv buffer is %d bytes", val);
 
-    val = 30 * 1000 * 50 / 8;
+    val = 30 * 1000 * 500 / 8;
     setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &val, sizeof(val));
     len = sizeof(val);
     getsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &val, &len);
