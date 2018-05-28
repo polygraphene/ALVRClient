@@ -135,7 +135,7 @@ class DecoderThread extends Thread {
             while (!mStopped) {
                 frameLog("Waiting NALU");
                 mBuf = mNalParser.waitNal();
-                if (mStopped) {
+                if (mStopped || mBuf == null) {
                     break;
                 }
 
