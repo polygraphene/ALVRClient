@@ -9,6 +9,7 @@
 #include <VrApi_Types.h>
 #include <VrApi_Helpers.h>
 #include <VrApi_SystemUtils.h>
+#include <VrApi_Input.h>
 #include "utils.h"
 #include "packet_types.h"
 
@@ -1691,9 +1692,69 @@ Java_com_polygraphene_alvr_VrAPI_renderLoading(JNIEnv *env, jobject instance) {
     renderLoadingScene();
 }
 
+void setControllerInfo(TrackingInfo *packet, double displayTime) {
+    packet->enableController = 0;
+    packet->controllerFlags = 0;
+
+    for ( uint32_t deviceIndex = 0; ; deviceIndex++ )
+    {
+        ovrInputCapabilityHeader curCaps;
+
+        if ( vrapi_EnumerateInputDevices( Ovr, deviceIndex, &curCaps ) < 0 )
+        {
+            break;
+        }
+
+        //LOG("Device %d: Type=%d ID=%d", deviceIndex, curCaps.Type, curCaps.DeviceID);
+        if(curCaps.Type == ovrControllerType_TrackedRemote) {
+            // Gear VR / Oculus Go 3DoF Controller
+            ovrInputTrackedRemoteCapabilities remoteCapabilities;
+            remoteCapabilities.Header = curCaps;
+            ovrResult result = vrapi_GetInputDeviceCapabilities(Ovr, &remoteCapabilities.Header);
+            if(result == ovrSuccess) {
+                packet->enableController = 1;
+
+                if((remoteCapabilities.ControllerCapabilities & ovrControllerCaps_LeftHand) != 0) {
+                    packet->controllerFlags |= TrackingInfo::CONTROLLER_FLAG_LEFTHAND;
+                }
+                if((remoteCapabilities.ControllerCapabilities & ovrControllerCaps_ModelOculusGo) != 0) {
+                    packet->controllerFlags |= TrackingInfo::CONTROLLER_FLAG_OCULUSGO;
+                }
+                ovrInputStateTrackedRemote remoteInputState;
+                remoteInputState.Header.ControllerType = remoteCapabilities.Header.Type;
+                ovrResult result = vrapi_GetCurrentInputState( Ovr, remoteCapabilities.Header.DeviceID, &remoteInputState.Header );
+
+                packet->controllerButtons = remoteInputState.Buttons;
+                packet->controllerTrackpadStatus = remoteInputState.TrackpadStatus;
+                packet->controllerTrackpadPosition.x = remoteInputState.TrackpadPosition.x;
+                packet->controllerTrackpadPosition.y = remoteInputState.TrackpadPosition.y;
+                packet->controllerBatteryPercentRemaining = remoteInputState.BatteryPercentRemaining;
+                packet->controllerRecenterCount = remoteInputState.RecenterCount;
+
+                ovrTracking tracking;
+                if(vrapi_GetInputTrackingState(Ovr, remoteCapabilities.Header.DeviceID, displayTime, &tracking) != ovrSuccess)
+                {
+                    LOG("vrapi_GetInputTrackingState failed. Device was disconnected?");
+                }else{
+                    memcpy(&packet->controller_Pose_Orientation, &tracking.HeadPose.Pose.Orientation, sizeof(tracking.HeadPose.Pose.Orientation));
+                    memcpy(&packet->controller_Pose_Position, &tracking.HeadPose.Pose.Position, sizeof(tracking.HeadPose.Pose.Position));
+                    memcpy(&packet->controller_AngularVelocity, &tracking.HeadPose.AngularVelocity, sizeof(tracking.HeadPose.AngularVelocity));
+                    memcpy(&packet->controller_LinearVelocity, &tracking.HeadPose.LinearVelocity, sizeof(tracking.HeadPose.LinearVelocity));
+                    memcpy(&packet->controller_AngularAcceleration, &tracking.HeadPose.AngularAcceleration, sizeof(tracking.HeadPose.AngularAcceleration));
+                    memcpy(&packet->controller_LinearAcceleration, &tracking.HeadPose.LinearAcceleration, sizeof(tracking.HeadPose.LinearAcceleration));
+                }
+                // OK. Filled all controller info.
+                // Skip other devices.
+                break;
+            }
+        }
+    }
+}
+
 void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTracking2 *tracking) {
     jbyteArray array = env->NewByteArray(sizeof(TrackingInfo));
     TrackingInfo *packet = (TrackingInfo *) env->GetByteArrayElements(array, 0);
+    memset(packet, 0, sizeof(TrackingInfo));
 
     uint64_t clientTime = getTimestampUs();
 
@@ -1710,10 +1771,7 @@ void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTrac
     memcpy(&packet->HeadPose_AngularAcceleration, &tracking->HeadPose.AngularAcceleration, sizeof(ovrVector3f));
     memcpy(&packet->HeadPose_LinearAcceleration, &tracking->HeadPose.LinearAcceleration, sizeof(ovrVector3f));
 
-    memcpy(&packet->Eye[0].ProjectionMatrix, &tracking->Eye[0].ProjectionMatrix, sizeof(ovrMatrix4f));
-    memcpy(&packet->Eye[0].ViewMatrix, &tracking->Eye[0].ViewMatrix, sizeof(ovrMatrix4f));
-    memcpy(&packet->Eye[1].ProjectionMatrix, &tracking->Eye[1].ProjectionMatrix, sizeof(ovrMatrix4f));
-    memcpy(&packet->Eye[1].ViewMatrix, &tracking->Eye[1].ViewMatrix, sizeof(ovrMatrix4f));
+    setControllerInfo(packet, displayTime);
 
     env->ReleaseByteArrayElements(array, (jbyte *) packet, 0);
 
