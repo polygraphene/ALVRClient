@@ -18,7 +18,7 @@
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include <string>
-#include <list>
+#include <map>
 
 #define CHECK_GL_ERRORS 1
 #if !defined( EGL_OPENGL_ES3_BIT_KHR )
@@ -113,7 +113,8 @@ struct TrackingFrame {
     uint64_t fetchTime;
     double displayTime;
 };
-std::list<std::shared_ptr<TrackingFrame> > trackingFrameList;
+typedef std::map<uint64_t, std::shared_ptr<TrackingFrame> > TRACKING_FRAME_MAP;
+TRACKING_FRAME_MAP trackingFrameMap;
 Mutex trackingFrameMutex;
 
 static double GetTimeInSeconds() {
@@ -1613,34 +1614,28 @@ Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject c
     {
         MutexLock lock(trackingFrameMutex);
 
-        if(trackingFrameList.size() > 0) {
-            mostOldFrame = trackingFrameList.front()->frameIndex;
-            mostRecentFrame = trackingFrameList.back()->frameIndex;
+        if(trackingFrameMap.size() > 0) {
+            mostOldFrame = trackingFrameMap.cbegin()->second->frameIndex;
+            mostRecentFrame = trackingFrameMap.crbegin()->second->frameIndex;
         }
 
-        int i = 0;
-        // TODO: We should use std::map
-        for (std::list<std::shared_ptr<TrackingFrame> >::iterator it = trackingFrameList.begin();
-             it != trackingFrameList.end(); ++it, i++) {
-            if ((*it)->frameIndex == renderedFrameIndex) {
-                frame = *it;
-                break;
-            }
-        }
-        if (!frame) {
+        const auto it = trackingFrameMap.find(renderedFrameIndex);
+        if(it != trackingFrameMap.end()) {
+            frame = it->second;
+        }else {
             // No matching tracking info. Too old frame.
-            LOG("Too old frame has arrived. Instead, we use most old tracking data in trackingFrameList. FrameIndex=%lu WantedFrameIndex=%lu trackingFrameList=(%lu - %lu)",
+            LOG("Too old frame has arrived. Instead, we use most old tracking data in trackingFrameMap. FrameIndex=%lu WantedFrameIndex=%lu trackingFrameMap=(%lu - %lu)",
                 renderedFrameIndex, WantedFrameIndex, mostOldFrame, mostRecentFrame);
-            if(trackingFrameList.size() > 0) {
-                frame = trackingFrameList.front();
+            if(trackingFrameMap.size() > 0) {
+                frame = trackingFrameMap.cbegin()->second;
             } else {
                 return;
             }
         }
     }
 
-    LOG("Frame latency is %lu us. FrameIndex=%lu", getTimestampUs() - frame->fetchTime,
-        frame->frameIndex);
+    LOG("Frame latency is %lu us. foundFrameIndex=%lu renderedFrameIndex=%lu LatestFrameIndex=%lu", getTimestampUs() - frame->fetchTime,
+        frame->frameIndex, renderedFrameIndex, FrameIndex);
 
 // Render eye images and setup the primary layer using ovrTracking2.
     const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java,
@@ -1747,9 +1742,9 @@ Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance
 
     {
         MutexLock lock(trackingFrameMutex);
-        trackingFrameList.push_back(frame);
-        if (trackingFrameList.size() > MAXIMUM_TRACKING_FRAMES) {
-            trackingFrameList.pop_front();
+        trackingFrameMap.insert(std::pair<uint64_t, std::shared_ptr<TrackingFrame> >(FrameIndex, frame));
+        if (trackingFrameMap.size() > MAXIMUM_TRACKING_FRAMES) {
+            trackingFrameMap.erase(trackingFrameMap.cbegin());
         }
     }
 
