@@ -36,6 +36,7 @@ static bool stopped = false;
 static bool connected = false;
 static uint64_t lastReceived = 0;
 static std::string deviceName;
+static ConnectionMessage g_connectionMessage;
 
 static JNIEnv *env_;
 static jobject instance_;
@@ -164,10 +165,24 @@ static int processRecv(int sock) {
         } else if (type == ALVR_PACKET_TYPE_CONNECTION_MESSAGE) {
             inet_ntop(addr.sin_family, &addr.sin_addr, str, sizeof(str));
             LOG("Received connection request packet from %s:%d.", str, htons(addr.sin_port));
+            if (ret < sizeof(ConnectionMessage)) {
+                return ret;
+            }
+            ConnectionMessage *connectionMessage = (ConnectionMessage *) buf;
+
+            // Save video width and height
+            g_connectionMessage = *connectionMessage;
 
             serverAddr = addr;
             connected = true;
             lastReceived = getTimestampUs();
+
+            LOG("Try setting recv buffer size = %d bytes", connectionMessage->bufferSize);
+            int val = connectionMessage->bufferSize;
+            setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &val, sizeof(val));
+            socklen_t socklen = sizeof(val);
+            getsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &val, &socklen);
+            LOG("Current socket recv buffer is %d bytes", val);
 
             // Start stream.
             StreamControlMessage message = {};
@@ -512,4 +527,16 @@ JNIEXPORT jboolean JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_isConnected(JNIEnv *env, jobject instance) {
     checkConnection();
     return (uint8_t)connected;
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_getWidth(JNIEnv *env, jobject instance) {
+    return g_connectionMessage.videoWidth;
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_getHeight(JNIEnv *env, jobject instance) {
+    return g_connectionMessage.videoHeight;
 }

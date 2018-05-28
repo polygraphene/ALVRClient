@@ -113,9 +113,9 @@ class DecoderThread extends Thread {
 
             int nalQueueMax = 10;
 
-            // TODO: Parse SPS to get geometry
-            int width = 2048;
-            int height = 1024;
+            int width = mNalParser.getWidth();
+            int height = mNalParser.getHeight();
+            Log.v(TAG, "Video geometry is " + width + "x" + height);
 
             String videoFormat = "video/avc";
             MediaFormat format = MediaFormat.createVideoFormat(videoFormat, width, height);
