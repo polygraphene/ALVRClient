@@ -12,6 +12,8 @@
 #include "utils.h"
 #include "packet_types.h"
 
+static const int MAXIMUM_NAL_BUFFER = 10;
+
 static bool initialized = false;
 static bool stopped = false;
 
@@ -151,9 +153,15 @@ static void putNAL(int len) {
     {
         MutexLock lock(nalMutex);
 
-        nalList.push_back(buf);
+        if(nalList.size() < MAXIMUM_NAL_BUFFER) {
+            nalList.push_back(buf);
 
-        pthread_cond_broadcast(&cond_nonzero);
+            pthread_cond_broadcast(&cond_nonzero);
+        }else {
+            // Discard buffer
+            LOG("NAL Queue is too large. Discard. Size=%d Limit=%d", nalList.size(), MAXIMUM_NAL_BUFFER);
+            env_->DeleteGlobalRef(buf.array);
+        }
     }
 }
 
