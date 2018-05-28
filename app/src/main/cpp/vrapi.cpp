@@ -92,6 +92,7 @@ PFNEGLGETSYNCATTRIBKHRPROC eglGetSyncAttribKHR;
 #define ALOGV(...) __android_log_print(ANDROID_LOG_VERBOSE, "ALVR Native", __VA_ARGS__)
 
 static const int NUM_MULTI_SAMPLES = 4;
+static const int MAXIMUM_TRACKING_FRAMES = 180;
 
 ANativeWindow *window = NULL;
 ovrMobile *Ovr;
@@ -1606,10 +1607,19 @@ Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject c
         }
     }
 
+    uint64_t mostOldFrame = 0;
+    uint64_t mostRecentFrame = 0;
     std::shared_ptr<TrackingFrame> frame;
     {
         MutexLock lock(trackingFrameMutex);
+
+        if(trackingFrameList.size() > 0) {
+            mostOldFrame = trackingFrameList.front()->frameIndex;
+            mostRecentFrame = trackingFrameList.back()->frameIndex;
+        }
+
         int i = 0;
+        // TODO: We should use std::map
         for (std::list<std::shared_ptr<TrackingFrame> >::iterator it = trackingFrameList.begin();
              it != trackingFrameList.end(); ++it, i++) {
             if ((*it)->frameIndex == renderedFrameIndex) {
@@ -1617,13 +1627,18 @@ Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject c
                 break;
             }
         }
+        if (!frame) {
+            // No matching tracking info. Too old frame.
+            LOG("Too old frame has arrived. Instead, we use most old tracking data in trackingFrameList. FrameIndex=%lu WantedFrameIndex=%lu trackingFrameList=(%lu - %lu)",
+                renderedFrameIndex, WantedFrameIndex, mostOldFrame, mostRecentFrame);
+            if(trackingFrameList.size() > 0) {
+                frame = trackingFrameList.front();
+            } else {
+                return;
+            }
+        }
     }
-    if (!frame) {
-        // No matching tracking info. Too old frame.
-        LOG("Too old frame has arrived. ignore. FrameIndex=%lu WantedFrameIndex=%lu",
-            renderedFrameIndex, WantedFrameIndex);
-        return;
-    }
+
     LOG("Frame latency is %lu us. FrameIndex=%lu", getTimestampUs() - frame->fetchTime,
         frame->frameIndex);
 
@@ -1733,7 +1748,7 @@ Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance
     {
         MutexLock lock(trackingFrameMutex);
         trackingFrameList.push_back(frame);
-        if (trackingFrameList.size() > 100) {
+        if (trackingFrameList.size() > MAXIMUM_TRACKING_FRAMES) {
             trackingFrameList.pop_front();
         }
     }
