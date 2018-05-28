@@ -228,6 +228,7 @@ class DecoderThread extends Thread {
             e.printStackTrace();
             Log.v(TAG, "DecoderThread stopped by Exception.");
         } finally {
+            Log.v(TAG, "Stopping decoder.");
             if (mDecoder != null) {
                 try {
                     mDecoder.stop();

@@ -229,7 +229,7 @@ class VrThread extends Thread {
 
         Log.v(TAG, "Start loop of VrThread.");
         while(mQueue.waitIdle()) {
-            if(!mVrAPI.isVrMode()) {
+            if(!mVrAPI.isVrMode() || !mResumed) {
                 mQueue.waitNext();
                 continue;
             }
