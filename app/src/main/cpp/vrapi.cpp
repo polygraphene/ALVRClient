@@ -1714,6 +1714,11 @@ void setControllerInfo(TrackingInfo *packet, double displayTime) {
             if(result == ovrSuccess) {
                 packet->enableController = 1;
 
+                //LOG("Device %d: Type=%d ID=%d Cap=%08X Buttons=%08X Max=%d,%d Size=%f,%f", deviceIndex, curCaps.Type, curCaps.DeviceID
+                //, remoteCapabilities.ControllerCapabilities, remoteCapabilities.ButtonCapabilities
+                //, remoteCapabilities.TrackpadMaxX, remoteCapabilities.TrackpadMaxY
+                //, remoteCapabilities.TrackpadSizeX, remoteCapabilities.TrackpadSizeY);
+
                 if((remoteCapabilities.ControllerCapabilities & ovrControllerCaps_LeftHand) != 0) {
                     packet->controllerFlags |= TrackingInfo::CONTROLLER_FLAG_LEFTHAND;
                 }
@@ -1729,8 +1734,9 @@ void setControllerInfo(TrackingInfo *packet, double displayTime) {
                     if (remoteInputState.TrackpadStatus) {
                         packet->controllerFlags |= TrackingInfo::CONTROLLER_FLAG_TRACKPAD_TOUCH;
                     }
-                    packet->controllerTrackpadPosition.x = remoteInputState.TrackpadPosition.x;
-                    packet->controllerTrackpadPosition.y = remoteInputState.TrackpadPosition.y;
+                    // Normalize to -1.0 - +1.0 for OpenVR Input
+                    packet->controllerTrackpadPosition.x = remoteInputState.TrackpadPosition.x / remoteCapabilities.TrackpadMaxX - 0.5f;
+                    packet->controllerTrackpadPosition.y = remoteInputState.TrackpadPosition.y / remoteCapabilities.TrackpadMaxY - 0.5f;
                     packet->controllerBatteryPercentRemaining = remoteInputState.BatteryPercentRemaining;
                     packet->controllerRecenterCount = remoteInputState.RecenterCount;
 
