@@ -1724,24 +1724,39 @@ void setControllerInfo(TrackingInfo *packet, double displayTime) {
                 remoteInputState.Header.ControllerType = remoteCapabilities.Header.Type;
                 ovrResult result = vrapi_GetCurrentInputState( Ovr, remoteCapabilities.Header.DeviceID, &remoteInputState.Header );
 
-                packet->controllerButtons = remoteInputState.Buttons;
-                packet->controllerTrackpadStatus = remoteInputState.TrackpadStatus;
-                packet->controllerTrackpadPosition.x = remoteInputState.TrackpadPosition.x;
-                packet->controllerTrackpadPosition.y = remoteInputState.TrackpadPosition.y;
-                packet->controllerBatteryPercentRemaining = remoteInputState.BatteryPercentRemaining;
-                packet->controllerRecenterCount = remoteInputState.RecenterCount;
+                if(result == ovrSuccess) {
+                    packet->controllerButtons = remoteInputState.Buttons;
+                    if (remoteInputState.TrackpadStatus) {
+                        packet->controllerFlags |= TrackingInfo::CONTROLLER_FLAG_TRACKPAD_TOUCH;
+                    }
+                    packet->controllerTrackpadPosition.x = remoteInputState.TrackpadPosition.x;
+                    packet->controllerTrackpadPosition.y = remoteInputState.TrackpadPosition.y;
+                    packet->controllerBatteryPercentRemaining = remoteInputState.BatteryPercentRemaining;
+                    packet->controllerRecenterCount = remoteInputState.RecenterCount;
 
-                ovrTracking tracking;
-                if(vrapi_GetInputTrackingState(Ovr, remoteCapabilities.Header.DeviceID, displayTime, &tracking) != ovrSuccess)
-                {
-                    LOG("vrapi_GetInputTrackingState failed. Device was disconnected?");
-                }else{
-                    memcpy(&packet->controller_Pose_Orientation, &tracking.HeadPose.Pose.Orientation, sizeof(tracking.HeadPose.Pose.Orientation));
-                    memcpy(&packet->controller_Pose_Position, &tracking.HeadPose.Pose.Position, sizeof(tracking.HeadPose.Pose.Position));
-                    memcpy(&packet->controller_AngularVelocity, &tracking.HeadPose.AngularVelocity, sizeof(tracking.HeadPose.AngularVelocity));
-                    memcpy(&packet->controller_LinearVelocity, &tracking.HeadPose.LinearVelocity, sizeof(tracking.HeadPose.LinearVelocity));
-                    memcpy(&packet->controller_AngularAcceleration, &tracking.HeadPose.AngularAcceleration, sizeof(tracking.HeadPose.AngularAcceleration));
-                    memcpy(&packet->controller_LinearAcceleration, &tracking.HeadPose.LinearAcceleration, sizeof(tracking.HeadPose.LinearAcceleration));
+                    ovrTracking tracking;
+                    if (vrapi_GetInputTrackingState(Ovr, remoteCapabilities.Header.DeviceID,
+                                                    displayTime, &tracking) != ovrSuccess) {
+                        LOG("vrapi_GetInputTrackingState failed. Device was disconnected?");
+                    } else {
+                        memcpy(&packet->controller_Pose_Orientation,
+                               &tracking.HeadPose.Pose.Orientation,
+                               sizeof(tracking.HeadPose.Pose.Orientation));
+                        memcpy(&packet->controller_Pose_Position, &tracking.HeadPose.Pose.Position,
+                               sizeof(tracking.HeadPose.Pose.Position));
+                        memcpy(&packet->controller_AngularVelocity,
+                               &tracking.HeadPose.AngularVelocity,
+                               sizeof(tracking.HeadPose.AngularVelocity));
+                        memcpy(&packet->controller_LinearVelocity,
+                               &tracking.HeadPose.LinearVelocity,
+                               sizeof(tracking.HeadPose.LinearVelocity));
+                        memcpy(&packet->controller_AngularAcceleration,
+                               &tracking.HeadPose.AngularAcceleration,
+                               sizeof(tracking.HeadPose.AngularAcceleration));
+                        memcpy(&packet->controller_LinearAcceleration,
+                               &tracking.HeadPose.LinearAcceleration,
+                               sizeof(tracking.HeadPose.LinearAcceleration));
+                    }
                 }
                 // OK. Filled all controller info.
                 // Skip other devices.
