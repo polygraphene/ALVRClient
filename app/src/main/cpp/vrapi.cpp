@@ -1505,6 +1505,7 @@ void renderLoadingScene() {
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_VrAPI_initialize(JNIEnv *env, jobject instance, jobject activity) {
+    LOG("Initializing EGL.");
     eglInit();
 
     EglInitExtensions();
@@ -1551,6 +1552,8 @@ Java_com_polygraphene_alvr_VrAPI_initialize(JNIEnv *env, jobject instance, jobje
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_VrAPI_destroy(JNIEnv *env, jobject instance) {
+    LOG("Destroying EGL.");
+
     ovrRenderer_Destroy(&Renderer);
 
     ovrProgram_Destroy(&Program);
@@ -1852,6 +1855,7 @@ extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_VrAPI_onSurfaceCreated(JNIEnv *env, jobject instance,
                                                   jobject surface) {
+    LOG("onSurfaceCreated called. Resumed=%d Window=%p Ovr=%p", Resumed, window, Ovr);
     window = ANativeWindow_fromSurface(env, surface);
 
     onVrModeChange(env);
@@ -1860,6 +1864,7 @@ Java_com_polygraphene_alvr_VrAPI_onSurfaceCreated(JNIEnv *env, jobject instance,
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_VrAPI_onSurfaceDestroyed(JNIEnv *env, jobject instance) {
+    LOG("onSurfaceDestroyed called. Resumed=%d Window=%p Ovr=%p", Resumed, window, Ovr);
     if (window != NULL) {
         ANativeWindow_release(window);
     }
@@ -1871,6 +1876,7 @@ Java_com_polygraphene_alvr_VrAPI_onSurfaceDestroyed(JNIEnv *env, jobject instanc
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_VrAPI_onSurfaceChanged(JNIEnv *env, jobject instance, jobject surface) {
+    LOG("onSurfaceChanged called. Resumed=%d Window=%p Ovr=%p", Resumed, window, Ovr);
     ANativeWindow *newWindow = ANativeWindow_fromSurface(env, surface);
     if (newWindow != window) {
         ANativeWindow_release(window);
@@ -1889,6 +1895,7 @@ Java_com_polygraphene_alvr_VrAPI_onSurfaceChanged(JNIEnv *env, jobject instance,
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_VrAPI_onResume(JNIEnv *env, jobject instance) {
+    LOG("onResume called. Resumed=%d Window=%p Ovr=%p", Resumed, window, Ovr);
     Resumed = true;
     onVrModeChange(env);
 }
@@ -1896,6 +1903,7 @@ Java_com_polygraphene_alvr_VrAPI_onResume(JNIEnv *env, jobject instance) {
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_VrAPI_onPause(JNIEnv *env, jobject instance) {
+    LOG("onPause called. Resumed=%d Window=%p Ovr=%p", Resumed, window, Ovr);
     Resumed = false;
     onVrModeChange(env);
 }

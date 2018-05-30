@@ -21,6 +21,9 @@ public class ThreadQueue {
                 runnable.run();
             }
         }
+        if(mStopped) {
+            return false;
+        }
         return true;
     }
 

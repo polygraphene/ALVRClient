@@ -65,7 +65,6 @@ class VrThread extends Thread {
         post(new Runnable() {
             @Override
             public void run() {
-                mLoadingTexture.destroyTexture();
                 mVrAPI.onSurfaceDestroyed();
             }
         });
@@ -171,11 +170,13 @@ class VrThread extends Thread {
         });
     }
 
+    // Called from onDestroy
     @Override
     public void interrupt() {
         post(new Runnable() {
             @Override
             public void run() {
+                mLoadingTexture.destroyTexture();
                 mQueue.interrupt();
             }
         });
