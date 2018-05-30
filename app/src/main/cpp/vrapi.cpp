@@ -1737,9 +1737,10 @@ void setControllerInfo(TrackingInfo *packet, double displayTime) {
                     if (remoteInputState.TrackpadStatus) {
                         packet->controllerFlags |= TrackingInfo::CONTROLLER_FLAG_TRACKPAD_TOUCH;
                     }
-                    // Normalize to -1.0 - +1.0 for OpenVR Input
-                    packet->controllerTrackpadPosition.x = remoteInputState.TrackpadPosition.x / remoteCapabilities.TrackpadMaxX - 0.5f;
-                    packet->controllerTrackpadPosition.y = remoteInputState.TrackpadPosition.y / remoteCapabilities.TrackpadMaxY - 0.5f;
+                    // Normalize to -1.0 - +1.0 for OpenVR Input. y-asix should be reversed.
+                    packet->controllerTrackpadPosition.x = remoteInputState.TrackpadPosition.x / remoteCapabilities.TrackpadMaxX * 2.0f - 1.0f;
+                    packet->controllerTrackpadPosition.y = remoteInputState.TrackpadPosition.y / remoteCapabilities.TrackpadMaxY * 2.0f - 1.0f;
+                    packet->controllerTrackpadPosition.y = -packet->controllerTrackpadPosition.y;
                     packet->controllerBatteryPercentRemaining = remoteInputState.BatteryPercentRemaining;
                     packet->controllerRecenterCount = remoteInputState.RecenterCount;
 
