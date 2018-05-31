@@ -20,6 +20,7 @@
 #include <GLES2/gl2ext.h>
 #include <string>
 #include <map>
+#include <vector>
 
 #define CHECK_GL_ERRORS 1
 #if !defined( EGL_OPENGL_ES3_BIT_KHR )
@@ -103,6 +104,7 @@ GLuint loadingTexture = 0;
 int enableTestMode = 0;
 int suspend = 0;
 bool Resumed = false;
+bool support72hz = false;
 
 uint64_t FrameIndex = 0;
 uint64_t WantedFrameIndex = 0;
@@ -1502,6 +1504,34 @@ void renderLoadingScene() {
 }
 
 
+void chooseRefreshRate(){
+    int numberOfRefreshRates = vrapi_GetSystemPropertyInt(&java, VRAPI_SYS_PROP_NUM_SUPPORTED_DISPLAY_REFRESH_RATES);
+    std::vector<float> refreshRates(numberOfRefreshRates);
+    vrapi_GetSystemPropertyFloatArray(&java, VRAPI_SYS_PROP_SUPPORTED_DISPLAY_REFRESH_RATES, &refreshRates[0], numberOfRefreshRates);
+
+    support72hz = false;
+    std::string refreshRateList = "";
+    char str[100];
+    for(int i = 0; i < numberOfRefreshRates; i++) {
+        snprintf(str, sizeof(str), "%f", refreshRates[i]);
+        refreshRateList += str;
+        if(i != numberOfRefreshRates - 1) {
+            refreshRateList += ", ";
+        }
+        if(((int)refreshRates[i]) == 72) {
+            support72hz = true;
+        }
+    }
+    LOG("Supported refresh rates: %s", refreshRateList.c_str());
+
+    if(support72hz) {
+        LOG("Use 72 Hz refresh rate.");
+        vrapi_SetDisplayRefreshRate(Ovr, 72.0f);
+    }else {
+        LOG("Use 60 Hz refresh rate.");
+    }
+}
+
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_VrAPI_initialize(JNIEnv *env, jobject instance, jobject activity) {
@@ -1525,6 +1555,8 @@ Java_com_polygraphene_alvr_VrAPI_initialize(JNIEnv *env, jobject instance, jobje
     UseMultiview &= (glExtensions.multi_view &&
                      vrapi_GetSystemPropertyInt(&java, VRAPI_SYS_PROP_MULTIVIEW_AVAILABLE));
     ALOGV("UseMultiview:%d", UseMultiview);
+
+    chooseRefreshRate();
 
     ovrRenderer_Create(&Renderer, &java, UseMultiview);
 
@@ -1913,4 +1945,10 @@ extern "C"
 JNIEXPORT jboolean JNICALL
 Java_com_polygraphene_alvr_VrAPI_isVrMode(JNIEnv *env, jobject instance) {
     return Ovr != NULL;
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_polygraphene_alvr_VrAPI_is72Hz(JNIEnv *env, jobject instance) {
+    return support72hz;
 }

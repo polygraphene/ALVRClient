@@ -27,4 +27,5 @@ public class VrAPI {
     native void onChangeSettings(int EnableTestMode, int suspend);
 
     native boolean isVrMode();
+    native boolean is72Hz();
 }

@@ -112,6 +112,8 @@ class UdpReceiverThread implements NALParser {
 
     native int send(byte[] buf, int length);
 
+    native void set72Hz(boolean is72Hz);
+
     //
     // NALParser interface
     //

@@ -37,6 +37,7 @@ static bool connected = false;
 static uint64_t lastReceived = 0;
 static std::string deviceName;
 static ConnectionMessage g_connectionMessage;
+static bool g_is72Hz = false;
 
 static JNIEnv *env_;
 static jobject instance_;
@@ -170,6 +171,10 @@ static int processRecv(int sock) {
             }
             ConnectionMessage *connectionMessage = (ConnectionMessage *) buf;
 
+            if(connectionMessage->version != ALVR_PROTOCOL_VERSION) {
+                LOG("Received connection message which has unsupported version. Received Version=%d Our Version=%d", connectionMessage->version, ALVR_PROTOCOL_VERSION);
+                return ret;
+            }
             // Save video width and height
             g_connectionMessage = *connectionMessage;
 
@@ -251,8 +256,10 @@ static void sendBroadcast() {
 
         HelloMessage helloMessage = {};
         helloMessage.type = 1;
+        helloMessage.version = ALVR_PROTOCOL_VERSION;
         memcpy(helloMessage.deviceName, deviceName.c_str(),
                std::min(deviceName.length(), sizeof(helloMessage.deviceName)));
+        helloMessage.refreshRate = g_is72Hz ? 72 : 60;
 
         sendto(sock, &helloMessage, sizeof(helloMessage), 0, (sockaddr *) &broadcastAddr,
                sizeof(broadcastAddr));
@@ -539,4 +546,11 @@ extern "C"
 JNIEXPORT jint JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_getHeight(JNIEnv *env, jobject instance) {
     return g_connectionMessage.videoHeight;
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_set72Hz(JNIEnv *env, jobject instance,
+                                                     jboolean is72Hz) {
+    g_is72Hz = is72Hz;
 }

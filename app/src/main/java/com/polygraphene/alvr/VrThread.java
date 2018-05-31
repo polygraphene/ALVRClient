@@ -5,6 +5,8 @@ import android.media.MediaCodec;
 import android.util.Log;
 import android.view.Surface;
 
+import java.util.concurrent.TimeUnit;
+
 class VrThread extends Thread {
     private static final String TAG = "VrThread";
 
@@ -32,6 +34,8 @@ class VrThread extends Thread {
     private UdpReceiverThread mReceiverThread;
 
     private StatisticsCounter mCounter = new StatisticsCounter();
+
+    private int m_RefreshRate = 60;
 
     // Called from native
     public interface VrFrameCallback {
@@ -100,30 +104,31 @@ class VrThread extends Thread {
             }
         }
 
-        Log.v(TAG, "VrThread.onResume: Starting worker threads.");
-        mReceiverThread = new UdpReceiverThread(mCounter, mOnChangeSettingsCallback);
-        mReceiverThread.setPort(PORT);
-        mDecoderThread = new DecoderThread(mReceiverThread
-                , mMainActivity.getAvcDecoder(), mCounter, mRenderCallback, mMainActivity);
-        mTrackingThread = new TrackingThread();
-
-        try {
-            mDecoderThread.start();
-            if (!mReceiverThread.start()) {
-                Log.e(TAG, "FATAL: Initialization of ReceiverThread failed.");
-                return;
-            }
-            // TrackingThread relies on ReceiverThread.
-            mTrackingThread.start();
-        } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
-            e.printStackTrace();
-        }
-
-        Log.v(TAG, "VrThread.onResume: Worker threads has started.");
-
         post(new Runnable() {
             @Override
             public void run() {
+                Log.v(TAG, "VrThread.onResume: Starting worker threads.");
+                mReceiverThread = new UdpReceiverThread(mCounter, mOnChangeSettingsCallback);
+                mReceiverThread.setPort(PORT);
+                mReceiverThread.set72Hz(mVrAPI.is72Hz());
+                mDecoderThread = new DecoderThread(mReceiverThread
+                        , mMainActivity.getAvcDecoder(), mCounter, mRenderCallback, mMainActivity);
+                mTrackingThread = new TrackingThread();
+
+                try {
+                    mDecoderThread.start();
+                    if (!mReceiverThread.start()) {
+                        Log.e(TAG, "FATAL: Initialization of ReceiverThread failed.");
+                        return;
+                    }
+                    // TrackingThread relies on ReceiverThread.
+                    mTrackingThread.start();
+                } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
+                    e.printStackTrace();
+                }
+
+                Log.v(TAG, "VrThread.onResume: Worker threads has started.");
+
                 mVrAPI.onResume();
             }
         });
@@ -209,6 +214,12 @@ class VrThread extends Thread {
         }
 
         mVrAPI.initialize(mMainActivity);
+
+        if(mVrAPI.is72Hz()) {
+            m_RefreshRate = 72;
+        }else{
+            m_RefreshRate = 60;
+        }
 
         mSurfaceTexture = new SurfaceTexture(mVrAPI.getSurfaceTextureID());
         mSurfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
@@ -348,12 +359,20 @@ class VrThread extends Thread {
 
         @Override
         public void run() {
+            long previousFetchTime = System.nanoTime();
             while (!mStopped) {
                 if (mVrAPI.isVrMode() && mReceiverThread.isConnected()) {
                     mVrAPI.fetchTrackingInfo(mOnSendTrackingCallback);
                 }
                 try {
-                    Thread.sleep(16);
+                    previousFetchTime += 1000 * 1000 * 1000 / m_RefreshRate;
+                    long next = previousFetchTime - System.nanoTime();
+                    if(next < 0) {
+                        // Exceed time!
+                        previousFetchTime = System.nanoTime();
+                    }else {
+                        TimeUnit.NANOSECONDS.sleep(next);
+                    }
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
