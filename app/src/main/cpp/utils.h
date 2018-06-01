@@ -8,6 +8,18 @@
 
 #define LOG(...) __android_log_print(ANDROID_LOG_DEBUG, "ALVR Native", __VA_ARGS__)
 
+inline void FrameLog(uint64_t frameIndex, const char *format, ...)
+{
+    char buf[10000];
+
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buf, sizeof(buf), format, args);
+    va_end(args);
+
+    __android_log_print(ANDROID_LOG_VERBOSE, "FrameTracking", "[Frame %lu] %s", frameIndex, buf);
+}
+
 inline uint64_t getTimestampUs(){
     timeval tv;
     gettimeofday(&tv, NULL);

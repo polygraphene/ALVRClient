@@ -136,14 +136,13 @@ class DecoderThread extends Thread {
             mDecoder.start();
 
             while (!mStopped) {
-                frameLog("Waiting NALU");
                 mBuf = mNalParser.waitNal();
                 if (mStopped || mBuf == null) {
                     break;
                 }
 
                 int NALType = mBuf.buf[4] & 0x1F;
-                frameLog("Got NAL TYPE " + NALType + " Len " + mBuf.len + "  q:" + mNalParser.getNalListSize());
+                Utils.frameLog(mBuf.frameIndex,"Got NAL Type=" + NALType + " Length=" + mBuf.len + " QueueSize=" + mNalParser.getNalListSize());
 
                 if (mFrameNumber > 500) {
                     //return;
@@ -159,7 +158,7 @@ class DecoderThread extends Thread {
                         mAvailableInputs.wait();
                     }
                 }
-                frameLog("Uses input index=" + index + " NAL Queue Size=" + mNalParser.getNalListSize() + " (Max:" + nalQueueMax + (mNalParser.getNalListSize() > nalQueueMax ? " discard)" : ")"));
+                Utils.frameLog(mBuf.frameIndex, "Uses input index=" + index + " NAL QueueSize=" + mNalParser.getNalListSize() + " (Max:" + nalQueueMax + (mNalParser.getNalListSize() > nalQueueMax ? " discard)" : ")"));
 
                 ByteBuffer buffer = mDecoder.getInputBuffer(index);
 
@@ -191,7 +190,7 @@ class DecoderThread extends Thread {
                     }
                 } else if (NALType == 5) {
                     // IDR
-                    frameLog("Feed IDR SPS:" + mSPSBuffer.len + " PPS:" + mPPSBuffer.len + " IDR:" + mBuf.len);
+                    Utils.frameLog(mBuf.frameIndex,"Feed IDR SPS:" + mSPSBuffer.len + " PPS:" + mPPSBuffer.len + " IDR:" + mBuf.len);
 
                     buffer.put(mBuf.buf, 0, mBuf.len);
                     mFrameNumber++;
@@ -216,13 +215,13 @@ class DecoderThread extends Thread {
                     mLatencyCollector.DecoderInput(mBuf.frameIndex);
                     if (mWaitNextIDR) {
                         // Ignore P-Frame until next I-Frame
-                        frameLog("Ignoring P-Frame");
+                        Utils.frameLog(mBuf.frameIndex,"Ignoring P-Frame");
                         mDecoder.queueInputBuffer(index, 0, 0, mBuf.presentationTime, 0);
                         mBuf = null;
                     } else {
                         pushFramePresentationMap(mBuf);
 
-                        frameLog("Feed P-Frame " + buffer.position() + " bytes NALType=" + String.format("%02X", NALType) + " FrameNumber=" + mFrameNumber + " FrameIndex=" + mBuf.frameIndex + " PresentationTime=" + mBuf.presentationTime);
+                        Utils.frameLog(mBuf.frameIndex,"Feed P-Frame " + buffer.position() + " bytes NALType=" + String.format("%02X", NALType) + " FrameNumber=" + mFrameNumber + " PresentationTime=" + mBuf.presentationTime);
                         mDecoder.queueInputBuffer(index, 0, buffer.position(), mBuf.presentationTime, 0);
                         mBuf = null;
                     }
@@ -264,7 +263,7 @@ class DecoderThread extends Thread {
     class Callback extends MediaCodec.Callback {
         @Override
         public void onInputBufferAvailable(@NonNull MediaCodec codec, int index) {
-            frameLog("onInputBufferAvailable " + index + " " + mBuf);
+            //frameLog("onInputBufferAvailable " + index + " " + mBuf);
 
             synchronized (mAvailableInputs) {
                 mAvailableInputs.add(index);
@@ -296,11 +295,11 @@ class DecoderThread extends Thread {
             mLatencyCollector.DecoderOutput(foundFrameIndex);
 
             long decodeLatency = System.nanoTime() / 1000 - inputTime;
-            frameLog("Render frame " + "fr:" + foundFrameIndex + " pres:" + info.presentationTimeUs + " decode latency=" + decodeLatency + " us");
+            Utils.frameLog(foundFrameIndex, "Render frame " + " presentationTimeUs:" + info.presentationTimeUs + " decodeLatency=" + decodeLatency + " us");
 
             mQueuedOutputBuffer = mRenderCallback.renderIf(mDecoder, mQueuedOutputBuffer, foundFrameIndex);
             if (mQueuedOutputBuffer == -1) {
-                frameLog("consumed");
+                //frameLog("consumed");
             } else {
                 frameLog("not ready. discard.");
                 mDecoder.releaseOutputBuffer(mQueuedOutputBuffer, false);

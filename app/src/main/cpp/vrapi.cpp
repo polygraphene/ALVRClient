@@ -1632,8 +1632,8 @@ Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject c
             // Activity has Paused or connection becomes idle
             return;
         }
-        ALOGV("Got frame for render. wanted FrameIndex=%lu got=%lu waiting=%.3f ms delay=%lu",
-              WantedFrameIndex, renderedFrameIndex,
+        FrameLog(renderedFrameIndex, "Got frame for render. wanted FrameIndex=%lu waiting=%.3f ms delay=%lu",
+              WantedFrameIndex,
               (GetTimeInSeconds() - currentTime) * 1000,
               WantedFrameIndex - renderedFrameIndex);
         if (WantedFrameIndex <= renderedFrameIndex) {
@@ -1670,8 +1670,8 @@ Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject c
         }
     }
 
-    LOG("Frame latency is %lu us. foundFrameIndex=%lu renderedFrameIndex=%lu LatestFrameIndex=%lu", getTimestampUs() - frame->fetchTime,
-        frame->frameIndex, renderedFrameIndex, FrameIndex);
+    FrameLog(renderedFrameIndex, "Frame latency is %lu us. foundFrameIndex=%lu LatestFrameIndex=%lu", getTimestampUs() - frame->fetchTime,
+        frame->frameIndex, FrameIndex);
 
 // Render eye images and setup the primary layer using ovrTracking2.
     const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java,
@@ -1679,7 +1679,7 @@ Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject c
                                                                    Ovr, &completionFence, false);
 
     clazz = env->GetObjectClass(latencyCollector);
-    jmethodID SubmitMethodID = env->GetMethodID(clazz, "Submit", "(J)V");
+    jmethodID SubmitMethodID = env->GetMethodID(clazz, "Rendered2", "(J)V");
     env->CallVoidMethod(latencyCollector, SubmitMethodID, renderedFrameIndex);
 
     const ovrLayerHeader2 *layers2[] =
@@ -1711,10 +1711,11 @@ Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject c
 // Hand over the eye images to the time warp.
     ovrResult res = vrapi_SubmitFrame2(Ovr, &frameDesc);
 
-    ALOGV("vrapi_SubmitFrame2 return=%d rendered FrameIndex=%lu Orientation=(%f, %f, %f, %f)", res,
-          renderedFrameIndex, frame->tracking.HeadPose.Pose.Orientation.x,
-          frame->tracking.HeadPose.Pose.Orientation.y, frame->tracking.HeadPose.Pose.Orientation.z,
-          frame->tracking.HeadPose.Pose.Orientation.w
+    FrameLog(renderedFrameIndex, "vrapi_SubmitFrame2 Orientation=(%f, %f, %f, %f)"
+            , frame->tracking.HeadPose.Pose.Orientation.x
+            , frame->tracking.HeadPose.Pose.Orientation.y
+            , frame->tracking.HeadPose.Pose.Orientation.z
+            , frame->tracking.HeadPose.Pose.Orientation.w
     );
     if (suspend) {
         ALOGV("submit enter suspend");
@@ -1836,7 +1837,7 @@ void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTrac
 
     env->ReleaseByteArrayElements(array, (jbyte *) packet, 0);
 
-    ALOGV("Sending tracking info. FrameIndex=%lu", FrameIndex);
+    FrameLog(FrameIndex, "Sending tracking info.");
 
     jclass clazz = env->GetObjectClass(callback);
     jmethodID sendTracking = env->GetMethodID(clazz, "onSendTracking", "([BIJ)V");

@@ -226,7 +226,7 @@ class VrThread extends Thread {
         mSurfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
             @Override
             public void onFrameAvailable(SurfaceTexture surfaceTexture) {
-                Log.v(TAG, "onFrameAvailable " + mFrameIndex);
+                Utils.frameLog(mFrameIndex, "onFrameAvailable");
 
                 synchronized (mWaiter) {
                     mRenderRequested = false;
@@ -255,7 +255,6 @@ class VrThread extends Thread {
 
     private void render(){
         if (mReceiverThread.isConnected()) {
-            Log.v(TAG, "Render received texture.");
             mVrAPI.render(new VrFrameCallback() {
                 @Override
                 public long waitFrame() {
@@ -265,7 +264,6 @@ class VrThread extends Thread {
                             Log.v(TAG, "updateTexImage(discard)");
                             mSurfaceTexture.updateTexImage();
                         }
-                        Log.v(TAG, "waitFrame Enter");
                         mRenderRequested = true;
                         mRendered = false;
                     }
@@ -275,7 +273,8 @@ class VrThread extends Thread {
                                 return -1;
                             }
                             if (mRendered) {
-                                Log.v(TAG, "waited:" + mFrameIndex);
+                                mRendered = false;
+                                mRenderRequested = false;
                                 mSurfaceTexture.updateTexImage();
                                 mLatencyCollector.Rendered1(mFrameIndex);
                                 break;
@@ -285,7 +284,6 @@ class VrThread extends Thread {
                                 return -1;
                             }
                             try {
-                                Log.v(TAG, "waiting");
                                 mWaiter.wait(100);
                             } catch (InterruptedException e) {
                                 e.printStackTrace();
@@ -334,7 +332,6 @@ class VrThread extends Thread {
                 return queuedOutputBuffer;
             }
 
-            Log.v(TAG, "releaseOutputBuffer " + frameIndex);
             codec.releaseOutputBuffer(queuedOutputBuffer, true);
             synchronized (mWaiter) {
                 //mRendered = true;

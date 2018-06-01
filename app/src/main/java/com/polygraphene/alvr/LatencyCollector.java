@@ -21,7 +21,6 @@ public class LatencyCollector {
         public long submit;
     }
     private TreeMap<Long, FrameTimestamp> mFrameList = new TreeMap<>();
-    private LinkedList<FrameTimestamp> mObjectPool = new LinkedList<>();
     public static final int MAX_FRAMES = 1000;
 
     private long mStatisticsTime;
@@ -35,9 +34,6 @@ public class LatencyCollector {
     private long[][] mPreviousLatency = new long[3][4];
 
     public LatencyCollector(){
-        for(int i = 0; i < MAX_FRAMES; i++) {
-            mObjectPool.add(new FrameTimestamp());
-        }
         mStatisticsTime = currentSec();
     }
 
@@ -50,7 +46,7 @@ public class LatencyCollector {
     }
 
     private FrameTimestamp newFrameTimestamp(){
-        if(mObjectPool.size() == 0) {
+        if(mFrameList.size() == MAX_FRAMES) {
             FrameTimestamp timestamp = mFrameList.get(mFrameList.firstKey());
             mFrameList.remove(mFrameList.firstKey());
             timestamp.tracking = timestamp.estimatedSent = timestamp.receivedFirst = timestamp.receivedLast
@@ -58,7 +54,7 @@ public class LatencyCollector {
                     = timestamp.submit = 0;
             return timestamp;
         }
-        return mObjectPool.getFirst();
+        return new FrameTimestamp();
     }
     private FrameTimestamp getFrame(long frameIndex){
         FrameTimestamp timestamp = mFrameList.get(frameIndex);
@@ -69,31 +65,31 @@ public class LatencyCollector {
         return timestamp;
     }
 
-    public void Tracking(long frameIndex) {
+    synchronized public void Tracking(long frameIndex) {
         getFrame(frameIndex).tracking = current();
     }
-    public void EstimatedSent(long frameIndex, long time) {
+    synchronized public void EstimatedSent(long frameIndex, long time) {
         getFrame(frameIndex).estimatedSent = time;
     }
-    public void ReceivedFirst(long frameIndex) {
+    synchronized public void ReceivedFirst(long frameIndex) {
         getFrame(frameIndex).receivedFirst = current();
     }
-    public void ReceivedLast(long frameIndex) {
+    synchronized public void ReceivedLast(long frameIndex) {
         getFrame(frameIndex).receivedLast = current();
     }
-    public void DecoderInput(long frameIndex) {
+    synchronized public void DecoderInput(long frameIndex) {
         getFrame(frameIndex).decoderInput = current();
     }
-    public void DecoderOutput(long frameIndex) {
+    synchronized public void DecoderOutput(long frameIndex) {
         getFrame(frameIndex).decoderOutput = current();
     }
-    public void Rendered1(long frameIndex) {
+    synchronized public void Rendered1(long frameIndex) {
         getFrame(frameIndex).rendered1 = current();
     }
-    public void Rendered2(long frameIndex) {
+    synchronized public void Rendered2(long frameIndex) {
         getFrame(frameIndex).rendered2 = current();
     }
-    public void Submit(long frameIndex) {
+    synchronized public void Submit(long frameIndex) {
         FrameTimestamp timestamp = getFrame(frameIndex);
         timestamp.submit = current();
 
@@ -104,10 +100,10 @@ public class LatencyCollector {
 
         Latency(latency);
 
-        Log.v(TAG, "totalLatency=" + latency[0] + " transportLatency=" + latency[1] + " decodeLatency=" + latency[2]);
+        Utils.frameLog(frameIndex, "totalLatency=" + latency[0] + " transportLatency=" + latency[1] + " decodeLatency=" + latency[2] + " (" + timestamp.decoderInput + " " + timestamp.decoderOutput + ")");
     }
 
-    public void ResetAll() {
+    synchronized public void ResetAll() {
         mPacketsLostTotal = 0;
         mPacketsLostInSecond = 0;
         mStatisticsTime = currentSec();
@@ -120,7 +116,7 @@ public class LatencyCollector {
         }
     }
 
-    public void ResetSecond(){
+    synchronized public void ResetSecond(){
         long[][] tmp = mPreviousLatency;
         mPreviousLatency = mLatency;
         mLatency = tmp;
@@ -134,7 +130,7 @@ public class LatencyCollector {
         mPacketsLostInSecond = 0;
     }
 
-    public void PacketLoss(long count) {
+    synchronized public void PacketLoss(long count) {
         long current = currentSec();
         if(mStatisticsTime != current){
             mStatisticsTime = current;
@@ -144,7 +140,7 @@ public class LatencyCollector {
         mPacketsLostInSecond += count;
     }
 
-    public void Latency(long[] latency) {
+    synchronized public void Latency(long[] latency) {
         long current = currentSec();
         if(mStatisticsTime != current){
             mStatisticsTime = current;
@@ -158,15 +154,15 @@ public class LatencyCollector {
         }
     }
 
-    public long GetPacketsLostTotal(){
+    synchronized public long GetPacketsLostTotal(){
         return mPacketsLostTotal;
     }
 
-    public long GetPacketsLostInSecond(){
+    synchronized public long GetPacketsLostInSecond(){
         return mPacketsLostInSecond;
     }
 
-    public long GetLatency(int i, int j){
+    synchronized public long GetLatency(int i, int j){
         if(j == 1 || j == 2) {
             return mPreviousLatency[i][j];
         }
