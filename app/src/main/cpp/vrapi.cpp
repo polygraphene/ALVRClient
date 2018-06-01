@@ -1613,7 +1613,7 @@ Java_com_polygraphene_alvr_VrAPI_createLoadingTexture(JNIEnv *env, jobject insta
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject callback) {
+Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject callback, jobject latencyCollector) {
     if (!CreatedScene) {
         // Show a loading message.
         renderLoadingScene();
@@ -1677,6 +1677,10 @@ Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject c
     const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java,
                                                                    &frame->tracking,
                                                                    Ovr, &completionFence, false);
+
+    clazz = env->GetObjectClass(latencyCollector);
+    jmethodID SubmitMethodID = env->GetMethodID(clazz, "Submit", "(J)V");
+    env->CallVoidMethod(latencyCollector, SubmitMethodID, renderedFrameIndex);
 
     const ovrLayerHeader2 *layers2[] =
             {
@@ -1842,7 +1846,7 @@ void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTrac
 
 // Called from TrackingThread
 extern "C"
-JNIEXPORT void JNICALL
+JNIEXPORT jlong JNICALL
 Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance,
                                                    jobject callback) {
     std::shared_ptr<TrackingFrame> frame(new TrackingFrame());
@@ -1864,6 +1868,8 @@ Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance
     }
 
     sendTrackingInfo(env, callback, frame->displayTime, &frame->tracking);
+
+    return FrameIndex;
 }
 
 extern "C"

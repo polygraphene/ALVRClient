@@ -81,6 +81,22 @@ struct TimeSync {
     uint64_t sequence;
     uint64_t serverTime;
     uint64_t clientTime;
+
+    // Following value are filled by client only when mode=0.
+    uint64_t packetsLostTotal;
+    uint64_t packetsLostInSecond;
+
+    uint32_t averageTotalLatency;
+    uint32_t maxTotalLatency;
+    uint32_t minTotalLatency;
+
+    uint32_t averageTransportLatency;
+    uint32_t maxTransportLatency;
+    uint32_t minTransportLatency;
+
+    uint32_t averageDecodeLatency;
+    uint32_t maxDecodeLatency;
+    uint32_t minDecodeLatency;
 };
 struct ChangeSettings {
     uint32_t type; // 4

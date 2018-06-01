@@ -21,9 +21,9 @@ public class VrAPI {
     native void onSurfaceChanged(Surface surface);
     native void onSurfaceDestroyed();
     native int getSurfaceTextureID();
-    native void render(VrThread.VrFrameCallback callback);
+    native void render(VrThread.VrFrameCallback callback, LatencyCollector latencyCollector);
     native void renderLoading();
-    native void fetchTrackingInfo(VrThread.OnSendTrackingCallback callback);
+    native long fetchTrackingInfo(VrThread.OnSendTrackingCallback callback);
     native void onChangeSettings(int EnableTestMode, int suspend);
 
     native boolean isVrMode();

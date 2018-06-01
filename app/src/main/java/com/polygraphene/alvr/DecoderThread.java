@@ -21,6 +21,7 @@ class DecoderThread extends Thread {
     private MediaCodec mDecoder = null;
     private int mQueuedOutputBuffer = -1;
     private StatisticsCounter mCounter;
+    private LatencyCollector mLatencyCollector;
 
     private NAL mBuf = null;
 
@@ -54,12 +55,14 @@ class DecoderThread extends Thread {
 
     private RenderCallback mRenderCallback;
 
-    DecoderThread(NALParser nalParser, MediaCodecInfo codecInfo, StatisticsCounter counter, RenderCallback renderCallback, MainActivity mainActivity) {
+    DecoderThread(NALParser nalParser, MediaCodecInfo codecInfo, StatisticsCounter counter
+            , RenderCallback renderCallback, MainActivity mainActivity, LatencyCollector latencyCollector) {
         mNalParser = nalParser;
         mCodecInfo = codecInfo;
         mCounter = counter;
         mRenderCallback = renderCallback;
         mMainActivity = mainActivity;
+        mLatencyCollector = latencyCollector;
     }
 
     private void frameLog(String s) {
@@ -197,6 +200,7 @@ class DecoderThread extends Thread {
 
                     pushFramePresentationMap(mBuf);
 
+                    mLatencyCollector.DecoderInput(mBuf.frameIndex);
                     mDecoder.queueInputBuffer(index, 0, buffer.position(), mBuf.presentationTime, 0);
                     mBuf = null;
                     //mDecoder.queueInputBuffer(inIndex, 0, buffer.position(), startTimestamp, 0);
@@ -209,6 +213,7 @@ class DecoderThread extends Thread {
                     }
                     mFrameNumber++;
 
+                    mLatencyCollector.DecoderInput(mBuf.frameIndex);
                     if (mWaitNextIDR) {
                         // Ignore P-Frame until next I-Frame
                         frameLog("Ignoring P-Frame");
@@ -288,6 +293,7 @@ class DecoderThread extends Thread {
                     }
                 }
             }
+            mLatencyCollector.DecoderOutput(foundFrameIndex);
 
             long decodeLatency = System.nanoTime() / 1000 - inputTime;
             frameLog("Render frame " + "fr:" + foundFrameIndex + " pres:" + info.presentationTimeUs + " decode latency=" + decodeLatency + " us");

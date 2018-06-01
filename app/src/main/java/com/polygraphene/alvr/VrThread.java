@@ -34,6 +34,7 @@ class VrThread extends Thread {
     private UdpReceiverThread mReceiverThread;
 
     private StatisticsCounter mCounter = new StatisticsCounter();
+    private LatencyCollector mLatencyCollector = new LatencyCollector();
 
     private int m_RefreshRate = 60;
 
@@ -108,11 +109,11 @@ class VrThread extends Thread {
             @Override
             public void run() {
                 Log.v(TAG, "VrThread.onResume: Starting worker threads.");
-                mReceiverThread = new UdpReceiverThread(mCounter, mOnChangeSettingsCallback);
+                mReceiverThread = new UdpReceiverThread(mCounter, mOnChangeSettingsCallback, mLatencyCollector);
                 mReceiverThread.setPort(PORT);
                 mReceiverThread.set72Hz(mVrAPI.is72Hz());
                 mDecoderThread = new DecoderThread(mReceiverThread
-                        , mMainActivity.getAvcDecoder(), mCounter, mRenderCallback, mMainActivity);
+                        , mMainActivity.getAvcDecoder(), mCounter, mRenderCallback, mMainActivity, mLatencyCollector);
                 mTrackingThread = new TrackingThread();
 
                 try {
@@ -276,6 +277,7 @@ class VrThread extends Thread {
                             if (mRendered) {
                                 Log.v(TAG, "waited:" + mFrameIndex);
                                 mSurfaceTexture.updateTexImage();
+                                mLatencyCollector.Rendered1(mFrameIndex);
                                 break;
                             }
                             if(System.nanoTime() - startTime > 1000 * 1000 * 1000L) {
@@ -293,7 +295,8 @@ class VrThread extends Thread {
 
                     return mFrameIndex;
                 }
-            });
+            }, mLatencyCollector);
+            mLatencyCollector.Submit(mFrameIndex);
         } else {
             mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \nPress CONNECT button\non ALVR server.");
             mVrAPI.renderLoading();
@@ -362,7 +365,8 @@ class VrThread extends Thread {
             long previousFetchTime = System.nanoTime();
             while (!mStopped) {
                 if (mVrAPI.isVrMode() && mReceiverThread.isConnected()) {
-                    mVrAPI.fetchTrackingInfo(mOnSendTrackingCallback);
+                    long frameIndex = mVrAPI.fetchTrackingInfo(mOnSendTrackingCallback);
+                    mLatencyCollector.Tracking(frameIndex);
                 }
                 try {
                     previousFetchTime += 1000 * 1000 * 1000 / m_RefreshRate;

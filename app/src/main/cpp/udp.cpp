@@ -35,12 +35,18 @@ static uint64_t timeSyncSequence = (uint64_t) -1;
 static bool stopped = false;
 static bool connected = false;
 static uint64_t lastReceived = 0;
+static uint64_t lastFrameIndex = 0;
 static std::string deviceName;
 static ConnectionMessage g_connectionMessage;
 static bool g_is72Hz = false;
 
 static JNIEnv *env_;
 static jobject instance_;
+static jobject latencyCollector_;
+static jclass latencyCollectorClass_;
+static jmethodID latencyCollectorEstimetedSent_;
+static jmethodID latencyCollectorReceivedFirst_;
+static jmethodID latencyCollectorReceivedLast_;
 
 // lock for accessing sendQueue
 static pthread_mutex_t pipeMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -59,13 +65,48 @@ struct SendBuffer {
 };
 static std::list<SendBuffer> sendQueue;
 
-
 uint64_t lastParsedPresentationTime = 0;
 uint32_t prevSequence = 0;
 
+static void callVoidMethod0(const char *name, const char *signature){
+    jmethodID methodID = env_->GetMethodID(latencyCollectorClass_, name, signature);
+    env_->CallVoidMethod(latencyCollector_, methodID);
+}
+
+static void callVoidMethod1(const char *name, const char *signature, jobject obj1){
+    jmethodID methodID = env_->GetMethodID(latencyCollectorClass_, name, signature);
+    env_->CallVoidMethod(latencyCollector_, methodID, obj1);
+}
+
+static void callVoidMethod2(const char *name, const char *signature, jobject obj1, jobject obj2){
+    jmethodID methodID = env_->GetMethodID(latencyCollectorClass_, name, signature);
+    env_->CallVoidMethod(latencyCollector_, methodID, obj1, obj2);
+}
+
+static jlong callLongMethod0(const char *name, const char *signature){
+    jmethodID methodID = env_->GetMethodID(latencyCollectorClass_, name, signature);
+    return env_->CallLongMethod(latencyCollector_, methodID);
+}
+static jlong callLongMethod2(const char *name, const char *signature, jobject obj1, jobject obj2){
+    jmethodID methodID = env_->GetMethodID(latencyCollectorClass_, name, signature);
+    return env_->CallLongMethod(latencyCollector_, methodID, obj1, obj2);
+}
+
+static void recordEstimatedSent(uint64_t frameIndex, uint64_t estimetedSentTime){
+    env_->CallVoidMethod(latencyCollector_, latencyCollectorEstimetedSent_, frameIndex, estimetedSentTime);
+}
+static void recordFirstPacketReceived(uint64_t frameIndex){
+    env_->CallVoidMethod(latencyCollector_, latencyCollectorReceivedFirst_, frameIndex);
+}
+static void recordLastPacketReceived(uint64_t frameIndex){
+    env_->CallVoidMethod(latencyCollector_, latencyCollectorReceivedLast_, frameIndex);
+}
+
 static void processSequence(uint32_t sequence) {
-    if (prevSequence + 1 != sequence) {
-        LOG("packet loss %d (%d -> %d)", sequence - (prevSequence + 1), prevSequence + 1,
+    if (prevSequence != 0 && prevSequence + 1 != sequence) {
+        uint32_t lost = sequence - (prevSequence + 1);
+        callVoidMethod1("PacketLoss", "(J)V", (jobject)lost);
+        LOG("packet loss %d (%d -> %d)", lost, prevSequence + 1,
             sequence - 1);
     }
     prevSequence = sequence;
@@ -102,13 +143,14 @@ static int processRecv(int sock) {
             processSequence(header->packetCounter);
             lastParsedPresentationTime = header->presentationTime;
 
-            LOG("presentationTime NALType=%d frameIndex=%lu delay=%ld us", buf[28] & 0x1F,
-                header->frameIndex,
-                (int64_t) getTimestampUs() - ((int64_t) header->presentationTime - TimeDiff));
+            lastFrameIndex = header->frameIndex;
+
+            recordFirstPacketReceived(header->frameIndex);
+            recordEstimatedSent(header->frameIndex, (int64_t) header->presentationTime - TimeDiff);
+
             bool ret2 = processPacket(env_, (char *) buf, ret);
             if (ret2) {
-                LOG("presentationTime end delay: %ld us",
-                    (int64_t) getTimestampUs() - ((int64_t) lastParsedPresentationTime - TimeDiff));
+                recordLastPacketReceived(lastFrameIndex);
             }
         } else if (type == ALVR_PACKET_TYPE_VIDEO_FRAME) {
             VideoFrame *header = (VideoFrame *)buf;
@@ -118,8 +160,7 @@ static int processRecv(int sock) {
             // Following packets of a video frame
             bool ret2 = processPacket(env_, (char *) buf, ret);
             if (ret2) {
-                LOG("presentationTime end delay: %ld us",
-                    (int64_t) getTimestampUs() - ((int64_t) lastParsedPresentationTime - TimeDiff));
+                recordLastPacketReceived(lastFrameIndex);
             }
         } else if (type == ALVR_PACKET_TYPE_TIME_SYNC) {
             // Time sync packet
@@ -181,6 +222,7 @@ static int processRecv(int sock) {
             serverAddr = addr;
             connected = true;
             lastReceived = getTimestampUs();
+            callVoidMethod0("ResetAll", "()V");
 
             LOG("Try setting recv buffer size = %d bytes", connectionMessage->bufferSize);
             int val = connectionMessage->bufferSize;
@@ -242,6 +284,21 @@ static void sendTimeSync() {
         timeSync.mode = 0;
         timeSync.clientTime = getTimestampUs();
         timeSync.sequence = ++timeSyncSequence;
+
+        timeSync.packetsLostTotal = (uint32_t) callLongMethod0("GetPacketsLostTotal", "()J");
+        timeSync.packetsLostInSecond = (uint32_t) callLongMethod0("GetPacketsLostTotal", "()J");
+
+        timeSync.averageTotalLatency = (uint32_t) callLongMethod2("GetLatency", "(II)J", (jobject)0, (jobject)0);
+        timeSync.maxTotalLatency = (uint32_t) callLongMethod2("GetLatency", "(II)J", (jobject)0, (jobject)1);
+        timeSync.minTotalLatency = (uint32_t) callLongMethod2("GetLatency", "(II)J", (jobject)0, (jobject)2);
+
+        timeSync.averageTransportLatency = (uint32_t) callLongMethod2("GetLatency", "(II)J", (jobject)1, (jobject)0);
+        timeSync.maxTransportLatency = (uint32_t) callLongMethod2("GetLatency", "(II)J", (jobject)1, (jobject)1);
+        timeSync.minTransportLatency = (uint32_t) callLongMethod2("GetLatency", "(II)J", (jobject)1, (jobject)2);
+
+        timeSync.averageDecodeLatency = (uint32_t) callLongMethod2("GetLatency", "(II)J", (jobject)2, (jobject)0);
+        timeSync.maxDecodeLatency = (uint32_t) callLongMethod2("GetLatency", "(II)J", (jobject)2, (jobject)1);
+        timeSync.minDecodeLatency = (uint32_t) callLongMethod2("GetLatency", "(II)J", (jobject)2, (jobject)2);
 
         sendto(sock, &timeSync, sizeof(timeSync), 0, (sockaddr *) &serverAddr,
                sizeof(serverAddr));
@@ -458,7 +515,7 @@ Java_com_polygraphene_alvr_UdpReceiverThread_flushNALList(JNIEnv *env, jobject i
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_runLoop(JNIEnv *env, jobject instance) {
+Java_com_polygraphene_alvr_UdpReceiverThread_runLoop(JNIEnv *env, jobject instance, jobject latencyCollector) {
     fd_set fds, fds_org;
 
     FD_ZERO(&fds_org);
@@ -468,6 +525,12 @@ Java_com_polygraphene_alvr_UdpReceiverThread_runLoop(JNIEnv *env, jobject instan
 
     env_ = env;
     instance_ = instance;
+    latencyCollector_ = latencyCollector;
+
+    latencyCollectorClass_ = env_->GetObjectClass(latencyCollector_);
+    latencyCollectorEstimetedSent_ = env_->GetMethodID(latencyCollectorClass_, "EstimatedSent", "(JJ)V");
+    latencyCollectorReceivedFirst_ = env_->GetMethodID(latencyCollectorClass_, "ReceivedFirst", "(J)V");
+    latencyCollectorReceivedLast_ = env_->GetMethodID(latencyCollectorClass_, "ReceivedLast", "(J)V");
 
     while (!stopped) {
         timeval timeout;
