@@ -68,8 +68,8 @@ public class LatencyCollector {
     synchronized public void Tracking(long frameIndex) {
         getFrame(frameIndex).tracking = current();
     }
-    synchronized public void EstimatedSent(long frameIndex, long time) {
-        getFrame(frameIndex).estimatedSent = time;
+    synchronized public void EstimatedSent(long frameIndex, long offset) {
+        getFrame(frameIndex).estimatedSent = current() + offset;
     }
     synchronized public void ReceivedFirst(long frameIndex) {
         getFrame(frameIndex).receivedFirst = current();
@@ -100,7 +100,7 @@ public class LatencyCollector {
 
         Latency(latency);
 
-        Utils.frameLog(frameIndex, "totalLatency=" + latency[0] + " transportLatency=" + latency[1] + " decodeLatency=" + latency[2] + " (" + timestamp.decoderInput + " " + timestamp.decoderOutput + ")");
+        Utils.frameLog(frameIndex, "totalLatency=" + latency[0] + " transportLatency=" + latency[1] + " decodeLatency=" + latency[2]);
     }
 
     synchronized public void ResetAll() {

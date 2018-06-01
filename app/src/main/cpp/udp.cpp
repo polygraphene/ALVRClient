@@ -142,7 +142,11 @@ static int processRecv(int sock) {
             lastFrameIndex = header->frameIndex;
 
             recordFirstPacketReceived(header->frameIndex);
-            recordEstimatedSent(header->frameIndex, (int64_t) header->presentationTime - TimeDiff);
+            if((int64_t) header->presentationTime - TimeDiff > getTimestampUs()) {
+                recordEstimatedSent(header->frameIndex, 0);
+            }else{
+                recordEstimatedSent(header->frameIndex, (int64_t) header->presentationTime - TimeDiff - getTimestampUs());
+            }
 
             bool ret2 = processPacket(env_, (char *) buf, ret);
             if (ret2) {
@@ -218,6 +222,8 @@ static int processRecv(int sock) {
             serverAddr = addr;
             connected = true;
             lastReceived = getTimestampUs();
+            prevSequence = 0;
+            TimeDiff = 0;
             resetAll();
 
             LOG("Try setting recv buffer size = %d bytes", connectionMessage->bufferSize);
