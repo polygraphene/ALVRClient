@@ -7,6 +7,7 @@
 #include <pthread.h>
 
 #define LOG(...) __android_log_print(ANDROID_LOG_DEBUG, "ALVR Native", __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "ALVR Native", __VA_ARGS__)
 
 inline void FrameLog(uint64_t frameIndex, const char *format, ...)
 {

@@ -24,6 +24,7 @@ int bufferLength = 0;
 int bufferPos = 0;
 
 // Current NAL meta data from packet
+uint64_t prevSequence;
 uint64_t presentationTime;
 uint64_t frameIndex;
 uint32_t frameByteSize;
@@ -63,6 +64,10 @@ static void allocateBuffer(int length) {
         env_->DeleteGlobalRef(currentBuf);
     }
     currentBuf = env_->NewByteArray(length);
+    if(currentBuf == NULL){
+        LOG("Error: NewByteArray return NULL. Memory is full?");
+        return;
+    }
     jobject tmp = currentBuf;
     currentBuf = (jbyteArray) env_->NewGlobalRef(currentBuf);
     env_->DeleteLocalRef(tmp);
@@ -72,44 +77,17 @@ static void allocateBuffer(int length) {
     cbuf = (char *) env_->GetByteArrayElements(currentBuf, NULL);
 }
 
-static void expandBuffer() {
-    // Allocate new buffer
-    jbyteArray newBuf = env_->NewByteArray(bufferLength * 2);
-    jobject tmp = newBuf;
-    newBuf = (jbyteArray) env_->NewGlobalRef(newBuf);
-    env_->DeleteLocalRef(tmp);
-    char *newcBuf = (char *) env_->GetByteArrayElements(newBuf, NULL);
-
-    // Copy
-    if (bufferPos != 0) {
-        memcpy(newcBuf, cbuf, bufferPos);
-    }
-
-    // Delete old buffer
-    env_->ReleaseByteArrayElements(currentBuf, (jbyte *) cbuf, 0);
-    env_->DeleteGlobalRef(currentBuf);
-
-    // Replace current buffer
-    currentBuf = newBuf;
-    cbuf = newcBuf;
-    bufferLength = bufferLength * 2;
-}
-
-static void append(char c) {
-    if (bufferPos + 1 >= bufferLength) {
-        expandBuffer();
-    }
-    cbuf[bufferPos++] = c;
-}
-
-static void push(char *buf, int len) {
-    if (bufferPos + len >= bufferLength) {
-        expandBuffer();
+static bool push(char *buf, int len) {
+    if (bufferPos + len > bufferLength) {
+        // Full!
+        return false;
     }
     memcpy(cbuf + bufferPos, buf, len);
     bufferPos += len;
+    return true;
 }
 
+// Only release buffer. Caller can use currentBuf after release.
 static void releaseBuffer(){
     if (currentBuf != NULL) {
         env_->ReleaseByteArrayElements(currentBuf, (jbyte *) cbuf, 0);
@@ -117,6 +95,7 @@ static void releaseBuffer(){
     }
 }
 
+// Release buffer and destroy object.
 static void destroyBuffer(){
     if (currentBuf != NULL) {
         env_->ReleaseByteArrayElements(currentBuf, (jbyte *) cbuf, 0);
@@ -130,6 +109,7 @@ void initNAL() {
 
     initializeBuffer();
     initialized = true;
+    prevSequence = 0;
     stopped = false;
 }
 
@@ -170,7 +150,6 @@ bool processPacket(JNIEnv *env, char *buf, int len) {
         initNAL();
     }
 
-    bool newNalParsed = false;
     int pos = 0;
 
     env_ = env;
@@ -181,6 +160,7 @@ bool processPacket(JNIEnv *env, char *buf, int len) {
         VideoFrameStart *header = (VideoFrameStart *)buf;
         presentationTime = header->presentationTime;
         frameIndex = header->frameIndex;
+        prevSequence = header->packetCounter;
 
         pos = sizeof(VideoFrameStart);
 
@@ -242,17 +222,35 @@ bool processPacket(JNIEnv *env, char *buf, int len) {
             // Note that if previous frame packet has lost, we dispose that incomplete buffer implicitly here.
         }
     }else {
+        VideoFrame *header = (VideoFrame *)buf;
         pos = sizeof(VideoFrame);
+
+        if(header->packetCounter != 1 && prevSequence + 1 != header->packetCounter) {
+            // Packet loss
+            LOGE("Ignore this frame because of packet loss. prevSequence=%d currentSequence=%d"
+            , prevSequence, header->packetCounter);
+
+            // We don't update prevSequence here. This lead to ignore all packet until next VideoFrameStart packet arrives.
+            return false;
+        }
+        prevSequence = header->packetCounter;
     }
 
-    push(buf + pos, len - pos);
+    if(!push(buf + pos, len - pos)) {
+        // Too large frame. It may be caused by packet loss.
+        // We ignore this frame.
+        LOGE("Error: Too large frame. Current buffer pos=%d buffer length=%d added size=%d"
+        , bufferPos, bufferLength, len - pos);
+        destroyBuffer();
+        return false;
+    }
     if(bufferPos >= frameByteSize) {
         // End of frame.
         putNAL(bufferPos);
-        newNalParsed = true;
+        return true;
     }
 
-    return newNalParsed;
+    return false;
 }
 
 
