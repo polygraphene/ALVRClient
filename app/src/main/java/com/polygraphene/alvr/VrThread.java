@@ -7,6 +7,8 @@ import android.media.MediaCodec;
 import android.util.Log;
 import android.view.Surface;
 
+import com.google.ar.core.Frame;
+
 import java.util.concurrent.TimeUnit;
 
 class VrThread extends Thread {
@@ -42,6 +44,9 @@ class VrThread extends Thread {
     private LatencyCollector mLatencyCollector = new LatencyCollector();
 
     private int m_RefreshRate = 60;
+
+    // Position got from ARCore
+    private float[] mPosition = new float[3];
 
     // Called from native
     public interface VrFrameCallback {
@@ -397,7 +402,7 @@ class VrThread extends Thread {
             long previousFetchTime = System.nanoTime();
             while (!mStopped) {
                 if (mVrAPI.isVrMode() && mReceiverThread.isConnected()) {
-                    long frameIndex = mVrAPI.fetchTrackingInfo(mOnSendTrackingCallback);
+                    long frameIndex = mVrAPI.fetchTrackingInfo(mOnSendTrackingCallback, mPosition);
                     mLatencyCollector.Tracking(frameIndex);
                 }
                 try {
@@ -445,4 +450,9 @@ class VrThread extends Thread {
         mReceiverThread.recoverConnectionState(serverAddress, serverPort);
     }
 
+    public void FeedArFrame(Frame frame) {
+        System.arraycopy(frame.getCamera().getPose().getTranslation(), 0
+        , mPosition, 0, 3);
+        Log.v(TAG, "New position feeded. Position=(" + mPosition[0] + ", " + mPosition[1] + ", " + mPosition[2] + ")");
+    }
 }

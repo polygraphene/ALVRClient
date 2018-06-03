@@ -1947,8 +1947,10 @@ void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTrac
 // Called from TrackingThread
 extern "C"
 JNIEXPORT jlong JNICALL
-Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance,
-                                                   jobject callback) {
+Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance, jobject callback,
+                                                   jfloatArray position_) {
+    jfloat *position = env->GetFloatArrayElements(position_, NULL);
+
     std::shared_ptr<TrackingFrame> frame(new TrackingFrame());
 
     FrameIndex++;
@@ -1959,6 +1961,10 @@ Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance
     frame->displayTime = vrapi_GetPredictedDisplayTime(Ovr, FrameIndex);
     frame->tracking = vrapi_GetPredictedTracking2(Ovr, frame->displayTime);
 
+    frame->tracking.HeadPose.Pose.Position.x += position[0];
+    frame->tracking.HeadPose.Pose.Position.y += position[1];
+    frame->tracking.HeadPose.Pose.Position.z += position[2];
+
     {
         MutexLock lock(trackingFrameMutex);
         trackingFrameMap.insert(std::pair<uint64_t, std::shared_ptr<TrackingFrame> >(FrameIndex, frame));
@@ -1968,6 +1974,8 @@ Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance
     }
 
     sendTrackingInfo(env, callback, frame->displayTime, &frame->tracking);
+
+    env->ReleaseFloatArrayElements(position_, position, 0);
 
     return FrameIndex;
 }

@@ -1,5 +1,6 @@
 package com.polygraphene.alvr;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
@@ -8,13 +9,39 @@ import android.content.pm.PackageManager;
 import android.media.AudioManager;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.Settings;
+import android.support.annotation.Nullable;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.util.Log;
+
 import android.view.KeyEvent;
-import android.view.SurfaceHolder;
+import android.view.Gravity;import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
+import android.widget.FrameLayout;
+import android.widget.Toast;
+
+import com.google.ar.core.ArCoreApk;
+import com.google.ar.core.Config;
+import com.google.ar.core.Frame;
+import com.google.ar.core.Session;
+import com.google.ar.core.TrackingState;
+import com.google.ar.core.exceptions.CameraNotAvailableException;
+import com.google.ar.core.exceptions.UnavailableApkTooOldException;
+import com.google.ar.core.exceptions.UnavailableArcoreNotInstalledException;
+import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException;
+import com.google.ar.core.exceptions.UnavailableException;
+import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
+import com.google.ar.sceneform.ArSceneView;
+import com.google.ar.sceneform.FrameTime;
+import com.google.ar.sceneform.Scene;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -29,6 +56,11 @@ public class MainActivity extends Activity {
     private List<MediaCodecInfo> mAvcDecoderList;
 
     private VrThread mVrThread = null;
+
+    private static final int RC_PERMISSIONS = 0x123;
+    private boolean mInstallRequested;
+    private ArSceneView mArSceneView = null;
+    private Session mSession = null;
 
     public MediaCodecInfo getAvcDecoder() {
         return mAvcDecoderList.get(0);
@@ -73,6 +105,36 @@ public class MainActivity extends Activity {
             return;
         }
 
+        //mArSceneView = findViewById(R.id.ar_scene_view);
+        if(mArSceneView != null) {
+            mArSceneView.getScene().setOnUpdateListener(new Scene.OnUpdateListener() {
+                @Override
+                public void onUpdate(FrameTime frameTime) {
+                    Frame frame = mArSceneView.getArFrame();
+                    if (frame == null) {
+                        return;
+                    }
+                    if (frame.getCamera().getTrackingState() != TrackingState.TRACKING) {
+                        return;
+                    }
+                    mVrThread.FeedArFrame(frame);
+                }
+            });
+            ((FrameLayout) mArSceneView.getParent()).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (mArSceneView.getVisibility() == View.GONE) {
+                        //mArSceneView.setVisibility(View.VISIBLE);
+                    } else {
+                        //mArSceneView.setVisibility(View.GONE);
+                    }
+                }
+            });
+            mArSceneView.setVisibility(View.INVISIBLE);
+        }
+
+        requestCameraPermission(RC_PERMISSIONS);
+
         Log.v(TAG, "onCreate: Starting VrThread");
         mVrThread = new VrThread(this);
         mVrThread.start();
@@ -85,6 +147,35 @@ public class MainActivity extends Activity {
         if(mVrThread != null) {
             mVrThread.onResume();
         }
+        if(mArSceneView != null) {
+            if (mArSceneView.getSession() == null) {
+                // If the session wasn't created yet, don't resume rendering.
+                // This can happen if ARCore needs to be updated or permissions are not granted yet.
+                try {
+                    Session session = createArSession(mInstallRequested);
+                    if (session == null) {
+                        mInstallRequested = hasCameraPermission();
+                        return;
+                    } else {
+                        mArSceneView.setupSession(session);
+                    }
+                } catch (UnavailableException e) {
+                    handleSessionException(e);
+                }
+            }
+
+            try {
+                mArSceneView.resume();
+            } catch (CameraNotAvailableException ex) {
+                displayError("Unable to get camera", ex);
+                finish();
+                return;
+            }
+
+            if (mArSceneView.getSession() != null) {
+                //showLoadingMessage();
+            }
+        }
     }
 
     @Override
@@ -93,6 +184,9 @@ public class MainActivity extends Activity {
 
         if(mVrThread != null) {
             mVrThread.onPause();
+        }
+        if(mArSceneView != null) {
+            mArSceneView.pause();
         }
     }
 
@@ -110,6 +204,9 @@ public class MainActivity extends Activity {
             }
         }
         Log.v(TAG, "onDestroy: VrThread has stopped.");
+        if(mArSceneView != null) {
+            mArSceneView.destroy();
+        }
     }
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
@@ -176,5 +273,92 @@ public class MainActivity extends Activity {
             e.printStackTrace();
             return getString(R.string.app_name) + " Unknown version";
         }
+    }
+
+    public void displayError(final String errorMsg, @Nullable final Throwable problem) {
+        final String tag = getClass().getSimpleName();
+        final String toastText;
+        if (problem != null && problem.getMessage() != null) {
+            Log.e(tag, errorMsg, problem);
+            toastText = errorMsg + ": " + problem.getMessage();
+        } else if (problem != null) {
+            Log.e(tag, errorMsg, problem);
+            toastText = errorMsg;
+        } else {
+            Log.e(tag, errorMsg);
+            toastText = errorMsg;
+        }
+
+        new Handler(Looper.getMainLooper())
+                .post(
+                        () -> {
+                            Toast toast = Toast.makeText(this, toastText, Toast.LENGTH_LONG);
+                            toast.setGravity(Gravity.CENTER, 0, 0);
+                            toast.show();
+                        });
+    }
+
+
+    public Session createArSession(boolean installRequested)
+            throws UnavailableException {
+        Session session = null;
+        // if we have the camera permission, create the session
+        if (hasCameraPermission()) {
+            switch (ArCoreApk.getInstance().requestInstall(this, !installRequested)) {
+                case INSTALL_REQUESTED:
+                    return null;
+                case INSTALLED:
+                    break;
+            }
+            session = new Session(this);
+            // IMPORTANT!!!  ArSceneView needs to use the non-blocking update mode.
+            Config config = new Config(session);
+            config.setUpdateMode(Config.UpdateMode.LATEST_CAMERA_IMAGE);
+            session.configure(config);
+        }
+        return session;
+    }
+
+    /** Check to see we have the necessary permissions for this app, and ask for them if we don't. */
+    public void requestCameraPermission(int requestCode) {
+        ActivityCompat.requestPermissions(
+                this, new String[] {Manifest.permission.CAMERA}, requestCode);
+    }
+
+    /** Check to see we have the necessary permissions for this app. */
+    public boolean hasCameraPermission() {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+    /** Check to see if we need to show the rationale for this permission. */
+    public boolean shouldShowRequestPermissionRationale(Activity activity) {
+        return ActivityCompat.shouldShowRequestPermissionRationale(
+                activity, Manifest.permission.CAMERA);
+    }
+
+    /** Launch Application Setting to grant permission. */
+    public void launchPermissionSettings(Activity activity) {
+        Intent intent = new Intent();
+        intent.setAction(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+        intent.setData(Uri.fromParts("package", activity.getPackageName(), null));
+        activity.startActivity(intent);
+    }
+
+    public void handleSessionException(UnavailableException sessionException) {
+
+        String message;
+        if (sessionException instanceof UnavailableArcoreNotInstalledException) {
+            message = "Please install ARCore";
+        } else if (sessionException instanceof UnavailableApkTooOldException) {
+            message = "Please update ARCore";
+        } else if (sessionException instanceof UnavailableSdkTooOldException) {
+            message = "Please update this app";
+        } else if (sessionException instanceof UnavailableDeviceNotCompatibleException) {
+            message = "This device does not support AR";
+        } else {
+            message = "Failed to create AR session";
+            Log.e(TAG, "Exception: " + sessionException);
+        }
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show();
     }
 }
