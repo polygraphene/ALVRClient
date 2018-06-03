@@ -7,6 +7,12 @@ import android.media.MediaCodec;
 import android.util.Log;
 import android.view.Surface;
 
+import com.google.ar.core.Frame;
+import com.google.ar.core.Session;
+import com.google.ar.core.exceptions.CameraNotAvailableException;
+import com.google.ar.core.exceptions.UnavailableException;
+import com.google.ar.sceneform.rendering.GLHelper;
+
 import java.util.concurrent.TimeUnit;
 
 class VrThread extends Thread {
@@ -35,6 +41,7 @@ class VrThread extends Thread {
 
     // Worker threads
     private TrackingThread mTrackingThread;
+    private ArThread mArThread;
     private DecoderThread mDecoderThread;
     private UdpReceiverThread mReceiverThread;
 
@@ -42,6 +49,12 @@ class VrThread extends Thread {
     private LatencyCollector mLatencyCollector = new LatencyCollector();
 
     private int m_RefreshRate = 60;
+    private int mArRefreshRate = 60;
+
+    // Position got from ARCore
+    private float[] mPosition = new float[3];
+    private float[] mOrientation = new float[4];
+    private Session mSession;
 
     // Called from native
     public interface VrFrameCallback {
@@ -109,7 +122,14 @@ class VrThread extends Thread {
                 e.printStackTrace();
             }
         }
-
+        if (mArThread != null) {
+            mArThread.interrupt();
+            try {
+                mArThread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
         post(new Runnable() {
             @Override
             public void run() {
@@ -122,7 +142,7 @@ class VrThread extends Thread {
                 mDecoderThread = new DecoderThread(mReceiverThread
                         , mMainActivity.getAvcDecoder(), mCounter, mRenderCallback, mMainActivity, mLatencyCollector);
                 mTrackingThread = new TrackingThread();
-
+                mArThread = new ArThread();
                 try {
                     mDecoderThread.start();
                     if (!mReceiverThread.start()) {
@@ -131,6 +151,7 @@ class VrThread extends Thread {
                     }
                     // TrackingThread relies on ReceiverThread.
                     mTrackingThread.start();
+                    mArThread.start();
                 } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
                     e.printStackTrace();
                 }
@@ -171,6 +192,15 @@ class VrThread extends Thread {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
+        }
+if (mArThread != null) {
+            mArThread.interrupt();
+            try {
+                mArThread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            mArThread = null;
         }
 
         if(mReceiverThread != null){
@@ -397,7 +427,7 @@ class VrThread extends Thread {
             long previousFetchTime = System.nanoTime();
             while (!mStopped) {
                 if (mVrAPI.isVrMode() && mReceiverThread.isConnected()) {
-                    long frameIndex = mVrAPI.fetchTrackingInfo(mOnSendTrackingCallback);
+                    long frameIndex = mVrAPI.fetchTrackingInfo(mOnSendTrackingCallback, mPosition, mOrientation);
                     mLatencyCollector.Tracking(frameIndex);
                 }
                 try {
@@ -443,6 +473,72 @@ class VrThread extends Thread {
 
         Log.v(TAG, "load connection state: " + serverAddress + " " + serverPort);
         mReceiverThread.recoverConnectionState(serverAddress, serverPort);
+    }
+
+    class ArThread extends Thread {
+        private static final String TAG = "ArThread";
+        boolean mStopped = false;
+
+        public void interrupt() {
+            Log.v(TAG, "Stopping ArThread.");
+            mStopped = true;
+        }
+
+        @Override
+        public void run() {
+            Log.v(TAG, "ArThread started.");
+            if (mSession != null) {
+                GLHelper.makeContext();
+                //int var3 = GLHelper.createCameraTexture();
+                //Log.v(TAG, "ArSession texture=" + var3);
+                //mSession.setCameraTextureName(var3);
+                try {
+                    mSession.resume();
+                    Log.e(TAG, "ArSession resumed");
+                } catch (CameraNotAvailableException e) {
+                    e.printStackTrace();
+                }
+            }
+            Log.v(TAG, "ArThread initialized.");
+
+            long previousFetchTime = System.nanoTime();
+            while (!mStopped) {
+                if (mVrAPI.isVrMode() && mReceiverThread.isConnected()) {
+                    if (mSession != null) {
+                        try {
+                            Log.v(TAG, "Update ArSession.");
+                            Frame frame = mSession.update();
+                            System.arraycopy(frame.getCamera().getDisplayOrientedPose().getTranslation(), 0
+                                    , mPosition, 0, 3);
+                            frame.getCamera().getDisplayOrientedPose().getRotationQuaternion(mOrientation, 0);
+                            Log.v(TAG, "New position fed. Position=(" + mPosition[0] + ", " + mPosition[1] + ", " + mPosition[2] + ")");
+                        } catch (CameraNotAvailableException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+                try {
+                    previousFetchTime += 1000 * 1000 * 1000 / mArRefreshRate;
+                    long next = previousFetchTime - System.nanoTime();
+                    if (next < 0) {
+                        // Exceed time!
+                        previousFetchTime = System.nanoTime();
+                    } else {
+                        TimeUnit.NANOSECONDS.sleep(next);
+                    }
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            Log.v(TAG, "ArThread has stopped.");
+            if(mSession != null) {
+                mSession.pause();
+                Log.e(TAG, "ArSession paused");
+            }
+        }
+    }
+    public void setArSession(Session session) {
+        mSession = session;
     }
 
 }
