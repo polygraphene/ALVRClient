@@ -4,7 +4,7 @@ android {
     compileSdkVersion 26
     defaultConfig {
         applicationId "com.polygraphene.alvr"
-        minSdkVersion 24
+        minSdkVersion 21
         targetSdkVersion 26
         versionCode 11
         versionName "1.9.1"
@@ -46,6 +46,23 @@ android {
             variant.mergeAssets.doLast {
                 delete(fileTree(dir: variant.mergeAssets.outputDir, includes: ['oculussig_*']))
             }
+        }
+    }
+    flavorDimensions "distribute"
+    productFlavors {
+        Github {
+            minSdkVersion 21
+            applicationId 'com.polygraphene.alvr'
+            targetSdkVersion 26
+            dimension "distribute"
+            manifestPlaceholders = [filter:"android.intent.category.LAUNCHER"]
+        }
+        OculusStore {
+            minSdkVersion 21
+            applicationId 'com.polygraphene.alvr.oculus'
+            targetSdkVersion 26
+            dimension "distribute"
+            manifestPlaceholders = [filter:"android.intent.category.INFO"]
         }
     }
 }
