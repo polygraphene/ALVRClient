@@ -109,6 +109,17 @@ bool support72hz = false;
 int FrameBufferWidth = 0;
 int FrameBufferHeight = 0;
 
+float position_offset_y = 0.0f;
+bool previousHeadsetTrackpad = false;
+float previousHeadsetY = 0.0f;
+float previousHeadsetX = 0.0f;
+float g_position[3];
+float g_orientation[4];
+ovrMatrix4f g_positionTransform;
+int g_positionRotation;
+ovrQuatf g_trackingOrientation;
+double g_rotationDiff;
+bool g_rotationDiffInitialized = false;
 uint64_t FrameIndex = 0;
 uint64_t WantedFrameIndex = 0;
 
@@ -1676,6 +1687,10 @@ Java_com_polygraphene_alvr_VrAPI_initialize(JNIEnv *env, jobject instance, jobje
     BackButtonState = BACK_BUTTON_STATE_NONE;
     BackButtonDown = false;
     BackButtonDownStartTime = 0.0;
+    g_position[0] = g_position[1] = g_position[2] = 0.0f;
+    g_positionTransform = ovrMatrix4f_CreateIdentity();
+    g_positionRotation = 0;
+    g_rotationDiffInitialized = false;
 }
 
 extern "C"
@@ -1908,6 +1923,68 @@ void setControllerInfo(TrackingInfo *packet, double displayTime) {
                 // Skip other devices.
                 break;
             }
+        }else if(curCaps.Type == ovrControllerType_Headset) {
+            // Gear VR / Oculus Go 3DoF Controller
+            ovrInputHeadsetCapabilities capabilities;
+            capabilities.Header = curCaps;
+            ovrResult result = vrapi_GetInputDeviceCapabilities(Ovr, &capabilities.Header);
+            if(result == ovrSuccess) {
+                LOG("Device %d: Type=%d ID=%d Cap=%08X Buttons=%08X Max=%d,%d Size=%f,%f", deviceIndex, curCaps.Type, curCaps.DeviceID
+                , capabilities.ControllerCapabilities, capabilities.ButtonCapabilities
+                , capabilities.TrackpadMaxX, capabilities.TrackpadMaxY
+                , capabilities.TrackpadSizeX, capabilities.TrackpadSizeY);
+
+                if ((capabilities.ControllerCapabilities & ovrControllerCaps_LeftHand) != 0) {
+                    packet->controllerFlags |= TrackingInfo::CONTROLLER_FLAG_LEFTHAND;
+                }
+                if ((capabilities.ControllerCapabilities & ovrControllerCaps_ModelOculusGo) !=
+                    0) {
+                    packet->controllerFlags |= TrackingInfo::CONTROLLER_FLAG_OCULUSGO;
+                }
+                ovrInputStateHeadset remoteInputState;
+                remoteInputState.Header.ControllerType = capabilities.Header.Type;
+                ovrResult result = vrapi_GetCurrentInputState(Ovr,
+                                                              capabilities.Header.DeviceID,
+                                                              &remoteInputState.Header);
+
+                if (result == ovrSuccess) {
+                    float normalized_x = remoteInputState.TrackpadPosition.x / capabilities.TrackpadMaxX;
+                    float normalized_y = remoteInputState.TrackpadPosition.y / capabilities.TrackpadMaxY;
+                    LOG("Headset trackpad: status=%d %f, %f (%f, %f) (%08X)", remoteInputState.TrackpadStatus
+                    , remoteInputState.TrackpadPosition.x
+                    , remoteInputState.TrackpadPosition.y
+                    , normalized_x, normalized_y
+                    , remoteInputState.Buttons);
+
+                    if(previousHeadsetTrackpad && remoteInputState.TrackpadStatus != 0) {
+                        position_offset_y += (normalized_y - previousHeadsetY) * 2.0f;
+                        LOG("Changing position_offset_y: %f", position_offset_y);
+                    }
+
+                    if(!previousHeadsetTrackpad && remoteInputState.TrackpadStatus != 0) {
+                        if(normalized_x < 0.42) {
+                            g_positionRotation++;
+                            g_positionTransform = ovrMatrix4f_CreateTranslation(-g_position[0], -g_position[1], -g_position[2]);
+                            ovrMatrix4f rotate = ovrMatrix4f_CreateRotation(0, M_PI / 4 * g_positionRotation, 0);
+                            g_positionTransform = ovrMatrix4f_Multiply(&rotate, &g_positionTransform);
+                            ovrMatrix4f translate = ovrMatrix4f_CreateTranslation(g_position[0], g_position[1], g_position[2]);
+                            g_positionTransform = ovrMatrix4f_Multiply(&translate, &g_positionTransform);
+                        }
+                        if(normalized_x > 0.505) {
+                            g_positionRotation--;
+                            g_positionTransform = ovrMatrix4f_CreateTranslation(-g_position[0], -g_position[1], -g_position[2]);
+                            ovrMatrix4f rotate = ovrMatrix4f_CreateRotation(0, M_PI / 4 * g_positionRotation, 0);
+                            g_positionTransform = ovrMatrix4f_Multiply(&rotate, &g_positionTransform);
+                            ovrMatrix4f translate = ovrMatrix4f_CreateTranslation(g_position[0], g_position[1], g_position[2]);
+                            g_positionTransform = ovrMatrix4f_Multiply(&translate, &g_positionTransform);
+                        }
+                    }
+
+                    previousHeadsetTrackpad = remoteInputState.TrackpadStatus != 0;
+                    previousHeadsetY = normalized_y;
+                    previousHeadsetX = normalized_x;
+                }
+            }
         }
     }
 }
@@ -1918,6 +1995,8 @@ void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTrac
     memset(packet, 0, sizeof(TrackingInfo));
 
     uint64_t clientTime = getTimestampUs();
+
+    g_trackingOrientation = tracking->HeadPose.Pose.Orientation;
 
     packet->type = ALVR_PACKET_TYPE_TRACKING_INFO;
     packet->clientTime = clientTime;
@@ -1943,14 +2022,23 @@ void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTrac
 
     env->CallVoidMethod(callback, sendTracking, array, sizeof(TrackingInfo), FrameIndex);
 }
+inline double PitchFromQuaternion(double x, double y, double z, double w) {
+    // (xx, yy, zz) = rotate (0, 0, -1) by quaternion
+    double xx = -2 * y * w
+                - 2 * x * y;
+    double zz = -w * w
+                + x * x
+                + y * y
+                - z * z;
+    return atan2(xx, zz);
+}
+
 
 // Called from TrackingThread
 extern "C"
 JNIEXPORT jlong JNICALL
 Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance, jobject callback,
-                                                   jfloatArray position_) {
-    jfloat *position = env->GetFloatArrayElements(position_, NULL);
-
+                                                   jfloatArray position_, jfloatArray orientation_) {
     std::shared_ptr<TrackingFrame> frame(new TrackingFrame());
 
     FrameIndex++;
@@ -1961,9 +2049,63 @@ Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance
     frame->displayTime = vrapi_GetPredictedDisplayTime(Ovr, FrameIndex);
     frame->tracking = vrapi_GetPredictedTracking2(Ovr, frame->displayTime);
 
-    frame->tracking.HeadPose.Pose.Position.x += position[0];
-    frame->tracking.HeadPose.Pose.Position.y += position[1];
-    frame->tracking.HeadPose.Pose.Position.z += position[2];
+    float transformedPosX = 0.0f;
+    float transformedPosY = 0.0f;
+    float transformedPosZ = 0.0f;
+    if(position_ != NULL) {
+        jfloat *position = env->GetFloatArrayElements(position_, NULL);
+        memcpy(g_position, position, sizeof(float) * 3);
+        env->ReleaseFloatArrayElements(position_, position, 0);
+
+        jfloat *orientation = env->GetFloatArrayElements(orientation_, NULL);
+        memcpy(g_orientation, orientation, sizeof(float) * 4);
+        env->ReleaseFloatArrayElements(orientation_, orientation, 0);
+
+        ovrMatrix4f posMatrix = ovrMatrix4f_CreateTranslation(g_position[0], g_position[1],
+                                                              g_position[2]);
+
+        ovrQuatf quot;
+        quot.x = -g_orientation[0];
+        quot.y = -g_orientation[1];
+        quot.z = -g_orientation[2];
+        quot.w = g_orientation[3];
+        ovrMatrix4f rot = ovrMatrix4f_CreateFromQuaternion(&quot);
+        ovrMatrix4f rot2 = ovrMatrix4f_CreateFromQuaternion(&g_trackingOrientation);
+
+        rot = ovrMatrix4f_Multiply(&rot2, &rot);
+        //rot = ovrMatrix4f_CreateIdentity();
+        LOG("DumpMatrix0: %s", DumpMatrix(&posMatrix).c_str());
+        LOG("DumpMatrix1: %s", DumpMatrix(&rot).c_str());
+        posMatrix = ovrMatrix4f_Multiply(&rot, &posMatrix);
+        LOG("DumpMatrix2: %s", DumpMatrix(&posMatrix).c_str());
+        transformedPosX = posMatrix.M[0][3] / posMatrix.M[3][3];
+        transformedPosY = posMatrix.M[1][3] / posMatrix.M[3][3];
+        transformedPosZ = posMatrix.M[2][3] / posMatrix.M[3][3];
+
+        double p1 = PitchFromQuaternion(g_orientation[0], g_orientation[1], g_orientation[2],
+                                        g_orientation[3]);
+        double p2 =
+                PitchFromQuaternion(g_trackingOrientation.x, g_trackingOrientation.y,
+                                    g_trackingOrientation.z, g_trackingOrientation.w);
+        double diff = p1 - p2;
+        if (diff < 0) {
+            diff += M_PI * 2;
+        }
+        if(!g_rotationDiffInitialized){
+            g_rotationDiffInitialized = true;
+            g_rotationDiff = diff;
+        }
+        transformedPosX = g_position[0] * cos(g_rotationDiff) - g_position[2] * sin(g_rotationDiff);
+        transformedPosY = g_position[1];
+        transformedPosZ = g_position[0] * sin(g_rotationDiff) + g_position[2] * cos(g_rotationDiff);
+
+        LOG("pitch=%f tracking pitch=%f (diff:%f) newp=%f, origp=%f (%f,%f,%f)", p1, p2, diff,
+            atan2(transformedPosZ, transformedPosX), atan2(g_position[2], g_position[0]),
+            transformedPosX, transformedPosY, transformedPosZ);
+    }
+    frame->tracking.HeadPose.Pose.Position.x = transformedPosX;
+    frame->tracking.HeadPose.Pose.Position.y = transformedPosY + position_offset_y;
+    frame->tracking.HeadPose.Pose.Position.z = transformedPosZ;
 
     {
         MutexLock lock(trackingFrameMutex);
@@ -1974,8 +2116,6 @@ Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance
     }
 
     sendTrackingInfo(env, callback, frame->displayTime, &frame->tracking);
-
-    env->ReleaseFloatArrayElements(position_, position, 0);
 
     return FrameIndex;
 }

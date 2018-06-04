@@ -15,9 +15,4 @@
         tools:context=".MainActivity"
         tools:layout_editor_absoluteX="0dp" />
 
-    <com.google.ar.sceneform.ArSceneView
-        android:id="@+id/ar_scene_view"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" />
-
 </FrameLayout>

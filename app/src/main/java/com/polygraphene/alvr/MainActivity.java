@@ -42,6 +42,7 @@ import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
 import com.google.ar.sceneform.ArSceneView;
 import com.google.ar.sceneform.FrameTime;
 import com.google.ar.sceneform.Scene;
+import com.google.ar.sceneform.rendering.GLHelper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -59,7 +60,6 @@ public class MainActivity extends Activity {
 
     private static final int RC_PERMISSIONS = 0x123;
     private boolean mInstallRequested;
-    private ArSceneView mArSceneView = null;
     private Session mSession = null;
 
     public MediaCodecInfo getAvcDecoder() {
@@ -98,39 +98,11 @@ public class MainActivity extends Activity {
         holder.addCallback(mCallback);
 
         mAvcDecoderList = findAvcDecoder();
-        if(mAvcDecoderList.size() == 0) {
+        if (mAvcDecoderList.size() == 0) {
             // TODO: Show error message for a user. How to?
             Log.e(TAG, "Suitable codec is not found.");
             finish();
             return;
-        }
-
-        //mArSceneView = findViewById(R.id.ar_scene_view);
-        if(mArSceneView != null) {
-            mArSceneView.getScene().setOnUpdateListener(new Scene.OnUpdateListener() {
-                @Override
-                public void onUpdate(FrameTime frameTime) {
-                    Frame frame = mArSceneView.getArFrame();
-                    if (frame == null) {
-                        return;
-                    }
-                    if (frame.getCamera().getTrackingState() != TrackingState.TRACKING) {
-                        return;
-                    }
-                    mVrThread.FeedArFrame(frame);
-                }
-            });
-            ((FrameLayout) mArSceneView.getParent()).setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    if (mArSceneView.getVisibility() == View.GONE) {
-                        //mArSceneView.setVisibility(View.VISIBLE);
-                    } else {
-                        //mArSceneView.setVisibility(View.GONE);
-                    }
-                }
-            });
-            mArSceneView.setVisibility(View.INVISIBLE);
         }
 
         requestCameraPermission(RC_PERMISSIONS);
@@ -144,37 +116,21 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
 
-        if(mVrThread != null) {
-            mVrThread.onResume();
-        }
-        if(mArSceneView != null) {
-            if (mArSceneView.getSession() == null) {
-                // If the session wasn't created yet, don't resume rendering.
-                // This can happen if ARCore needs to be updated or permissions are not granted yet.
-                try {
-                    Session session = createArSession(mInstallRequested);
-                    if (session == null) {
-                        mInstallRequested = hasCameraPermission();
-                        return;
-                    } else {
-                        mArSceneView.setupSession(session);
-                    }
-                } catch (UnavailableException e) {
-                    handleSessionException(e);
-                }
-            }
-
+        if (mSession == null) {
             try {
-                mArSceneView.resume();
-            } catch (CameraNotAvailableException ex) {
-                displayError("Unable to get camera", ex);
-                finish();
-                return;
-            }
+                mSession = createArSession(mInstallRequested);
 
-            if (mArSceneView.getSession() != null) {
-                //showLoadingMessage();
+                int var3 = GLHelper.createCameraTexture();
+                Log.v(TAG, "ArSession texture=" + var3);
+                mSession.setCameraTextureName(var3);
+            } catch (UnavailableException e) {
+                handleSessionException(e);
             }
+        }
+        mVrThread.setArSession(mSession);
+
+        if (mVrThread != null) {
+            mVrThread.onResume();
         }
     }
 
@@ -182,11 +138,8 @@ public class MainActivity extends Activity {
     protected void onPause() {
         super.onPause();
 
-        if(mVrThread != null) {
+        if (mVrThread != null) {
             mVrThread.onPause();
-        }
-        if(mArSceneView != null) {
-            mArSceneView.pause();
         }
     }
 
@@ -195,7 +148,7 @@ public class MainActivity extends Activity {
         super.onDestroy();
 
         Log.v(TAG, "onDestroy: Stopping VrThread.");
-        if(mVrThread != null) {
+        if (mVrThread != null) {
             mVrThread.interrupt();
             try {
                 mVrThread.join();
@@ -204,9 +157,6 @@ public class MainActivity extends Activity {
             }
         }
         Log.v(TAG, "onDestroy: VrThread has stopped.");
-        if(mArSceneView != null) {
-            mArSceneView.destroy();
-        }
     }
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
@@ -236,7 +186,7 @@ public class MainActivity extends Activity {
         audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, 0);
     }
 
-    private List<MediaCodecInfo> findAvcDecoder(){
+    private List<MediaCodecInfo> findAvcDecoder() {
         List<MediaCodecInfo> codecList = new ArrayList<>();
 
         MediaCodecList mcl = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
@@ -264,7 +214,7 @@ public class MainActivity extends Activity {
         return codecList;
     }
 
-    public String getVersionName(){
+    public String getVersionName() {
         try {
             PackageInfo pInfo = this.getPackageManager().getPackageInfo(getPackageName(), 0);
             String version = pInfo.versionName;
@@ -315,28 +265,38 @@ public class MainActivity extends Activity {
             Config config = new Config(session);
             config.setUpdateMode(Config.UpdateMode.LATEST_CAMERA_IMAGE);
             session.configure(config);
+            Log.v(TAG, "ArSession configured");
         }
         return session;
     }
 
-    /** Check to see we have the necessary permissions for this app, and ask for them if we don't. */
+    /**
+     * Check to see we have the necessary permissions for this app, and ask for them if we don't.
+     */
     public void requestCameraPermission(int requestCode) {
         ActivityCompat.requestPermissions(
-                this, new String[] {Manifest.permission.CAMERA}, requestCode);
+                this, new String[]{Manifest.permission.CAMERA}, requestCode);
     }
 
-    /** Check to see we have the necessary permissions for this app. */
+    /**
+     * Check to see we have the necessary permissions for this app.
+     */
     public boolean hasCameraPermission() {
         return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED;
     }
-    /** Check to see if we need to show the rationale for this permission. */
+
+    /**
+     * Check to see if we need to show the rationale for this permission.
+     */
     public boolean shouldShowRequestPermissionRationale(Activity activity) {
         return ActivityCompat.shouldShowRequestPermissionRationale(
                 activity, Manifest.permission.CAMERA);
     }
 
-    /** Launch Application Setting to grant permission. */
+    /**
+     * Launch Application Setting to grant permission.
+     */
     public void launchPermissionSettings(Activity activity) {
         Intent intent = new Intent();
         intent.setAction(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);

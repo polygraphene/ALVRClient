@@ -107,6 +107,10 @@ class UdpReceiverThread implements NALParser {
         mThread.join();
     }
 
+    public boolean isAlive() {
+        return mThread.isAlive();
+    }
+
     // called from native
     @SuppressWarnings("unused")
     public void onConnected(int width, int height) {

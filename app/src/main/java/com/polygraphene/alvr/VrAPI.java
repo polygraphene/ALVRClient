@@ -23,7 +23,7 @@ public class VrAPI {
     native int getSurfaceTextureID();
     native void render(VrThread.VrFrameCallback callback, LatencyCollector latencyCollector);
     native void renderLoading();
-    native long fetchTrackingInfo(VrThread.OnSendTrackingCallback callback, float[] position);
+    native long fetchTrackingInfo(VrThread.OnSendTrackingCallback callback, float[] position, float[] orientation);
     native void onChangeSettings(int EnableTestMode, int suspend);
     native void onKeyEvent(int keyCode, int action);
 
