@@ -168,6 +168,24 @@ class VrThread extends Thread {
             mResumed = false;
             mWaiter.notifyAll();
         }
+        if (mTrackingThread != null) {
+            mTrackingThread.interrupt();
+            try {
+                mTrackingThread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            mTrackingThread = null;
+        }
+        if (mArThread != null) {
+            mArThread.interrupt();
+            try {
+                mArThread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            mArThread = null;
+        }
         // DecoderThread must be stopped before ReceiverThread
         if (mDecoderThread != null) {
             mDecoderThread.interrupt();
@@ -188,24 +206,6 @@ class VrThread extends Thread {
                 }
             }
             mReceiverThread = null;
-        }
-        if (mTrackingThread != null) {
-            mTrackingThread.interrupt();
-            try {
-                mTrackingThread.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            mTrackingThread = null;
-        }
-        if (mArThread != null) {
-            mArThread.interrupt();
-            try {
-                mArThread.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            mArThread = null;
         }
 
         if(mReceiverThread != null){
@@ -519,9 +519,9 @@ class VrThread extends Thread {
                         try {
                             Log.v(TAG, "Update ArSession.");
                             Frame frame = mSession.update();
-                            System.arraycopy(frame.getCamera().getPose().getTranslation(), 0
+                            System.arraycopy(frame.getCamera().getDisplayOrientedPose().getTranslation(), 0
                                     , mPosition, 0, 3);
-                            frame.getCamera().getPose().getRotationQuaternion(mOrientation, 0);
+                            frame.getCamera().getDisplayOrientedPose().getRotationQuaternion(mOrientation, 0);
                             Log.v(TAG, "New position fed. Position=(" + mPosition[0] + ", " + mPosition[1] + ", " + mPosition[2] + ")");
                         } catch (CameraNotAvailableException e) {
                             e.printStackTrace();

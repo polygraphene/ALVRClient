@@ -1989,7 +1989,7 @@ void setControllerInfo(TrackingInfo *packet, double displayTime) {
     }
 }
 
-void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTracking2 *tracking) {
+void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTracking2 *tracking, const ovrVector3f *fakePosition, const ovrQuatf *orientation) {
     jbyteArray array = env->NewByteArray(sizeof(TrackingInfo));
     TrackingInfo *packet = (TrackingInfo *) env->GetByteArrayElements(array, 0);
     memset(packet, 0, sizeof(TrackingInfo));
@@ -2003,8 +2003,10 @@ void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTrac
     packet->FrameIndex = FrameIndex;
     packet->predictedDisplayTime = displayTime;
 
-    memcpy(&packet->HeadPose_Pose_Orientation, &tracking->HeadPose.Pose.Orientation, sizeof(ovrQuatf));
-    memcpy(&packet->HeadPose_Pose_Position, &tracking->HeadPose.Pose.Position, sizeof(ovrVector3f));
+    memcpy(&packet->HeadPose_Pose_Orientation, orientation, sizeof(float) * 4);
+    memcpy(&packet->HeadPose_Pose_Position, fakePosition, sizeof(ovrVector3f));
+    //memcpy(&packet->HeadPose_Pose_Orientation, &tracking->HeadPose.Pose.Orientation, sizeof(ovrQuatf));
+    //memcpy(&packet->HeadPose_Pose_Position, &tracking->HeadPose.Pose.Position, sizeof(ovrVector3f));
 
     memcpy(&packet->HeadPose_AngularVelocity, &tracking->HeadPose.AngularVelocity, sizeof(ovrVector3f));
     memcpy(&packet->HeadPose_LinearVelocity, &tracking->HeadPose.LinearVelocity, sizeof(ovrVector3f));
@@ -2033,7 +2035,14 @@ inline double PitchFromQuaternion(double x, double y, double z, double w) {
     return atan2(xx, zz);
 }
 
-
+ovrQuatf quatMultipy(const ovrQuatf *a, const ovrQuatf *b){
+    ovrQuatf dest;
+    dest.x = a->x * b->w + a->w * b->x + a->y * b->z - a->z * b->y;
+    dest.y = a->y * b->w + a->w * b->y + a->z * b->x - a->x * b->z;
+    dest.z = a->z * b->w + a->w * b->z + a->x * b->y - a->y * b->x;
+    dest.w = a->w * b->w - a->x * b->x - a->y * b->y - a->z * b->z;
+    return dest;
+}
 // Called from TrackingThread
 extern "C"
 JNIEXPORT jlong JNICALL
@@ -2052,6 +2061,7 @@ Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance
     float transformedPosX = 0.0f;
     float transformedPosY = 0.0f;
     float transformedPosZ = 0.0f;
+    ovrQuatf orientation2 = {0};
     if(position_ != NULL) {
         jfloat *position = env->GetFloatArrayElements(position_, NULL);
         memcpy(g_position, position, sizeof(float) * 3);
@@ -2074,10 +2084,7 @@ Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance
 
         rot = ovrMatrix4f_Multiply(&rot2, &rot);
         //rot = ovrMatrix4f_CreateIdentity();
-        LOG("DumpMatrix0: %s", DumpMatrix(&posMatrix).c_str());
-        LOG("DumpMatrix1: %s", DumpMatrix(&rot).c_str());
         posMatrix = ovrMatrix4f_Multiply(&rot, &posMatrix);
-        LOG("DumpMatrix2: %s", DumpMatrix(&posMatrix).c_str());
         transformedPosX = posMatrix.M[0][3] / posMatrix.M[3][3];
         transformedPosY = posMatrix.M[1][3] / posMatrix.M[3][3];
         transformedPosZ = posMatrix.M[2][3] / posMatrix.M[3][3];
@@ -2099,13 +2106,25 @@ Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance
         transformedPosY = g_position[1];
         transformedPosZ = g_position[0] * sin(g_rotationDiff) + g_position[2] * cos(g_rotationDiff);
 
+        ovrQuatf quat;
+        quat.x = 0;
+        quat.y = 0;
+        quat.z = 1;
+        quat.w = 0;
+        orientation2 = quatMultipy((ovrQuatf*)&g_orientation, &quat);
+
         LOG("pitch=%f tracking pitch=%f (diff:%f) newp=%f, origp=%f (%f,%f,%f)", p1, p2, diff,
             atan2(transformedPosZ, transformedPosX), atan2(g_position[2], g_position[0]),
             transformedPosX, transformedPosY, transformedPosZ);
+        LOG("report1:(%f,%f,%f,%f)", g_orientation[0], g_orientation[1], g_orientation[2], g_orientation[3]);
+        LOG("report2:(%f,%f,%f,%f)", g_trackingOrientation.x, g_trackingOrientation.y,
+            g_trackingOrientation.z, g_trackingOrientation.w);
     }
-    frame->tracking.HeadPose.Pose.Position.x = transformedPosX;
-    frame->tracking.HeadPose.Pose.Position.y = transformedPosY + position_offset_y;
-    frame->tracking.HeadPose.Pose.Position.z = transformedPosZ;
+
+    ovrVector3f vec;
+    vec.x = transformedPosX;
+    vec.y = transformedPosY + position_offset_y;
+    vec.z = transformedPosZ;
 
     {
         MutexLock lock(trackingFrameMutex);
@@ -2115,7 +2134,7 @@ Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance
         }
     }
 
-    sendTrackingInfo(env, callback, frame->displayTime, &frame->tracking);
+    sendTrackingInfo(env, callback, frame->displayTime, &frame->tracking, &vec, &orientation2);
 
     return FrameIndex;
 }
