@@ -254,7 +254,7 @@ class VrThread extends Thread {
     }
 
     private void render(){
-        if (mReceiverThread.isConnected()) {
+        if (mReceiverThread.isConnected() && mDecoderThread.isFrameAvailable()) {
             mVrAPI.render(new VrFrameCallback() {
                 @Override
                 public long waitFrame() {
@@ -296,7 +296,11 @@ class VrThread extends Thread {
             }, mLatencyCollector);
             mLatencyCollector.Submit(mFrameIndex);
         } else {
-            mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \nPress CONNECT button\non ALVR server.");
+            if(mReceiverThread.isConnected()) {
+                mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \nConnected!\nStreaming will begin soon!");
+            }else {
+                mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \nPress CONNECT button\non ALVR server.");
+            }
             mVrAPI.renderLoading();
             try {
                 Thread.sleep(100);
@@ -306,7 +310,18 @@ class VrThread extends Thread {
         }
     }
 
-    private UdpReceiverThread.OnChangeSettingsCallback mOnChangeSettingsCallback = new UdpReceiverThread.OnChangeSettingsCallback() {
+    private UdpReceiverThread.Callback mOnChangeSettingsCallback = new UdpReceiverThread.Callback() {
+        @Override
+        public void onConnected(final int width, final int height) {
+            post(new Runnable() {
+                @Override
+                public void run() {
+                    mVrAPI.setFrameGeometry(width, height);
+                    mDecoderThread.notifyGeometryChange();
+                }
+            });
+        }
+
         @Override
         public void onChangeSettings(int enableTestMode, int suspend) {
             mVrAPI.onChangeSettings(enableTestMode, suspend);

@@ -28,4 +28,6 @@ public class VrAPI {
 
     native boolean isVrMode();
     native boolean is72Hz();
+
+    native void setFrameGeometry(int width, int height);
 }

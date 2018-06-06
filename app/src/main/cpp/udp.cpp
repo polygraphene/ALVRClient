@@ -233,6 +233,11 @@ static int processRecv(int sock) {
             getsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &val, &socklen);
             LOG("Current socket recv buffer is %d bytes", val);
 
+            jclass clazz = env_->GetObjectClass(instance_);
+            jmethodID method = env_->GetMethodID(clazz, "onConnected", "(II)V");
+            env_->CallVoidMethod(instance_, method, g_connectionMessage.videoWidth, g_connectionMessage.videoHeight);
+            env_->DeleteLocalRef(clazz);
+
             // Start stream.
             StreamControlMessage message = {};
             message.type = ALVR_PACKET_TYPE_STREAM_CONTROL_MESSAGE;

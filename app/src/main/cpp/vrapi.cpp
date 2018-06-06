@@ -105,6 +105,8 @@ int enableTestMode = 0;
 int suspend = 0;
 bool Resumed = false;
 bool support72hz = false;
+int FrameBufferWidth = 0;
+int FrameBufferHeight = 0;
 
 uint64_t FrameIndex = 0;
 uint64_t WantedFrameIndex = 0;
@@ -1185,17 +1187,14 @@ static void ovrRenderer_Clear(ovrRenderer *renderer) {
 }
 
 static void
-ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMultiview) {
+ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMultiview, int width, int height) {
     renderer->NumBuffers = useMultiview ? 1 : VRAPI_FRAME_LAYER_EYE_MAX;
 
     // Create the frame buffers.
     for (int eye = 0; eye < renderer->NumBuffers; eye++) {
         ovrFramebuffer_Create(&renderer->FrameBuffer[eye], useMultiview,
                               VRAPI_TEXTURE_FORMAT_8888,
-                              vrapi_GetSystemPropertyInt(java,
-                                                         VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_WIDTH),
-                              vrapi_GetSystemPropertyInt(java,
-                                                         VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_HEIGHT),
+                              width, height,
                               NUM_MULTI_SAMPLES);
 
     }
@@ -1558,7 +1557,11 @@ Java_com_polygraphene_alvr_VrAPI_initialize(JNIEnv *env, jobject instance, jobje
 
     chooseRefreshRate();
 
-    ovrRenderer_Create(&Renderer, &java, UseMultiview);
+    FrameBufferWidth = vrapi_GetSystemPropertyInt(&java,
+                               VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_WIDTH);
+    FrameBufferHeight = vrapi_GetSystemPropertyInt(&java,
+                               VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_HEIGHT);
+    ovrRenderer_Create(&Renderer, &java, UseMultiview, FrameBufferWidth, FrameBufferHeight);
 
     //
     // Generate texture for SurfaceTexture which is output of MediaCodec.
@@ -1958,4 +1961,18 @@ extern "C"
 JNIEXPORT jboolean JNICALL
 Java_com_polygraphene_alvr_VrAPI_is72Hz(JNIEnv *env, jobject instance) {
     return support72hz;
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_VrAPI_setFrameGeometry(JNIEnv *env, jobject instance, jint width,
+                                                  jint height) {
+    int eye_width = width / 2;
+    if(eye_width != FrameBufferWidth || height != FrameBufferHeight) {
+        LOG("Changing FrameBuffer geometry. Old=%dx%d New=%dx%d", FrameBufferWidth, FrameBufferHeight, eye_width, height);
+        FrameBufferWidth = eye_width;
+        FrameBufferHeight = height;
+        ovrRenderer_Destroy(&Renderer);
+        ovrRenderer_Create(&Renderer, &java, UseMultiview, FrameBufferWidth, FrameBufferHeight);
+    }
 }

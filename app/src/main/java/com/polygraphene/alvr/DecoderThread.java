@@ -28,11 +28,13 @@ class DecoderThread extends Thread {
     private boolean mWaitNextIDR = false;
     private long mFrameNumber = 0;
     private boolean mStopped = false;
+    private boolean mIsFrameAvailable = false;
 
     @SuppressWarnings("unused")
     private MainActivity mMainActivity = null;
 
     private boolean mDebugIDRFrame = false;
+
 
     private class FramePresentationTime {
         public long frameIndex;
@@ -176,16 +178,17 @@ class DecoderThread extends Thread {
                     // PPS
                     mPPSBuffer = mBuf;
 
-                    mBuf = null;
                     if (mWaitNextIDR) {
                         if (mSPSBuffer != null)
                             buffer.put(mSPSBuffer.buf, 0, mSPSBuffer.len);
                         buffer.put(mBuf.buf, 0, mBuf.len);
 
+                        mBuf = null;
                         mWaitNextIDR = false;
                         frameLog("Sending Codec Config. Size: " + buffer.position());
                         mDecoder.queueInputBuffer(index, 0, buffer.position(), 0, MediaCodec.BUFFER_FLAG_CODEC_CONFIG);
                     } else {
+                        mBuf = null;
                         mDecoder.queueInputBuffer(index, 0, buffer.position(), 0, 0);
                     }
                 } else if (NALType == 5) {
@@ -275,6 +278,8 @@ class DecoderThread extends Thread {
         public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index, @NonNull MediaCodec.BufferInfo info) {
             mCounter.countOutputFrame(1);
 
+            mIsFrameAvailable = true;
+
             if (mQueuedOutputBuffer != -1) {
                 mDecoder.releaseOutputBuffer(mQueuedOutputBuffer, false);
                 mQueuedOutputBuffer = -1;
@@ -317,4 +322,13 @@ class DecoderThread extends Thread {
             Log.d("DecodeActivity", "New format " + mDecoder.getOutputFormat());
         }
     }
+
+    public boolean isFrameAvailable() {
+        return mIsFrameAvailable;
+    }
+
+    public void notifyGeometryChange() {
+        mWaitNextIDR = true;
+    }
+
 }

@@ -20,14 +20,15 @@ class UdpReceiverThread implements NALParser {
 
     public native boolean isConnected();
 
-    interface OnChangeSettingsCallback {
+    interface Callback {
+        void onConnected(int width, int height);
         void onChangeSettings(int enableTestMode, int suspend);
     }
-    private OnChangeSettingsCallback mOnChangeSettingsCallback;
+    private Callback mCallback;
 
-    UdpReceiverThread(StatisticsCounter counter, OnChangeSettingsCallback onChangeSettingsCallback, LatencyCollector latencyCollector) {
+    UdpReceiverThread(StatisticsCounter counter, Callback callback, LatencyCollector latencyCollector) {
         mCounter = counter;
-        mOnChangeSettingsCallback = onChangeSettingsCallback;
+        mCallback = callback;
         mLatencyCollector = latencyCollector;
     }
 
@@ -100,8 +101,12 @@ class UdpReceiverThread implements NALParser {
 
     // called from native
     @SuppressWarnings("unused")
+    public void onConnected(int width, int height) {
+        mCallback.onConnected(width, height);
+    }
+    @SuppressWarnings("unused")
     public void onChangeSettings(int EnableTestMode, int suspend) {
-        mOnChangeSettingsCallback.onChangeSettings(EnableTestMode, suspend);
+        mCallback.onChangeSettings(EnableTestMode, suspend);
     }
 
     native int initializeSocket(int port, String deviceName, String broadcastAddr);
