@@ -11,11 +11,12 @@ enum ALVR_PACKET_TYPE {
     ALVR_PACKET_TYPE_CONNECTION_MESSAGE = 6,
     ALVR_PACKET_TYPE_STREAM_CONTROL_MESSAGE = 7,
     ALVR_PACKET_TYPE_VIDEO_FRAME_START = 8,
-    ALVR_PACKET_TYPE_VIDEO_FRAME = 9
+    ALVR_PACKET_TYPE_VIDEO_FRAME = 9,
+    ALVR_PACKET_TYPE_RECOVER_CONNECTION = 10
 };
 
 enum {
-    ALVR_PROTOCOL_VERSION = 10
+    ALVR_PROTOCOL_VERSION = 12
 };
 #pragma pack(push, 1)
 // hello message
@@ -129,6 +130,9 @@ struct VideoFrame {
     uint32_t type; // 9
     uint32_t packetCounter;
     // char frameBuffer[];
+};
+struct RecoverConnection {
+    uint32_t type; // 10
 };
 #pragma pack(pop)
 

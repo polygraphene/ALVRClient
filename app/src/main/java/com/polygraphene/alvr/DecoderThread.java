@@ -146,9 +146,6 @@ class DecoderThread extends Thread {
                 int NALType = mBuf.buf[4] & 0x1F;
                 Utils.frameLog(mBuf.frameIndex,"Got NAL Type=" + NALType + " Length=" + mBuf.len + " QueueSize=" + mNalParser.getNalListSize());
 
-                if (mFrameNumber > 500) {
-                    //return;
-                }
                 int index;
                 while (true) {
                     synchronized (mAvailableInputs) {
@@ -163,10 +160,6 @@ class DecoderThread extends Thread {
                 Utils.frameLog(mBuf.frameIndex, "Uses input index=" + index + " NAL QueueSize=" + mNalParser.getNalListSize() + " (Max:" + nalQueueMax + (mNalParser.getNalListSize() > nalQueueMax ? " discard)" : ")"));
 
                 ByteBuffer buffer = mDecoder.getInputBuffer(index);
-
-                if (mNalParser.getNalListSize() > nalQueueMax) {
-                    mNalParser.flushNALList();
-                }
 
                 if (NALType == 7) {
                     // SPS

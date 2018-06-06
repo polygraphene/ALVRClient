@@ -1,5 +1,7 @@
 package com.polygraphene.alvr;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.SurfaceTexture;
 import android.media.MediaCodec;
 import android.util.Log;
@@ -9,6 +11,9 @@ import java.util.concurrent.TimeUnit;
 
 class VrThread extends Thread {
     private static final String TAG = "VrThread";
+
+    private static final String KEY_SERVER_ADDRESS = "serverAddress";
+    private static final String KEY_SERVER_PORT = "serverPort";
 
     private static final int PORT = 9944;
 
@@ -109,9 +114,11 @@ class VrThread extends Thread {
             @Override
             public void run() {
                 Log.v(TAG, "VrThread.onResume: Starting worker threads.");
+
                 mReceiverThread = new UdpReceiverThread(mCounter, mOnChangeSettingsCallback, mLatencyCollector);
                 mReceiverThread.setPort(PORT);
                 mReceiverThread.set72Hz(mVrAPI.is72Hz());
+                loadConnectionState();
                 mDecoderThread = new DecoderThread(mReceiverThread
                         , mMainActivity.getAvcDecoder(), mCounter, mRenderCallback, mMainActivity, mLatencyCollector);
                 mTrackingThread = new TrackingThread();
@@ -134,7 +141,6 @@ class VrThread extends Thread {
             }
         });
     }
-
     public void onPause() {
         Log.v(TAG, "VrThread.onPause: Stopping worker threads.");
         synchronized (mWaiter) {
@@ -165,6 +171,11 @@ class VrThread extends Thread {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
+        }
+
+        if(mReceiverThread != null){
+            saveConnectionState(mReceiverThread.getServerAddress()
+                    , mReceiverThread.getServerPort());
         }
 
         Log.v(TAG, "VrThread.onPause: All worker threads has stopped.");
@@ -403,4 +414,26 @@ class VrThread extends Thread {
             mReceiverThread.send(buf, len);
         }
     };
+
+    private void saveConnectionState(String serverAddress, int serverPort) {
+        Log.v(TAG, "save connection state: " + serverAddress + " " + serverPort);
+        SharedPreferences pref = mMainActivity.getSharedPreferences("pref", Context.MODE_PRIVATE);
+        SharedPreferences.Editor edit = pref.edit();
+        // If server address is NULL, it means no preserved connection.
+        edit.putString(KEY_SERVER_ADDRESS, serverAddress);
+        edit.putInt(KEY_SERVER_PORT, serverPort);
+        edit.apply();
+    }
+
+    private void loadConnectionState() {
+        SharedPreferences pref = mMainActivity.getSharedPreferences("pref", Context.MODE_PRIVATE);
+        String serverAddress = pref.getString(KEY_SERVER_ADDRESS, null);
+        int serverPort = pref.getInt(KEY_SERVER_PORT, 0);
+
+        saveConnectionState(null, 0);
+
+        Log.v(TAG, "load connection state: " + serverAddress + " " + serverPort);
+        mReceiverThread.recoverConnectionState(serverAddress, serverPort);
+    }
+
 }

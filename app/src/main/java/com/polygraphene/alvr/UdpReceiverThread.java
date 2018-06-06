@@ -18,6 +18,9 @@ class UdpReceiverThread implements NALParser {
     private boolean mInitialized = false;
     private boolean mInitializeFailed = false;
 
+    private String mPreviousServerAddress;
+    private int mPreviousServerPort;
+
     public native boolean isConnected();
 
     interface Callback {
@@ -44,6 +47,11 @@ class UdpReceiverThread implements NALParser {
         } else {
             return manufacturer + " " + model;
         }
+    }
+
+    public void recoverConnectionState(String serverAddress, int serverPort){
+        mPreviousServerAddress = serverAddress;
+        mPreviousServerPort = serverPort;
     }
 
     public boolean start() {
@@ -87,7 +95,7 @@ class UdpReceiverThread implements NALParser {
             }
             Log.v(TAG, "UdpReceiverThread initialized.");
 
-            runLoop(mLatencyCollector);
+            runLoop(mLatencyCollector, mPreviousServerAddress, mPreviousServerPort);
         } finally {
             closeSocket();
         }
@@ -113,13 +121,16 @@ class UdpReceiverThread implements NALParser {
 
     native void closeSocket();
 
-    native void runLoop(LatencyCollector latencyCollector);
+    native void runLoop(LatencyCollector latencyCollector, String serverAddress, int serverPort);
 
     native void interrupt();
 
     native int send(byte[] buf, int length);
 
     native void set72Hz(boolean is72Hz);
+
+    native String getServerAddress();
+    native int getServerPort();
 
     //
     // NALParser interface

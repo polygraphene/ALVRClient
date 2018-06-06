@@ -34,6 +34,7 @@ static int64_t TimeDiff;
 static uint64_t timeSyncSequence = (uint64_t) -1;
 static bool stopped = false;
 static bool connected = false;
+static bool hasServerAddress = false;
 static uint64_t lastReceived = 0;
 static uint64_t lastFrameIndex = 0;
 static std::string deviceName;
@@ -221,6 +222,7 @@ static int processRecv(int sock) {
 
             serverAddr = addr;
             connected = true;
+            hasServerAddress = true;
             lastReceived = getTimestampUs();
             prevSequence = 0;
             TimeDiff = 0;
@@ -346,6 +348,19 @@ static void doPeriodicWork() {
     sendTimeSync();
     sendBroadcast();
     checkConnection();
+}
+
+static void recoverConnection(std::string serverAddress, int serverPort) {
+    LOG("Sending recover connection request. server=%s:%d", serverAddress.c_str(), serverPort);
+    sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(serverPort);
+    inet_pton(AF_INET, serverAddress.c_str(), &addr.sin_addr);
+
+    RecoverConnection message = {};
+    message.type = ALVR_PACKET_TYPE_RECOVER_CONNECTION;
+
+    sendto(sock, &message, sizeof(message), 0, (sockaddr *)&addr, sizeof(addr));
 }
 
 extern "C"
@@ -503,7 +518,8 @@ Java_com_polygraphene_alvr_UdpReceiverThread_flushNALList(JNIEnv *env, jobject i
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_runLoop(JNIEnv *env, jobject instance, jobject latencyCollector) {
+Java_com_polygraphene_alvr_UdpReceiverThread_runLoop(JNIEnv *env, jobject instance, jobject latencyCollector
+, jstring serverAddress, int serverPort) {
     fd_set fds, fds_org;
 
     FD_ZERO(&fds_org);
@@ -525,6 +541,10 @@ Java_com_polygraphene_alvr_UdpReceiverThread_runLoop(JNIEnv *env, jobject instan
     latencyCollectorGetPacketsLostTotal_ = env_->GetMethodID(latencyCollectorClass_, "GetPacketsLostTotal", "()J");
     latencyCollectorGetPacketsLostInSecond_ = env_->GetMethodID(latencyCollectorClass_, "GetPacketsLostInSecond", "()J");
     latencyCollectorResetAll_ = env_->GetMethodID(latencyCollectorClass_, "ResetAll", "()V");
+
+    if(serverAddress != NULL) {
+        recoverConnection(GetStringFromJNIString(env, serverAddress), serverPort);
+    }
 
     while (!stopped) {
         timeval timeout;
@@ -610,4 +630,24 @@ JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_set72Hz(JNIEnv *env, jobject instance,
                                                      jboolean is72Hz) {
     g_is72Hz = is72Hz;
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_getServerAddress(JNIEnv *env, jobject instance) {
+    if(hasServerAddress){
+        char serverAddress[100];
+        inet_ntop(serverAddr.sin_family, &serverAddr.sin_addr, serverAddress, sizeof(serverAddress));
+        return env->NewStringUTF(serverAddress);
+    }
+    return NULL;
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_getServerPort(JNIEnv *env, jobject instance) {
+    if(hasServerAddress) {
+        return htons(serverAddr.sin_port);
+    }
+    return 0;
 }

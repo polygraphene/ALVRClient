@@ -5,6 +5,7 @@
 #include <time.h>
 #include <android/log.h>
 #include <pthread.h>
+#include <string>
 
 #define LOG(...) __android_log_print(ANDROID_LOG_DEBUG, "ALVR Native", __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "ALVR Native", __VA_ARGS__)
@@ -61,5 +62,12 @@ public:
     }
 };
 
+inline std::string GetStringFromJNIString(JNIEnv *env, jstring string){
+    const char *buf = env->GetStringUTFChars(string, 0);
+    std::string ret = buf;
+    env->ReleaseStringUTFChars(string, buf);
+
+    return ret;
+}
 
 #endif //ALVRCLIENT_UTILS_H
