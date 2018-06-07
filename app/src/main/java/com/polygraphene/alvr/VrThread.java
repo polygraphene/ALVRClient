@@ -187,6 +187,15 @@ class VrThread extends Thread {
         });
     }
 
+    public void onKeyEvent(final int keyCode, final int action) {
+        post(new Runnable() {
+            @Override
+            public void run() {
+                mVrAPI.onKeyEvent(keyCode, action);
+            }
+        });
+    }
+
     // Called from onDestroy
     @Override
     public void interrupt() {

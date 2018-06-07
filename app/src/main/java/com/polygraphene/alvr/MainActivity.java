@@ -1,13 +1,16 @@
 package com.polygraphene.alvr;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.media.AudioManager;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.Window;
@@ -107,6 +110,33 @@ public class MainActivity extends Activity {
             }
         }
         Log.v(TAG, "onDestroy: VrThread has stopped.");
+    }
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        //Log.v(TAG, "dispatchKeyEvent: " + event.getKeyCode());
+        if(event.getAction() == KeyEvent.ACTION_DOWN || event.getAction() == KeyEvent.ACTION_UP) {
+            if (event.getKeyCode() == KeyEvent.KEYCODE_VOLUME_UP)
+            {
+                adjustVolume(1);
+                return true;
+            }
+            if (event.getKeyCode() == KeyEvent.KEYCODE_VOLUME_DOWN)
+            {
+                adjustVolume(-1);
+                return true;
+            }
+
+            mVrThread.onKeyEvent(event.getKeyCode(), event.getAction());
+            return true;
+        }else{
+            return super.dispatchKeyEvent(event);
+        }
+    }
+
+    private void adjustVolume(int direction)
+    {
+        AudioManager audio = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, 0);
     }
 
     private List<MediaCodecInfo> findAvcDecoder(){

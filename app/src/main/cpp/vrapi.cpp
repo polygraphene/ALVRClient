@@ -5,6 +5,7 @@
 #include <android/log.h>
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
+#include <android/input.h>
 #include <VrApi.h>
 #include <VrApi_Types.h>
 #include <VrApi_Helpers.h>
@@ -121,6 +122,17 @@ struct TrackingFrame {
 typedef std::map<uint64_t, std::shared_ptr<TrackingFrame> > TRACKING_FRAME_MAP;
 TRACKING_FRAME_MAP trackingFrameMap;
 Mutex trackingFrameMutex;
+
+typedef enum
+{
+    BACK_BUTTON_STATE_NONE,
+    BACK_BUTTON_STATE_PENDING_SHORT_PRESS,
+    BACK_BUTTON_STATE_SKIP_UP
+} ovrBackButtonState;
+
+ovrBackButtonState BackButtonState;
+bool BackButtonDown;
+double BackButtonDownStartTime;
 
 static double GetTimeInSeconds() {
     struct timespec now;
@@ -1458,8 +1470,86 @@ void onVrModeChange(JNIEnv *env) {
     }
 }
 
+static void ovrApp_PushBlackFinal()
+{
+    int frameFlags = 0;
+    frameFlags |= VRAPI_FRAME_FLAG_FLUSH | VRAPI_FRAME_FLAG_FINAL;
+
+    ovrLayerProjection2 layer = vrapi_DefaultLayerBlackProjection2();
+    layer.Header.Flags |= VRAPI_FRAME_LAYER_FLAG_INHIBIT_SRGB_FRAMEBUFFER;
+
+    const ovrLayerHeader2 * layers[] =
+            {
+                    &layer.Header
+            };
+
+    ovrSubmitFrameDescription2 frameDesc = {};
+    frameDesc.Flags = frameFlags;
+    frameDesc.SwapInterval = 1;
+    frameDesc.FrameIndex = FrameIndex;
+    frameDesc.DisplayTime = GetTimeInSeconds();
+    frameDesc.LayerCount = 1;
+    frameDesc.Layers = layers;
+
+    vrapi_SubmitFrame2( Ovr, &frameDesc );
+}
+
+static void ovrApp_BackButtonAction()
+{
+    if ( BackButtonState == BACK_BUTTON_STATE_PENDING_SHORT_PRESS && !BackButtonDown )
+    {
+        if ( ( GetTimeInSeconds() - BackButtonDownStartTime ) >
+             vrapi_GetSystemPropertyFloat( &java, VRAPI_SYS_PROP_BACK_BUTTON_SHORTPRESS_TIME ) )
+        {
+            ALOGV( "back button short press" );
+            ALOGV( "        ovrApp_PushBlackFinal()" );
+            ovrApp_PushBlackFinal();
+            ALOGV( "        vrapi_ShowSystemUI( confirmQuit )" );
+            vrapi_ShowSystemUI( &java, VRAPI_SYS_UI_CONFIRM_QUIT_MENU );
+            BackButtonState = BACK_BUTTON_STATE_NONE;
+        }
+    }
+}
+
+static int ovrApp_HandleKeyEvent( const int keyCode, const int action )
+{
+    LOG("HandleKeyEvent: keyCode=%d action=%d", keyCode, action);
+    // Handle back button.
+    if ( keyCode == AKEYCODE_BACK )
+    {
+        if ( action == AKEY_EVENT_ACTION_DOWN )
+        {
+            if ( !BackButtonDown )
+            {
+                BackButtonDownStartTime = GetTimeInSeconds();
+            }
+            BackButtonDown = true;
+        }
+        else if ( action == AKEY_EVENT_ACTION_UP )
+        {
+            if ( BackButtonState == BACK_BUTTON_STATE_NONE )
+            {
+                if ( ( GetTimeInSeconds() - BackButtonDownStartTime ) <
+                     vrapi_GetSystemPropertyFloat( &java, VRAPI_SYS_PROP_BACK_BUTTON_SHORTPRESS_TIME ) )
+                {
+                    BackButtonState = BACK_BUTTON_STATE_PENDING_SHORT_PRESS;
+                }
+            }
+            else if ( BackButtonState == BACK_BUTTON_STATE_SKIP_UP )
+            {
+                BackButtonState = BACK_BUTTON_STATE_NONE;
+            }
+            BackButtonDown = false;
+        }
+        return 1;
+    }
+    return 0;
+}
+
 void renderLoadingScene() {
     double DisplayTime = GetTimeInSeconds();
+
+    ovrApp_BackButtonAction();
 
     // Show a loading icon.
     FrameIndex++;
@@ -1582,6 +1672,10 @@ Java_com_polygraphene_alvr_VrAPI_initialize(JNIEnv *env, jobject instance, jobje
                     GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T,
                     GL_CLAMP_TO_EDGE);
+
+    BackButtonState = BACK_BUTTON_STATE_NONE;
+    BackButtonDown = false;
+    BackButtonDownStartTime = 0.0;
 }
 
 extern "C"
@@ -1621,6 +1715,8 @@ Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject c
         // Show a loading message.
         renderLoadingScene();
     }
+
+    ovrApp_BackButtonAction();
 
     double currentTime = GetTimeInSeconds();
 
@@ -1975,4 +2071,11 @@ Java_com_polygraphene_alvr_VrAPI_setFrameGeometry(JNIEnv *env, jobject instance,
         ovrRenderer_Destroy(&Renderer);
         ovrRenderer_Create(&Renderer, &java, UseMultiview, FrameBufferWidth, FrameBufferHeight);
     }
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_VrAPI_onKeyEvent(JNIEnv *env, jobject instance, jint keyCode,
+                                            jint action) {
+    ovrApp_HandleKeyEvent(keyCode, action);
 }

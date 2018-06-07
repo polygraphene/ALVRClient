@@ -25,6 +25,7 @@ public class VrAPI {
     native void renderLoading();
     native long fetchTrackingInfo(VrThread.OnSendTrackingCallback callback);
     native void onChangeSettings(int EnableTestMode, int suspend);
+    native void onKeyEvent(int keyCode, int action);
 
     native boolean isVrMode();
     native boolean is72Hz();
