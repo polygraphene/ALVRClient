@@ -480,12 +480,6 @@ class VrThread extends Thread {
         mReceiverThread.recoverConnectionState(serverAddress, serverPort);
     }
 
-    public void FeedArFrame(Frame frame) {
-        System.arraycopy(frame.getCamera().getPose().getTranslation(), 0
-        , mPosition, 0, 3);
-        Log.v(TAG, "New position feeded. Position=(" + mPosition[0] + ", " + mPosition[1] + ", " + mPosition[2] + ")");
-    }
-
     class ArThread extends Thread {
         private static final String TAG = "ArThread";
         boolean mStopped = false;
