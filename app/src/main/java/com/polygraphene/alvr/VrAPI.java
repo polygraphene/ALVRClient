@@ -31,4 +31,6 @@ public class VrAPI {
     native boolean is72Hz();
 
     native void setFrameGeometry(int width, int height);
+
+    native void setArCameraTexture(int texture);
 }

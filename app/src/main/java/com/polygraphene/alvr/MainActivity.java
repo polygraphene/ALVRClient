@@ -20,7 +20,9 @@ import android.support.v4.content.ContextCompat;
 import android.util.Log;
 
 import android.view.KeyEvent;
-import android.view.Gravity;import android.view.SurfaceHolder;
+import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.Window;
@@ -106,6 +108,14 @@ public class MainActivity extends Activity {
         }
 
         requestCameraPermission(RC_PERMISSIONS);
+
+        surfaceView.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                Log.v(TAG, "onTouch: " + event.getAction() + " " + event.getX() + " " + event.getY());
+                return true;
+            }
+        });
 
         Log.v(TAG, "onCreate: Starting VrThread");
         mVrThread = new VrThread(this);

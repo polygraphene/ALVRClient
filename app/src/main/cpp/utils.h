@@ -7,6 +7,10 @@
 #include <pthread.h>
 #include <string>
 
+#include <VrApi.h>
+#include <VrApi_Types.h>
+#include <VrApi_Helpers.h>
+
 #define LOG(...) __android_log_print(ANDROID_LOG_DEBUG, "ALVR Native", __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "ALVR Native", __VA_ARGS__)
 
@@ -68,6 +72,36 @@ inline std::string GetStringFromJNIString(JNIEnv *env, jstring string){
     env->ReleaseStringUTFChars(string, buf);
 
     return ret;
+}
+
+inline double PitchFromQuaternion(double x, double y, double z, double w) {
+    // (xx, yy, zz) = rotate (0, 0, -1) by quaternion
+    double xx = -2 * y * w
+                - 2 * x * y;
+    double zz = -w * w
+                + x * x
+                + y * y
+                - z * z;
+    return atan2(xx, zz);
+}
+
+inline double PitchFromQuaternion(const ovrQuatf *qt) {
+    return PitchFromQuaternion(qt->x, qt->y, qt->z, qt->w);
+}
+
+inline ovrQuatf quatMultipy(const ovrQuatf *a, const ovrQuatf *b){
+    ovrQuatf dest;
+    dest.x = a->x * b->w + a->w * b->x + a->y * b->z - a->z * b->y;
+    dest.y = a->y * b->w + a->w * b->y + a->z * b->x - a->x * b->z;
+    dest.z = a->z * b->w + a->w * b->z + a->x * b->y - a->y * b->x;
+    dest.w = a->w * b->w - a->x * b->x - a->y * b->y - a->z * b->z;
+    return dest;
+}
+
+inline std::string DumpQuat(const ovrQuatf &a) {
+    char buf[100];
+    snprintf(buf, sizeof(buf), "(%f,%f,%f,%f)", a.x, a.y, a.z, a.w);
+    return buf;
 }
 
 #endif //ALVRCLIENT_UTILS_H

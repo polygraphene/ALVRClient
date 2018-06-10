@@ -4,6 +4,9 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.SurfaceTexture;
 import android.media.MediaCodec;
+import android.opengl.EGL14;
+import android.opengl.EGLContext;
+import android.opengl.GLUtils;
 import android.util.Log;
 import android.view.Surface;
 
@@ -55,6 +58,7 @@ class VrThread extends Thread {
     private float[] mPosition = new float[3];
     private float[] mOrientation = new float[4];
     private Session mSession;
+    private EGLContext mEGLContext;
 
     // Called from native
     public interface VrFrameCallback {
@@ -290,6 +294,8 @@ if (mArThread != null) {
         mLoadingTexture.initializeMessageCanvas(mVrAPI.createLoadingTexture());
         mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\nLoading...");
 
+        mEGLContext = EGL14.eglGetCurrentContext();
+
         Log.v(TAG, "Start loop of VrThread.");
         while(mQueue.waitIdle()) {
             if(!mVrAPI.isVrMode() || !mResumed) {
@@ -487,11 +493,17 @@ if (mArThread != null) {
         @Override
         public void run() {
             Log.v(TAG, "ArThread started.");
+            GLHelper.makeContext(mEGLContext);
+            int texture = GLHelper.createCameraTexture();
             if (mSession != null) {
-                GLHelper.makeContext();
-                //int var3 = GLHelper.createCameraTexture();
-                //Log.v(TAG, "ArSession texture=" + var3);
-                //mSession.setCameraTextureName(var3);
+                Log.v(TAG, "ArSession texture=" + texture);
+                mSession.setCameraTextureName(texture);
+                post(new Runnable() {
+                    @Override
+                    public void run() {
+                        mVrAPI.setArCameraTexture(texture);
+                    }
+                });
                 try {
                     mSession.resume();
                     Log.e(TAG, "ArSession resumed");
@@ -506,6 +518,7 @@ if (mArThread != null) {
                 if (mVrAPI.isVrMode() && mReceiverThread.isConnected()) {
                     if (mSession != null) {
                         try {
+                            mSession.setCameraTextureName(texture);
                             Log.v(TAG, "Update ArSession.");
                             Frame frame = mSession.update();
                             System.arraycopy(frame.getCamera().getDisplayOrientedPose().getTranslation(), 0

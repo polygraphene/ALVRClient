@@ -115,8 +115,6 @@ float previousHeadsetY = 0.0f;
 float previousHeadsetX = 0.0f;
 float g_position[3];
 ovrQuatf g_orientation;
-ovrMatrix4f g_positionTransform;
-int g_positionRotation;
 ovrQuatf g_trackingOrientation;
 double g_rotationDiff;
 uint64_t g_rotationDiffLastInitialized = 0;
@@ -124,6 +122,8 @@ uint64_t FrameIndex = 0;
 uint64_t WantedFrameIndex = 0;
 ovrVector3f g_basePoint;
 ovrVector3f g_rotatedBasePoint;
+int g_AROverlayMode = 0; // 0: VR only, 1: AR 30% 2: AR 70% 3: AR 100%
+int g_ARCameraTexture = -1;
 
 struct TrackingFrame {
     ovrTracking2 tracking;
@@ -386,6 +386,56 @@ static const char FRAGMENT_SHADER_LOADING[] =
                 "   }\n"
                 "}\n";
 
+static const char VERTEX_SHADER_AR[] =
+        "#ifndef DISABLE_MULTIVIEW\n"
+                "	#define DISABLE_MULTIVIEW 0\n"
+                "#endif\n"
+                "#define NUM_VIEWS 2\n"
+                "#if defined( GL_OVR_multiview2 ) && ! DISABLE_MULTIVIEW\n"
+                "	#extension GL_OVR_multiview2 : enable\n"
+                "	layout(num_views=NUM_VIEWS) in;\n"
+                "	#define VIEW_ID gl_ViewID_OVR\n"
+                "#else\n"
+                "	uniform lowp int ViewID;\n"
+                "	#define VIEW_ID ViewID\n"
+                "#endif\n"
+                "in vec3 vertexPosition;\n"
+                "in vec4 vertexColor;\n"
+                "in mat4 vertexTransform;\n"
+                "in vec2 vertexUv;\n"
+                "uniform mat4 mvpMatrix[NUM_VIEWS];\n"
+                "uniform lowp int EnableTestMode;\n"
+                "out vec4 fragmentColor;\n"
+                "out vec2 uv;\n"
+                "void main()\n"
+                "{\n"
+                "	gl_Position = mvpMatrix[VIEW_ID] * vec4( vertexPosition, 1.0 );\n"
+                "   if(VIEW_ID == uint(0)){\n"
+                "      uv = vec2(vertexUv.x * 2.0, vertexUv.y);\n"
+                "   }else{\n"
+                "      uv = vec2(vertexUv.x * 2.0, vertexUv.y);\n"
+                "   }\n"
+                "   fragmentColor = vertexColor;\n"
+                "}\n";
+
+static const char FRAGMENT_SHADER_AR[] =
+        "#extension GL_OES_EGL_image_external_essl3 : require\n"
+                "#extension GL_OES_EGL_image_external : require\n"
+                "in lowp vec2 uv;\n"
+                "in lowp vec4 fragmentColor;\n"
+                "out lowp vec4 outColor;\n"
+                "uniform samplerExternalOES sTexture;\n"
+                "uniform lowp int EnableTestMode;\n"
+                "uniform lowp float alpha;\n"
+                "void main()\n"
+                "{\n"
+                "   if(EnableTestMode % 2 == 0){\n"
+                "	    outColor = texture(sTexture, uv);\n"
+                "   } else {\n"
+                "       outColor = fragmentColor;\n"
+                "   }\n"
+                "   outColor.a = alpha;\n"
+                "}\n";
 struct {
     EGLDisplay Display;
     EGLConfig Config;
@@ -1042,12 +1092,14 @@ enum E1test {
     UNIFORM_VIEW_ID,
     UNIFORM_MVP_MATRIX,
     UNIFORM_ENABLE_TEST_MODE,
+    UNIFORM_ALPHA,
 };
 enum E2test {
     UNIFORM_TYPE_VECTOR4,
     UNIFORM_TYPE_MATRIX4X4,
     UNIFORM_TYPE_INT,
     UNIFORM_TYPE_BUFFER,
+    UNIFORM_TYPE_FLOAT,
 };
 typedef struct {
     E1test index;
@@ -1060,6 +1112,7 @@ static ovrUniform ProgramUniforms[] =
                 {UNIFORM_VIEW_ID,          UNIFORM_TYPE_INT,       "ViewID"},
                 {UNIFORM_MVP_MATRIX,       UNIFORM_TYPE_MATRIX4X4, "mvpMatrix"},
                 {UNIFORM_ENABLE_TEST_MODE, UNIFORM_TYPE_INT,       "EnableTestMode"},
+                {UNIFORM_ALPHA, UNIFORM_TYPE_FLOAT,       "alpha"},
         };
 
 static const char *programVersion = "#version 300 es\n";
@@ -1188,6 +1241,7 @@ int SwapInterval = 1;
 bool CreatedScene = false;
 ovrProgram Program;
 ovrProgram ProgramLoading;
+ovrProgram ProgramAR;
 ovrGeometry Panel;
 ovrGeometry TestMode;
 
@@ -1387,13 +1441,72 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
 
             GL(glBindVertexArray(Panel.VertexArrayObject));
 
-            GL(glActiveTexture(GL_TEXTURE0));
-            GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, SurfaceTextureID));
-
             GL(glUniformMatrix4fv(Program.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
                                   (float *) mvpMatrix));
 
-            GL(glDrawElements(GL_TRIANGLES, Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
+            GL(glActiveTexture(GL_TEXTURE0));
+
+            if(g_AROverlayMode == 0) {
+                // VR 100%
+                glDisable(GL_BLEND);
+                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, SurfaceTextureID));
+
+                GL(glDrawElements(GL_TRIANGLES, Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
+            }else if(g_AROverlayMode == 1) {
+                // AR 30% VR 70%
+                glDisable(GL_BLEND);
+                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, SurfaceTextureID));
+                GL(glDrawElements(GL_TRIANGLES, Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
+
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+                GL(glUseProgram(ProgramAR.Program));
+
+                GL(glBindVertexArray(Panel.VertexArrayObject));
+
+                GL(glUniformMatrix4fv(ProgramAR.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
+                                      (float *) mvpMatrix));
+
+                GL(glActiveTexture(GL_TEXTURE0));
+
+                GL(glUniform1f(ProgramAR.UniformLocation[UNIFORM_ALPHA], 0.3));
+                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, g_ARCameraTexture));
+                GL(glDrawElements(GL_TRIANGLES, Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
+            }else if(g_AROverlayMode == 2) {
+                // AR 70% VR 30%
+                glDisable(GL_BLEND);
+                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, SurfaceTextureID));
+                GL(glDrawElements(GL_TRIANGLES, Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
+
+                GL(glUseProgram(ProgramAR.Program));
+
+                GL(glBindVertexArray(Panel.VertexArrayObject));
+
+                GL(glUniformMatrix4fv(ProgramAR.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
+                                      (float *) mvpMatrix));
+
+                GL(glActiveTexture(GL_TEXTURE0));
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+                GL(glUniformMatrix4fv(Program.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
+                                      (float *) mvpMatrix));
+
+                GL(glUniform1f(ProgramAR.UniformLocation[UNIFORM_ALPHA], 0.7));
+                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, g_ARCameraTexture));
+                GL(glDrawElements(GL_TRIANGLES, Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
+            }else if(g_AROverlayMode == 3) {
+                // AR 100%
+                glDisable(GL_BLEND);
+
+                GL(glUseProgram(ProgramAR.Program));
+                GL(glUniformMatrix4fv(ProgramAR.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
+                                      (float *) mvpMatrix));
+
+                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, g_ARCameraTexture));
+                GL(glDrawElements(GL_TRIANGLES, Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
+            }
         }
 
         GL(glBindVertexArray(0));
@@ -1595,6 +1708,8 @@ void renderLoadingScene() {
         ovrProgram_Create(&Program, VERTEX_SHADER, FRAGMENT_SHADER, UseMultiview);
         ovrProgram_Create(&ProgramLoading, VERTEX_SHADER_LOADING, FRAGMENT_SHADER_LOADING,
                           UseMultiview);
+        ovrProgram_Create(&ProgramAR, VERTEX_SHADER_AR, FRAGMENT_SHADER_AR,
+                          UseMultiview);
         ovrGeometry_CreatePanel(&Panel);
         ovrGeometry_CreateVAO(&Panel);
         ovrGeometry_CreateTestMode(&TestMode);
@@ -1689,8 +1804,7 @@ Java_com_polygraphene_alvr_VrAPI_initialize(JNIEnv *env, jobject instance, jobje
     BackButtonDown = false;
     BackButtonDownStartTime = 0.0;
     g_position[0] = g_position[1] = g_position[2] = 0.0f;
-    g_positionTransform = ovrMatrix4f_CreateIdentity();
-    g_positionRotation = 0;
+    g_ARCameraTexture = -1;
     g_rotationDiffLastInitialized = 0;
 }
 
@@ -1703,6 +1817,7 @@ Java_com_polygraphene_alvr_VrAPI_destroy(JNIEnv *env, jobject instance) {
 
     ovrProgram_Destroy(&Program);
     ovrProgram_Destroy(&ProgramLoading);
+    ovrProgram_Destroy(&ProgramAR);
     ovrGeometry_DestroyVAO(&Panel);
     ovrGeometry_Destroy(&Panel);
     ovrGeometry_DestroyVAO(&TestMode);
@@ -1965,22 +2080,20 @@ void setControllerInfo(TrackingInfo *packet, double displayTime, const ovrVector
                         LOG("Changing position_offset_y: %f", position_offset_y);
                     }
 
-                    if(!previousHeadsetTrackpad && remoteInputState.TrackpadStatus != 0) {
-                        if(normalized_x < 0.42) {
-                            g_positionRotation++;
-                            g_positionTransform = ovrMatrix4f_CreateTranslation(-g_position[0], -g_position[1], -g_position[2]);
-                            ovrMatrix4f rotate = ovrMatrix4f_CreateRotation(0, M_PI / 4 * g_positionRotation, 0);
-                            g_positionTransform = ovrMatrix4f_Multiply(&rotate, &g_positionTransform);
-                            ovrMatrix4f translate = ovrMatrix4f_CreateTranslation(g_position[0], g_position[1], g_position[2]);
-                            g_positionTransform = ovrMatrix4f_Multiply(&translate, &g_positionTransform);
+                    if(previousHeadsetTrackpad && remoteInputState.TrackpadStatus == 0) {
+                        if(normalized_x < 0.4) {
+                            if(g_AROverlayMode > 0){
+                                g_AROverlayMode--;
+                            }else{
+                                g_AROverlayMode = 3;
+                            }
                         }
-                        if(normalized_x > 0.505) {
-                            g_positionRotation--;
-                            g_positionTransform = ovrMatrix4f_CreateTranslation(-g_position[0], -g_position[1], -g_position[2]);
-                            ovrMatrix4f rotate = ovrMatrix4f_CreateRotation(0, M_PI / 4 * g_positionRotation, 0);
-                            g_positionTransform = ovrMatrix4f_Multiply(&rotate, &g_positionTransform);
-                            ovrMatrix4f translate = ovrMatrix4f_CreateTranslation(g_position[0], g_position[1], g_position[2]);
-                            g_positionTransform = ovrMatrix4f_Multiply(&translate, &g_positionTransform);
+                        if(normalized_x > 0.6) {
+                            if(g_AROverlayMode < 3){
+                                g_AROverlayMode++;
+                            }else{
+                                g_AROverlayMode = 0;
+                            }
                         }
                     }
 
@@ -2027,34 +2140,6 @@ void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTrac
     env->CallVoidMethod(callback, sendTracking, array, sizeof(TrackingInfo), FrameIndex);
 }
 
-inline double PitchFromQuaternion(double x, double y, double z, double w) {
-    // (xx, yy, zz) = rotate (0, 0, -1) by quaternion
-    double xx = -2 * y * w
-                - 2 * x * y;
-    double zz = -w * w
-                + x * x
-                + y * y
-                - z * z;
-    return atan2(xx, zz);
-}
-
-inline double PitchFromQuaternion(const ovrQuatf *qt) {
-    return PitchFromQuaternion(qt->x, qt->y, qt->z, qt->w);
-}
-ovrQuatf quatMultipy(const ovrQuatf *a, const ovrQuatf *b){
-    ovrQuatf dest;
-    dest.x = a->x * b->w + a->w * b->x + a->y * b->z - a->z * b->y;
-    dest.y = a->y * b->w + a->w * b->y + a->z * b->x - a->x * b->z;
-    dest.z = a->z * b->w + a->w * b->z + a->x * b->y - a->y * b->x;
-    dest.w = a->w * b->w - a->x * b->x - a->y * b->y - a->z * b->z;
-    return dest;
-}
-
-std::string quatToStr(const ovrQuatf &a) {
-    char buf[100];
-    snprintf(buf, sizeof(buf), "(%f,%f,%f,%f)", a.x, a.y, a.z, a.w);
-    return buf;
-}
 
 // Called from TrackingThread
 extern "C"
@@ -2122,9 +2207,9 @@ Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance
         LOG("pitch=%f tracking pitch=%f (diff:%f) (%f,%f,%f) (%f,%f,%f)", p1, pitch_tracking, diff,
             g_position[0], g_position[1], g_position[2],
             transformed.x, transformed.y, transformed.z);
-        LOG("report1:(%s)", quatToStr(g_orientation).c_str());
-        LOG("report2:(%s)", quatToStr(frame->tracking.HeadPose.Pose.Orientation).c_str());
-        LOG("report3:(%s)", quatToStr(orientation2).c_str());
+        LOG("report1:(%s)", DumpQuat(g_orientation).c_str());
+        LOG("report2:(%s)", DumpQuat(frame->tracking.HeadPose.Pose.Orientation).c_str());
+        LOG("report3:(%s)", DumpQuat(orientation2).c_str());
     }
 
     {
@@ -2246,4 +2331,10 @@ JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_VrAPI_onKeyEvent(JNIEnv *env, jobject instance, jint keyCode,
                                             jint action) {
     ovrApp_HandleKeyEvent(keyCode, action);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_VrAPI_setArCameraTexture(JNIEnv *env, jobject instance, jint texture) {
+    g_ARCameraTexture = texture;
 }

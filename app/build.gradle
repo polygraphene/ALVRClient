@@ -3,7 +3,7 @@ apply plugin: 'com.android.application'
 android {
     compileSdkVersion 26
     defaultConfig {
-        applicationId "com.polygraphene.alvr"
+        applicationId "com.polygraphene.alvr.ar"
         minSdkVersion 21
         targetSdkVersion 26
         versionCode 12
@@ -53,14 +53,14 @@ android {
     productFlavors {
         Github {
             minSdkVersion 21
-            applicationId 'com.polygraphene.alvr'
+            applicationId 'com.polygraphene.alvr.ar'
             targetSdkVersion 26
             dimension "distribute"
             manifestPlaceholders = [filter:"android.intent.category.LAUNCHER"]
         }
         OculusStore {
             minSdkVersion 21
-            applicationId 'com.polygraphene.alvr.oculus'
+            applicationId 'com.polygraphene.alvr.ar.oculus'
             targetSdkVersion 26
             dimension "distribute"
             manifestPlaceholders = [filter:"android.intent.category.INFO"]
