@@ -1,0 +1,100 @@
+#ifndef ALVRCLIENT_VR_CONTEXT_H
+#define ALVRCLIENT_VR_CONTEXT_H
+
+#include <memory>
+#include <map>
+#include <android/native_window.h>
+#include <android/native_window_jni.h>
+#include <android/input.h>
+#include "packet_types.h"
+#include "render.h"
+#include "utils.h"
+
+
+
+class VrContext {
+public:
+    void initialize(JNIEnv *env, jobject activity);
+    void destroy();
+
+    void onChangeSettings(int EnableTestMode, int Suspend);
+    void onSurfaceCreated(jobject surface);
+    void onSurfaceDestroyed();
+    void onSurfaceChanged(jobject surface);
+    void onResume();
+    void onPause();
+    bool onKeyEvent(int keyCode, int action);
+
+    void onVrModeChange();
+
+    void PushBlackFinal();
+    void BackButtonAction();
+    void chooseRefreshRate();
+
+    void render(jobject callback, jobject latencyCollector);
+    void renderLoading();
+
+    void setControllerInfo(TrackingInfo *packet, double displayTime);
+
+    void sendTrackingInfo(JNIEnv *env_, jobject callback, double displayTime, ovrTracking2 *tracking, const ovrVector3f *other_tracking_position);
+    int64_t fetchTrackingInfo(JNIEnv *env_, jobject callback);
+
+    void setFrameGeometry(int width, int height);
+
+    bool isVrMode() { return Ovr != NULL; }
+    bool is72Hz() { return support72hz; }
+
+    int getLoadingTexture(){
+        return loadingTexture;
+    }
+    int getSurfaceTextureID(){
+        return SurfaceTextureID;
+    }
+
+private:
+    ANativeWindow *window = NULL;
+    ovrMobile *Ovr;
+    ovrJava java;
+    JNIEnv *env;
+
+    bool UseMultiview = true;
+    GLuint SurfaceTextureID = 0;
+    GLuint loadingTexture = 0;
+    int enableTestMode = 0;
+    int suspend = 0;
+    bool Resumed = false;
+    bool support72hz = false;
+    int FrameBufferWidth = 0;
+    int FrameBufferHeight = 0;
+
+    uint64_t FrameIndex = 0;
+    uint64_t WantedFrameIndex = 0;
+
+    static const int MAXIMUM_TRACKING_FRAMES = 180;
+
+    struct TrackingFrame {
+        ovrTracking2 tracking;
+        uint64_t frameIndex;
+        uint64_t fetchTime;
+        double displayTime;
+    };
+    typedef std::map<uint64_t, std::shared_ptr<TrackingFrame> > TRACKING_FRAME_MAP;
+
+    typedef enum
+    {
+        BACK_BUTTON_STATE_NONE,
+        BACK_BUTTON_STATE_PENDING_SHORT_PRESS,
+        BACK_BUTTON_STATE_SKIP_UP
+    } ovrBackButtonState;
+
+    TRACKING_FRAME_MAP trackingFrameMap;
+    Mutex trackingFrameMutex;
+
+    ovrBackButtonState BackButtonState;
+    bool BackButtonDown;
+    double BackButtonDownStartTime;
+
+    ovrRenderer Renderer;
+};
+
+#endif //ALVRCLIENT_VR_CONTEXT_H

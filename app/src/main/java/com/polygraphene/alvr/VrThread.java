@@ -19,7 +19,7 @@ class VrThread extends Thread {
 
     private MainActivity mMainActivity;
 
-    private VrAPI mVrAPI = new VrAPI();
+    private VrContext mVrContext = new VrContext();
     private ThreadQueue mQueue = null;
     private boolean mResumed = false;
 
@@ -57,7 +57,7 @@ class VrThread extends Thread {
         post(new Runnable() {
             @Override
             public void run() {
-                mVrAPI.onSurfaceCreated(surface);
+                mVrContext.onSurfaceCreated(surface);
             }
         });
     }
@@ -66,7 +66,7 @@ class VrThread extends Thread {
         post(new Runnable() {
             @Override
             public void run() {
-                mVrAPI.onSurfaceChanged(surface);
+                mVrContext.onSurfaceChanged(surface);
             }
         });
     }
@@ -75,7 +75,7 @@ class VrThread extends Thread {
         post(new Runnable() {
             @Override
             public void run() {
-                mVrAPI.onSurfaceDestroyed();
+                mVrContext.onSurfaceDestroyed();
             }
         });
     }
@@ -117,7 +117,7 @@ class VrThread extends Thread {
 
                 mReceiverThread = new UdpReceiverThread(mCounter, mOnChangeSettingsCallback, mLatencyCollector);
                 mReceiverThread.setPort(PORT);
-                mReceiverThread.set72Hz(mVrAPI.is72Hz());
+                mReceiverThread.set72Hz(mVrContext.is72Hz());
                 loadConnectionState();
                 mDecoderThread = new DecoderThread(mReceiverThread
                         , mMainActivity.getAvcDecoder(), mCounter, mRenderCallback, mMainActivity, mLatencyCollector);
@@ -137,7 +137,7 @@ class VrThread extends Thread {
 
                 Log.v(TAG, "VrThread.onResume: Worker threads has started.");
 
-                mVrAPI.onResume();
+                mVrContext.onResume();
             }
         });
     }
@@ -182,7 +182,7 @@ class VrThread extends Thread {
         post(new Runnable() {
             @Override
             public void run() {
-                mVrAPI.onPause();
+                mVrContext.onPause();
             }
         });
     }
@@ -191,7 +191,7 @@ class VrThread extends Thread {
         post(new Runnable() {
             @Override
             public void run() {
-                mVrAPI.onKeyEvent(keyCode, action);
+                mVrContext.onKeyEvent(keyCode, action);
             }
         });
     }
@@ -239,15 +239,15 @@ class VrThread extends Thread {
             notifyAll();
         }
 
-        mVrAPI.initialize(mMainActivity);
+        mVrContext.initialize(mMainActivity);
 
-        if(mVrAPI.is72Hz()) {
+        if(mVrContext.is72Hz()) {
             m_RefreshRate = 72;
         }else{
             m_RefreshRate = 60;
         }
 
-        mSurfaceTexture = new SurfaceTexture(mVrAPI.getSurfaceTextureID());
+        mSurfaceTexture = new SurfaceTexture(mVrContext.getSurfaceTextureID());
         mSurfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
             @Override
             public void onFrameAvailable(SurfaceTexture surfaceTexture) {
@@ -262,12 +262,12 @@ class VrThread extends Thread {
         });
         mSurface = new Surface(mSurfaceTexture);
 
-        mLoadingTexture.initializeMessageCanvas(mVrAPI.createLoadingTexture());
+        mLoadingTexture.initializeMessageCanvas(mVrContext.getLoadingTexture());
         mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\nLoading...");
 
         Log.v(TAG, "Start loop of VrThread.");
         while(mQueue.waitIdle()) {
-            if(!mVrAPI.isVrMode() || !mResumed) {
+            if(!mVrContext.isVrMode() || !mResumed) {
                 mQueue.waitNext();
                 continue;
             }
@@ -275,12 +275,12 @@ class VrThread extends Thread {
         }
 
         Log.v(TAG, "Destroying vrapi state.");
-        mVrAPI.destroy();
+        mVrContext.destroy();
     }
 
     private void render(){
         if (mReceiverThread.isConnected() && mDecoderThread.isFrameAvailable()) {
-            mVrAPI.render(new VrFrameCallback() {
+            mVrContext.render(new VrFrameCallback() {
                 @Override
                 public long waitFrame() {
                     long startTime = System.nanoTime();
@@ -326,7 +326,7 @@ class VrThread extends Thread {
             }else {
                 mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \nPress CONNECT button\non ALVR server.");
             }
-            mVrAPI.renderLoading();
+            mVrContext.renderLoading();
             try {
                 Thread.sleep(100);
             } catch (InterruptedException e) {
@@ -343,7 +343,7 @@ class VrThread extends Thread {
             send(new Runnable() {
                 @Override
                 public void run() {
-                    mVrAPI.setFrameGeometry(width, height);
+                    mVrContext.setFrameGeometry(width, height);
                     mDecoderThread.notifyGeometryChange();
                 }
             });
@@ -351,7 +351,7 @@ class VrThread extends Thread {
 
         @Override
         public void onChangeSettings(int enableTestMode, int suspend) {
-            mVrAPI.onChangeSettings(enableTestMode, suspend);
+            mVrContext.onChangeSettings(enableTestMode, suspend);
         }
     };
 
@@ -403,8 +403,8 @@ class VrThread extends Thread {
         public void run() {
             long previousFetchTime = System.nanoTime();
             while (!mStopped) {
-                if (mVrAPI.isVrMode() && mReceiverThread.isConnected()) {
-                    long frameIndex = mVrAPI.fetchTrackingInfo(mOnSendTrackingCallback);
+                if (mVrContext.isVrMode() && mReceiverThread.isConnected()) {
+                    long frameIndex = mVrContext.fetchTrackingInfo(mOnSendTrackingCallback);
                     mLatencyCollector.Tracking(frameIndex);
                 }
                 try {

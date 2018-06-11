@@ -139,7 +139,7 @@ static void putNAL(int len) {
             pthread_cond_broadcast(&cond_nonzero);
         }else {
             // Discard buffer
-            LOG("NAL Queue is too large. Discard. Size=%d Limit=%d", nalList.size(), MAXIMUM_NAL_BUFFER);
+            LOG("NAL Queue is too large. Discard. Size=%lu Limit=%d", nalList.size(), MAXIMUM_NAL_BUFFER);
             env_->DeleteGlobalRef(buf.array);
         }
     }
@@ -227,7 +227,7 @@ bool processPacket(JNIEnv *env, char *buf, int len) {
 
         if(header->packetCounter != 1 && prevSequence + 1 != header->packetCounter) {
             // Packet loss
-            LOGE("Ignore this frame because of packet loss. prevSequence=%d currentSequence=%d"
+            LOGE("Ignore this frame because of packet loss. prevSequence=%lu currentSequence=%d"
             , prevSequence, header->packetCounter);
 
             // We don't update prevSequence here. This lead to ignore all packet until next VideoFrameStart packet arrives.

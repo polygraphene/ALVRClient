@@ -21,7 +21,8 @@ add_library( # Sets the name of the library.
              # Provides a relative path to your source file(s).
              src/main/cpp/udp.cpp
              src/main/cpp/nal.cpp
-             src/main/cpp/vrapi.cpp
+             src/main/cpp/vr_context.cpp
+             src/main/cpp/render.cpp
               )
 
 link_directories(src/main/jniLibs/${ANDROID_ABI})

@@ -1,27 +1,11 @@
-#include <unistd.h>
-#include <stdlib.h>
-#include <time.h>
-#include <jni.h>
-#include <android/log.h>
-#include <android/native_window.h>
-#include <android/native_window_jni.h>
-#include <android/input.h>
-#include <VrApi.h>
-#include <VrApi_Types.h>
-#include <VrApi_Helpers.h>
-#include <VrApi_SystemUtils.h>
-#include <VrApi_Input.h>
-#include "utils.h"
-#include "packet_types.h"
-
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
-#include <GLES3/gl3.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
-#include <string>
-#include <map>
-#include <vector>
+
+#include "render.h"
+#include "utils.h"
+
+static const int NUM_MULTI_SAMPLES = 4;
+Render_EGL egl;
 
 #define CHECK_GL_ERRORS 1
 #if !defined( EGL_OPENGL_ES3_BIT_KHR )
@@ -40,16 +24,16 @@
 #if !defined( GL_EXT_multisampled_render_to_texture )
 
 typedef void (GL_APIENTRY *PFNGLRENDERBUFFERSTORAGEMULTISAMPLEEXTPROC)(GLenum target,
-                                                                       GLsizei samples,
-                                                                       GLenum internalformat,
-                                                                       GLsizei width,
-                                                                       GLsizei height);
+        GLsizei samples,
+GLenum internalformat,
+        GLsizei width,
+GLsizei height);
 
 typedef void (GL_APIENTRY *PFNGLFRAMEBUFFERTEXTURE2DMULTISAMPLEEXTPROC)(GLenum target,
-                                                                        GLenum attachment,
-                                                                        GLenum textarget,
-                                                                        GLuint texture, GLint level,
-                                                                        GLsizei samples);
+        GLenum attachment,
+GLenum textarget,
+        GLuint texture, GLint level,
+        GLsizei samples);
 
 #endif
 
@@ -59,27 +43,24 @@ static const int GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_BASE_VIEW_INDEX_OVR = 0x9632;
 static const int GL_MAX_VIEWS_OVR = 0x9631;
 
 typedef void (GL_APIENTRY *PFNGLFRAMEBUFFERTEXTUREMULTIVIEWOVRPROC)(GLenum target,
-                                                                    GLenum attachment,
-                                                                    GLuint texture, GLint level,
-                                                                    GLint baseViewIndex,
-                                                                    GLsizei numViews);
+        GLenum attachment,
+GLuint texture, GLint level,
+GLint baseViewIndex,
+        GLsizei numViews);
 
 #endif
 
 #if !defined( GL_OVR_multiview_multisampled_render_to_texture )
 
 typedef void (GL_APIENTRY *PFNGLFRAMEBUFFERTEXTUREMULTISAMPLEMULTIVIEWOVRPROC)(GLenum target,
-                                                                               GLenum attachment,
-                                                                               GLuint texture,
-                                                                               GLint level,
-                                                                               GLsizei samples,
-                                                                               GLint baseViewIndex,
-                                                                               GLsizei numViews);
+        GLenum attachment,
+GLuint texture,
+        GLint level,
+GLsizei samples,
+        GLint baseViewIndex,
+GLsizei numViews);
 
 #endif
-
-// Must use EGLSyncKHR because the VrApi still supports OpenGL ES 2.0
-#define EGL_SYNC
 
 #if defined EGL_SYNC
 // EGL_KHR_reusable_sync
@@ -90,68 +71,6 @@ PFNEGLSIGNALSYNCKHRPROC eglSignalSyncKHR;
 PFNEGLGETSYNCATTRIBKHRPROC eglGetSyncAttribKHR;
 #endif
 
-
-#define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, "ALVR Native", __VA_ARGS__)
-#define ALOGV(...) __android_log_print(ANDROID_LOG_VERBOSE, "ALVR Native", __VA_ARGS__)
-
-static const int NUM_MULTI_SAMPLES = 4;
-static const int MAXIMUM_TRACKING_FRAMES = 180;
-
-ANativeWindow *window = NULL;
-ovrMobile *Ovr;
-bool UseMultiview = true;
-GLuint SurfaceTextureID = 0;
-GLuint loadingTexture = 0;
-int enableTestMode = 0;
-int suspend = 0;
-bool Resumed = false;
-bool support72hz = false;
-int FrameBufferWidth = 0;
-int FrameBufferHeight = 0;
-
-uint64_t FrameIndex = 0;
-uint64_t WantedFrameIndex = 0;
-
-
-struct TrackingFrame {
-    ovrTracking2 tracking;
-    uint64_t frameIndex;
-    uint64_t fetchTime;
-    double displayTime;
-};
-typedef std::map<uint64_t, std::shared_ptr<TrackingFrame> > TRACKING_FRAME_MAP;
-TRACKING_FRAME_MAP trackingFrameMap;
-Mutex trackingFrameMutex;
-
-typedef enum
-{
-    BACK_BUTTON_STATE_NONE,
-    BACK_BUTTON_STATE_PENDING_SHORT_PRESS,
-    BACK_BUTTON_STATE_SKIP_UP
-} ovrBackButtonState;
-
-ovrBackButtonState BackButtonState;
-bool BackButtonDown;
-double BackButtonDownStartTime;
-
-static double GetTimeInSeconds() {
-    struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    return (now.tv_sec * 1e9 + now.tv_nsec) * 0.000000001;
-}
-
-static std::string DumpMatrix(const ovrMatrix4f *matrix) {
-    char buf[1000];
-    sprintf(buf, "%.5f, %.5f, %.5f, %.5f\n"
-                    "%.5f, %.5f, %.5f, %.5f\n"
-                    "%.5f, %.5f, %.5f, %.5f\n"
-                    "%.5f, %.5f, %.5f, %.5f\n", matrix->M[0][0], matrix->M[0][1], matrix->M[0][2],
-            matrix->M[0][3], matrix->M[1][0], matrix->M[1][1], matrix->M[1][2], matrix->M[1][3],
-            matrix->M[2][0], matrix->M[2][1], matrix->M[2][2], matrix->M[2][3], matrix->M[3][0],
-            matrix->M[3][1], matrix->M[3][2], matrix->M[3][3]
-    );
-    return std::string(buf);
-}
 
 /*
 ================================================================================
@@ -168,7 +87,7 @@ typedef struct {
 
 OpenGLExtensions_t glExtensions;
 
-static void EglInitExtensions() {
+void EglInitExtensions(bool *multi_view) {
 #if defined EGL_SYNC
     eglCreateSyncKHR = (PFNEGLCREATESYNCKHRPROC) eglGetProcAddress("eglCreateSyncKHR");
     eglDestroySyncKHR = (PFNEGLDESTROYSYNCKHRPROC) eglGetProcAddress("eglDestroySyncKHR");
@@ -187,6 +106,7 @@ static void EglInitExtensions() {
                 strstr(allExtensions, "GL_EXT_texture_border_clamp") ||
                 strstr(allExtensions, "GL_OES_texture_border_clamp");
     }
+    *multi_view = glExtensions.multi_view;
 }
 
 static const char *EglErrorString(const EGLint error) {
@@ -270,7 +190,7 @@ static void GLCheckErrors(int line) {
         if (error == GL_NO_ERROR) {
             break;
         }
-        ALOGE("GL error on line %d: %s", line, GlErrorString(error));
+        LOGE("GL error on line %d: %s", line, GlErrorString(error));
     }
 }
 
@@ -374,13 +294,6 @@ static const char FRAGMENT_SHADER_LOADING[] =
                 "   }\n"
                 "}\n";
 
-struct {
-    EGLDisplay Display;
-    EGLConfig Config;
-    EGLSurface TinySurface;
-    EGLSurface MainSurface;
-    EGLContext Context;
-} egl;
 
 void eglInit() {
     EGLint major, minor;
@@ -395,7 +308,7 @@ void eglInit() {
     EGLConfig configs[MAX_CONFIGS];
     EGLint numConfigs = 0;
     if (eglGetConfigs(egl.Display, configs, MAX_CONFIGS, &numConfigs) == EGL_FALSE) {
-        ALOGE("        eglGetConfigs() failed: %s", EglErrorString(eglGetError()));
+        LOGE("        eglGetConfigs() failed: %s", EglErrorString(eglGetError()));
         return;
     }
     const EGLint configAttribs[] =
@@ -438,7 +351,7 @@ void eglInit() {
         }
     }
     if (egl.Config == 0) {
-        ALOGE("        eglChooseConfig() failed: %s", EglErrorString(eglGetError()));
+        LOGE("        eglChooseConfig() failed: %s", EglErrorString(eglGetError()));
         return;
     }
     EGLint contextAttribs[] =
@@ -446,10 +359,10 @@ void eglInit() {
                     EGL_CONTEXT_CLIENT_VERSION, 3,
                     EGL_NONE
             };
-    ALOGV("        Context = eglCreateContext( Display, Config, EGL_NO_CONTEXT, contextAttribs )");
+    LOG("        Context = eglCreateContext( Display, Config, EGL_NO_CONTEXT, contextAttribs )");
     egl.Context = eglCreateContext(egl.Display, egl.Config, EGL_NO_CONTEXT, contextAttribs);
     if (egl.Context == EGL_NO_CONTEXT) {
-        ALOGE("        eglCreateContext() failed: %s", EglErrorString(eglGetError()));
+        LOGE("        eglCreateContext() failed: %s", EglErrorString(eglGetError()));
         return;
     }
     const EGLint surfaceAttribs[] =
@@ -458,17 +371,17 @@ void eglInit() {
                     EGL_HEIGHT, 16,
                     EGL_NONE
             };
-    ALOGV("        TinySurface = eglCreatePbufferSurface( Display, Config, surfaceAttribs )");
+    LOG("        TinySurface = eglCreatePbufferSurface( Display, Config, surfaceAttribs )");
     egl.TinySurface = eglCreatePbufferSurface(egl.Display, egl.Config, surfaceAttribs);
     if (egl.TinySurface == EGL_NO_SURFACE) {
-        ALOGE("        eglCreatePbufferSurface() failed: %s", EglErrorString(eglGetError()));
+        LOGE("        eglCreatePbufferSurface() failed: %s", EglErrorString(eglGetError()));
         eglDestroyContext(egl.Display, egl.Context);
         egl.Context = EGL_NO_CONTEXT;
         return;
     }
-    ALOGV("        eglMakeCurrent( Display, TinySurface, TinySurface, Context )");
+    LOG("        eglMakeCurrent( Display, TinySurface, TinySurface, Context )");
     if (eglMakeCurrent(egl.Display, egl.TinySurface, egl.TinySurface, egl.Context) == EGL_FALSE) {
-        ALOGE("        eglMakeCurrent() failed: %s", EglErrorString(eglGetError()));
+        LOGE("        eglMakeCurrent() failed: %s", EglErrorString(eglGetError()));
         eglDestroySurface(egl.Display, egl.TinySurface);
         eglDestroyContext(egl.Display, egl.Context);
         egl.Context = EGL_NO_CONTEXT;
@@ -476,59 +389,48 @@ void eglInit() {
     }
 }
 
-static void eglDestroy()
+void eglDestroy()
 {
     if ( egl.Display != 0 )
     {
-        ALOGE( "        eglMakeCurrent( Display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT )" );
+        LOGE( "        eglMakeCurrent( Display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT )" );
         if ( eglMakeCurrent( egl.Display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT ) == EGL_FALSE )
         {
-            ALOGE( "        eglMakeCurrent() failed: %s", EglErrorString( eglGetError() ) );
+            LOGE( "        eglMakeCurrent() failed: %s", EglErrorString( eglGetError() ) );
         }
     }
     if ( egl.Context != EGL_NO_CONTEXT )
     {
-        ALOGE( "        eglDestroyContext( Display, Context )" );
+        LOGE( "        eglDestroyContext( Display, Context )" );
         if ( eglDestroyContext( egl.Display, egl.Context ) == EGL_FALSE )
         {
-            ALOGE( "        eglDestroyContext() failed: %s", EglErrorString( eglGetError() ) );
+            LOGE( "        eglDestroyContext() failed: %s", EglErrorString( eglGetError() ) );
         }
         egl.Context = EGL_NO_CONTEXT;
     }
     if ( egl.TinySurface != EGL_NO_SURFACE )
     {
-        ALOGE( "        eglDestroySurface( Display, TinySurface )" );
+        LOGE( "        eglDestroySurface( Display, TinySurface )" );
         if ( eglDestroySurface( egl.Display, egl.TinySurface ) == EGL_FALSE )
         {
-            ALOGE( "        eglDestroySurface() failed: %s", EglErrorString( eglGetError() ) );
+            LOGE( "        eglDestroySurface() failed: %s", EglErrorString( eglGetError() ) );
         }
         egl.TinySurface = EGL_NO_SURFACE;
     }
     if ( egl.Display != 0 )
     {
-        ALOGE( "        eglTerminate( Display )" );
+        LOGE( "        eglTerminate( Display )" );
         if ( eglTerminate( egl.Display ) == EGL_FALSE )
         {
-            ALOGE( "        eglTerminate() failed: %s", EglErrorString( eglGetError() ) );
+            LOGE( "        eglTerminate() failed: %s", EglErrorString( eglGetError() ) );
         }
         egl.Display = 0;
     }
 }
 
 
-const int NUM_ROTATIONS = 2;
-const int NUM_INSTANCES = 100;
 
-typedef struct {
-#if defined( EGL_SYNC )
-    EGLDisplay Display;
-    EGLSyncKHR Sync;
-#else
-    GLsync		Sync;
-#endif
-} ovrFence;
-
-static void ovrFence_Create(ovrFence *fence) {
+void ovrFence_Create(ovrFence *fence) {
 #if defined( EGL_SYNC )
     fence->Display = 0;
     fence->Sync = EGL_NO_SYNC_KHR;
@@ -537,11 +439,11 @@ static void ovrFence_Create(ovrFence *fence) {
 #endif
 }
 
-static void ovrFence_Destroy(ovrFence *fence) {
+void ovrFence_Destroy(ovrFence *fence) {
 #if defined( EGL_SYNC )
     if (fence->Sync != EGL_NO_SYNC_KHR) {
         if (eglDestroySyncKHR(fence->Display, fence->Sync) == EGL_FALSE) {
-            ALOGE("eglDestroySyncKHR() : EGL_FALSE");
+            LOGE("eglDestroySyncKHR() : EGL_FALSE");
             return;
         }
         fence->Display = 0;
@@ -556,21 +458,21 @@ static void ovrFence_Destroy(ovrFence *fence) {
 #endif
 }
 
-static void ovrFence_Insert(ovrFence *fence) {
+void ovrFence_Insert(ovrFence *fence) {
     ovrFence_Destroy(fence);
 
 #if defined( EGL_SYNC )
     fence->Display = eglGetCurrentDisplay();
     fence->Sync = eglCreateSyncKHR(fence->Display, EGL_SYNC_FENCE_KHR, NULL);
     if (fence->Sync == EGL_NO_SYNC_KHR) {
-        ALOGE("eglCreateSyncKHR() : EGL_NO_SYNC_KHR");
+        LOGE("eglCreateSyncKHR() : EGL_NO_SYNC_KHR");
         return;
     }
     // Force flushing the commands.
     // Note that some drivers will already flush when calling eglCreateSyncKHR.
     if (eglClientWaitSyncKHR(fence->Display, fence->Sync, EGL_SYNC_FLUSH_COMMANDS_BIT_KHR, 0) ==
         EGL_FALSE) {
-        ALOGE("eglClientWaitSyncKHR() : EGL_FALSE");
+        LOGE("eglClientWaitSyncKHR() : EGL_FALSE");
         return;
     }
 #else
@@ -583,19 +485,7 @@ static void ovrFence_Insert(ovrFence *fence) {
 }
 
 
-typedef struct {
-    int Width;
-    int Height;
-    int Multisamples;
-    int TextureSwapChainLength;
-    int TextureSwapChainIndex;
-    bool UseMultiview;
-    ovrTextureSwapChain *ColorTextureSwapChain;
-    GLuint *DepthBuffers;
-    GLuint *FrameBuffers;
-} ovrFramebuffer;
-
-static void ovrFramebuffer_Clear(ovrFramebuffer *frameBuffer) {
+void ovrFramebuffer_Clear(ovrFramebuffer *frameBuffer) {
     frameBuffer->Width = 0;
     frameBuffer->Height = 0;
     frameBuffer->Multisamples = 0;
@@ -607,7 +497,7 @@ static void ovrFramebuffer_Clear(ovrFramebuffer *frameBuffer) {
     frameBuffer->FrameBuffers = NULL;
 }
 
-static bool ovrFramebuffer_Create(ovrFramebuffer *frameBuffer, const bool useMultiview,
+bool ovrFramebuffer_Create(ovrFramebuffer *frameBuffer, const bool useMultiview,
                                   const ovrTextureFormat colorFormat, const int width,
                                   const int height, const int multisamples) {
     PFNGLRENDERBUFFERSTORAGEMULTISAMPLEEXTPROC glRenderbufferStorageMultisampleEXT =
@@ -640,7 +530,7 @@ static bool ovrFramebuffer_Create(ovrFramebuffer *frameBuffer, const bool useMul
     frameBuffer->FrameBuffers = (GLuint *) malloc(
             frameBuffer->TextureSwapChainLength * sizeof(GLuint));
 
-    ALOGV("        frameBuffer->UseMultiview = %d", frameBuffer->UseMultiview);
+    LOG("        frameBuffer->UseMultiview = %d", frameBuffer->UseMultiview);
 
     for (int i = 0; i < frameBuffer->TextureSwapChainLength; i++) {
         // Create the color buffer texture.
@@ -699,8 +589,8 @@ static bool ovrFramebuffer_Create(ovrFramebuffer *frameBuffer, const bool useMul
             GL(GLenum renderFramebufferStatus = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER));
             GL(glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0));
             if (renderFramebufferStatus != GL_FRAMEBUFFER_COMPLETE) {
-                ALOGE("Incomplete frame buffer object: %s",
-                      GlFrameBufferStatusString(renderFramebufferStatus));
+                LOGE("Incomplete frame buffer object: %s",
+                     GlFrameBufferStatusString(renderFramebufferStatus));
                 return false;
             }
         } else {
@@ -725,8 +615,8 @@ static bool ovrFramebuffer_Create(ovrFramebuffer *frameBuffer, const bool useMul
                 GL(GLenum renderFramebufferStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER));
                 GL(glBindFramebuffer(GL_FRAMEBUFFER, 0));
                 if (renderFramebufferStatus != GL_FRAMEBUFFER_COMPLETE) {
-                    ALOGE("Incomplete frame buffer object: %s",
-                          GlFrameBufferStatusString(renderFramebufferStatus));
+                    LOGE("Incomplete frame buffer object: %s",
+                         GlFrameBufferStatusString(renderFramebufferStatus));
                     return false;
                 }
             } else {
@@ -746,8 +636,8 @@ static bool ovrFramebuffer_Create(ovrFramebuffer *frameBuffer, const bool useMul
                 GL(GLenum renderFramebufferStatus = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER));
                 GL(glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0));
                 if (renderFramebufferStatus != GL_FRAMEBUFFER_COMPLETE) {
-                    ALOGE("Incomplete frame buffer object: %s",
-                          GlFrameBufferStatusString(renderFramebufferStatus));
+                    LOGE("Incomplete frame buffer object: %s",
+                         GlFrameBufferStatusString(renderFramebufferStatus));
                     return false;
                 }
             }
@@ -757,7 +647,7 @@ static bool ovrFramebuffer_Create(ovrFramebuffer *frameBuffer, const bool useMul
     return true;
 }
 
-static void ovrFramebuffer_Destroy(ovrFramebuffer *frameBuffer) {
+void ovrFramebuffer_Destroy(ovrFramebuffer *frameBuffer) {
     GL(glDeleteFramebuffers(frameBuffer->TextureSwapChainLength, frameBuffer->FrameBuffers));
     if (frameBuffer->UseMultiview) {
         GL(glDeleteTextures(frameBuffer->TextureSwapChainLength, frameBuffer->DepthBuffers));
@@ -772,16 +662,16 @@ static void ovrFramebuffer_Destroy(ovrFramebuffer *frameBuffer) {
     ovrFramebuffer_Clear(frameBuffer);
 }
 
-static void ovrFramebuffer_SetCurrent(ovrFramebuffer *frameBuffer) {
+void ovrFramebuffer_SetCurrent(ovrFramebuffer *frameBuffer) {
     GL(glBindFramebuffer(GL_DRAW_FRAMEBUFFER,
                          frameBuffer->FrameBuffers[frameBuffer->TextureSwapChainIndex]));
 }
 
-static void ovrFramebuffer_SetNone() {
+void ovrFramebuffer_SetNone() {
     GL(glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0));
 }
 
-static void ovrFramebuffer_Resolve(ovrFramebuffer *frameBuffer) {
+void ovrFramebuffer_Resolve(ovrFramebuffer *frameBuffer) {
     // Discard the depth buffer, so the tiler won't need to write it back out to memory.
     const GLenum depthAttachment[1] = {GL_DEPTH_ATTACHMENT};
     glInvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 1, depthAttachment);
@@ -790,47 +680,22 @@ static void ovrFramebuffer_Resolve(ovrFramebuffer *frameBuffer) {
     glFlush();
 }
 
-static void ovrFramebuffer_Advance(ovrFramebuffer *frameBuffer) {
+void ovrFramebuffer_Advance(ovrFramebuffer *frameBuffer) {
     // Advance to the next texture from the set.
     frameBuffer->TextureSwapChainIndex =
             (frameBuffer->TextureSwapChainIndex + 1) % frameBuffer->TextureSwapChainLength;
 }
 
-
-typedef struct {
-    GLuint Index;
-    GLint Size;
-    GLenum Type;
-    GLboolean Normalized;
-    GLsizei Stride;
-    const GLvoid *Pointer;
-} ovrVertexAttribPointer;
-
-#define MAX_VERTEX_ATTRIB_POINTERS        4
-
-typedef struct {
-    GLuint VertexBuffer;
-    GLuint IndexBuffer;
-    GLuint VertexArrayObject;
-    GLuint VertexUVBuffer;
-    int VertexCount;
-    int IndexCount;
-    ovrVertexAttribPointer VertexAttribs[MAX_VERTEX_ATTRIB_POINTERS];
-} ovrGeometry;
-
-enum VertexAttributeLocation {
-    VERTEX_ATTRIBUTE_LOCATION_POSITION,
-    VERTEX_ATTRIBUTE_LOCATION_COLOR,
-    VERTEX_ATTRIBUTE_LOCATION_UV,
-    VERTEX_ATTRIBUTE_LOCATION_TRANSFORM
-};
+//
+// ovrGeometry
+//
 
 typedef struct {
     enum VertexAttributeLocation location;
     const char *name;
 } ovrVertexAttribute;
 
-static ovrVertexAttribute ProgramVertexAttributes[] =
+ovrVertexAttribute ProgramVertexAttributes[] =
         {
                 {VERTEX_ATTRIBUTE_LOCATION_POSITION,  "vertexPosition"},
                 {VERTEX_ATTRIBUTE_LOCATION_COLOR,     "vertexColor"},
@@ -838,7 +703,7 @@ static ovrVertexAttribute ProgramVertexAttributes[] =
                 {VERTEX_ATTRIBUTE_LOCATION_TRANSFORM, "vertexTransform"}
         };
 
-static void ovrGeometry_Clear(ovrGeometry *geometry) {
+void ovrGeometry_Clear(ovrGeometry *geometry) {
     geometry->VertexBuffer = 0;
     geometry->IndexBuffer = 0;
     geometry->VertexArrayObject = 0;
@@ -850,7 +715,7 @@ static void ovrGeometry_Clear(ovrGeometry *geometry) {
     }
 }
 
-static void ovrGeometry_CreatePanel(ovrGeometry *geometry) {
+void ovrGeometry_CreatePanel(ovrGeometry *geometry) {
     typedef struct {
         float positions[4][4];
         float uv[4][2];
@@ -900,7 +765,7 @@ static void ovrGeometry_CreatePanel(ovrGeometry *geometry) {
     GL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
 }
 
-static void ovrGeometry_CreateTestMode(ovrGeometry *geometry) {
+void ovrGeometry_CreateTestMode(ovrGeometry *geometry) {
     typedef struct {
         float positions[8][4];
         unsigned char colors[8][4];
@@ -971,14 +836,14 @@ static void ovrGeometry_CreateTestMode(ovrGeometry *geometry) {
     GL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
 }
 
-static void ovrGeometry_Destroy(ovrGeometry *geometry) {
+void ovrGeometry_Destroy(ovrGeometry *geometry) {
     GL(glDeleteBuffers(1, &geometry->IndexBuffer));
     GL(glDeleteBuffers(1, &geometry->VertexBuffer));
 
     ovrGeometry_Clear(geometry);
 }
 
-static void ovrGeometry_CreateVAO(ovrGeometry *geometry) {
+void ovrGeometry_CreateVAO(ovrGeometry *geometry) {
     GL(glGenVertexArrays(1, &geometry->VertexArrayObject));
     GL(glBindVertexArray(geometry->VertexArrayObject));
 
@@ -1001,30 +866,13 @@ static void ovrGeometry_CreateVAO(ovrGeometry *geometry) {
     GL(glBindVertexArray(0));
 }
 
-static void ovrGeometry_DestroyVAO(ovrGeometry *geometry) {
+void ovrGeometry_DestroyVAO(ovrGeometry *geometry) {
     GL(glDeleteVertexArrays(1, &geometry->VertexArrayObject));
 }
 
-/*
-================================================================================
-
-ovrProgram
-
-================================================================================
-*/
-
-#define MAX_PROGRAM_UNIFORMS    8
-#define MAX_PROGRAM_TEXTURES    8
-
-typedef struct {
-    GLuint Program;
-    GLuint VertexShader;
-    GLuint FragmentShader;
-    // These will be -1 if not used by the program.
-    GLint UniformLocation[MAX_PROGRAM_UNIFORMS];    // ProgramUniforms[].name
-    GLint UniformBinding[MAX_PROGRAM_UNIFORMS];    // ProgramUniforms[].name
-    GLint Textures[MAX_PROGRAM_TEXTURES];            // Texture%i
-} ovrProgram;
+//
+// ovrProgram
+//
 
 enum E1test {
     UNIFORM_VIEW_ID,
@@ -1052,14 +900,14 @@ static ovrUniform ProgramUniforms[] =
 
 static const char *programVersion = "#version 300 es\n";
 
-static bool
+bool
 ovrProgram_Create(ovrProgram *program, const char *vertexSource, const char *fragmentSource,
                   const bool useMultiview) {
     GLint r;
 
     GL(program->VertexShader = glCreateShader(GL_VERTEX_SHADER));
     if (program->VertexShader == 0) {
-        ALOGE("glCreateShader error: %d", glGetError());
+        LOGE("glCreateShader error: %d", glGetError());
         return false;
     }
 
@@ -1074,7 +922,7 @@ ovrProgram_Create(ovrProgram *program, const char *vertexSource, const char *fra
     if (r == GL_FALSE) {
         GLchar msg[4096];
         GL(glGetShaderInfoLog(program->VertexShader, sizeof(msg), 0, msg));
-        ALOGE("%s\n%s\n", vertexSource, msg);
+        LOGE("%s\n%s\n", vertexSource, msg);
         return false;
     }
 
@@ -1086,7 +934,7 @@ ovrProgram_Create(ovrProgram *program, const char *vertexSource, const char *fra
     if (r == GL_FALSE) {
         GLchar msg[4096];
         GL(glGetShaderInfoLog(program->FragmentShader, sizeof(msg), 0, msg));
-        ALOGE("%s\n%s\n", fragmentSource, msg);
+        LOGE("%s\n%s\n", fragmentSource, msg);
         return false;
     }
 
@@ -1105,7 +953,7 @@ ovrProgram_Create(ovrProgram *program, const char *vertexSource, const char *fra
     if (r == GL_FALSE) {
         GLchar msg[4096];
         GL(glGetProgramInfoLog(program->Program, sizeof(msg), 0, msg));
-        ALOGE("Linking program failed: %s\n", msg);
+        LOGE("Linking program failed: %s\n", msg);
         return false;
     }
 
@@ -1145,7 +993,7 @@ ovrProgram_Create(ovrProgram *program, const char *vertexSource, const char *fra
     return true;
 }
 
-static void ovrProgram_Destroy(ovrProgram *program) {
+void ovrProgram_Destroy(ovrProgram *program) {
     if (program->Program != 0) {
         GL(glDeleteProgram(program->Program));
         program->Program = 0;
@@ -1160,36 +1008,14 @@ static void ovrProgram_Destroy(ovrProgram *program) {
     }
 }
 
-
-/*
-================================================================================
-
-ovrRenderer
-
-================================================================================
-*/
-
-
-
-ovrJava java;
-int SwapInterval = 1;
-bool CreatedScene = false;
-ovrProgram Program;
-ovrProgram ProgramLoading;
-ovrGeometry Panel;
-ovrGeometry TestMode;
-
+//
+// ovrRenderer
+//
 
 static int MAX_FENCES = 4;
 
-typedef struct {
-    ovrFramebuffer FrameBuffer[VRAPI_FRAME_LAYER_EYE_MAX];
-    int NumBuffers;
-    ovrFence *Fence;            // Per-frame completion fence
-    int FenceIndex;
-} ovrRenderer;
 
-static void ovrRenderer_Clear(ovrRenderer *renderer) {
+void ovrRenderer_Clear(ovrRenderer *renderer) {
     for (int eye = 0; eye < VRAPI_FRAME_LAYER_EYE_MAX; eye++) {
         ovrFramebuffer_Clear(&renderer->FrameBuffer[eye]);
     }
@@ -1198,10 +1024,11 @@ static void ovrRenderer_Clear(ovrRenderer *renderer) {
     renderer->FenceIndex = 0;
 }
 
-static void
-ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMultiview, int width, int height) {
+void
+ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMultiview, int width, int height
+        , int SurfaceTextureID, int LoadingTexture) {
     renderer->NumBuffers = useMultiview ? 1 : VRAPI_FRAME_LAYER_EYE_MAX;
-
+    renderer->UseMultiview = useMultiview;
     // Create the frame buffers.
     for (int eye = 0; eye < renderer->NumBuffers; eye++) {
         ovrFramebuffer_Create(&renderer->FrameBuffer[eye], useMultiview,
@@ -1215,9 +1042,36 @@ ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMul
     for (int i = 0; i < MAX_FENCES; i++) {
         ovrFence_Create(&renderer->Fence[i]);
     }
+    renderer->SurfaceTextureID = SurfaceTextureID;
+    renderer->LoadingTexture = LoadingTexture;
+    renderer->SceneCreated = false;
 }
 
-static void ovrRenderer_Destroy(ovrRenderer *renderer) {
+
+void ovrRenderer_CreateScene(ovrRenderer *renderer) {
+    if(renderer->SceneCreated) {
+        return;
+    }
+    ovrProgram_Create(&renderer->Program, VERTEX_SHADER, FRAGMENT_SHADER, renderer->UseMultiview);
+    ovrProgram_Create(&renderer->ProgramLoading, VERTEX_SHADER_LOADING, FRAGMENT_SHADER_LOADING,
+                      renderer->UseMultiview);
+    ovrGeometry_CreatePanel(&renderer->Panel);
+    ovrGeometry_CreateVAO(&renderer->Panel);
+    ovrGeometry_CreateTestMode(&renderer->TestMode);
+    ovrGeometry_CreateVAO(&renderer->TestMode);
+    renderer->SceneCreated = true;
+}
+
+void ovrRenderer_Destroy(ovrRenderer *renderer) {
+    if(renderer->SceneCreated) {
+        ovrProgram_Destroy(&renderer->Program);
+        ovrProgram_Destroy(&renderer->ProgramLoading);
+        ovrGeometry_DestroyVAO(&renderer->Panel);
+        ovrGeometry_Destroy(&renderer->Panel);
+        ovrGeometry_DestroyVAO(&renderer->TestMode);
+        ovrGeometry_Destroy(&renderer->TestMode);
+    }
+
     for (int eye = 0; eye < renderer->NumBuffers; eye++) {
         ovrFramebuffer_Destroy(&renderer->FrameBuffer[eye]);
     }
@@ -1228,10 +1082,10 @@ static void ovrRenderer_Destroy(ovrRenderer *renderer) {
     free(renderer->Fence);
 }
 
-static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava *java,
+ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava *java,
                                                    const ovrTracking2 *tracking, ovrMobile *ovr,
                                                    unsigned long long *completionFence,
-                                                   bool loading) {
+                                                   bool loading, int enableTestMode) {
     ovrTracking2 updatedTracking = *tracking;
 
     ovrLayerProjection2 layer = vrapi_DefaultLayerProjection2();
@@ -1257,14 +1111,14 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
         ovrFramebuffer_SetCurrent(frameBuffer);
 
         if (loading) {
-            GL(glUseProgram(ProgramLoading.Program));
+            GL(glUseProgram(renderer->ProgramLoading.Program));
         } else {
-            GL(glUseProgram(Program.Program));
+            GL(glUseProgram(renderer->Program.Program));
         }
-        if (Program.UniformLocation[UNIFORM_VIEW_ID] >=
+        if (renderer->Program.UniformLocation[UNIFORM_VIEW_ID] >=
             0)  // NOTE: will not be present when multiview path is enabled.
         {
-            GL(glUniform1i(Program.UniformLocation[UNIFORM_VIEW_ID], eye));
+            GL(glUniform1i(renderer->Program.UniformLocation[UNIFORM_VIEW_ID], eye));
         }
         GL(glEnable(GL_SCISSOR_TEST));
         GL(glDepthMask(GL_TRUE));
@@ -1278,7 +1132,7 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
         GL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 
         //enableTestMode = 0;
-        GL(glUniform1i(Program.UniformLocation[UNIFORM_ENABLE_TEST_MODE], enableTestMode));
+        GL(glUniform1i(renderer->Program.UniformLocation[UNIFORM_ENABLE_TEST_MODE], enableTestMode));
         if ((enableTestMode & 1) != 0) {
             int N = 10;
             for (int i = 0; i < N; i++) {
@@ -1316,24 +1170,24 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
                     LOG("mm:\n%s", DumpMatrix(&TestModeMatrix[0]).c_str());
                 }
 
-                GL(glUniformMatrix4fv(Program.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
+                GL(glUniformMatrix4fv(renderer->Program.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
                                       (float *) TestModeMatrix));
-                GL(glBindVertexArray(TestMode.VertexArrayObject));
+                GL(glBindVertexArray(renderer->TestMode.VertexArrayObject));
 
                 if (i < 2) {
                     GL(glActiveTexture(GL_TEXTURE0));
-                    GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, SurfaceTextureID));
+                    GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->SurfaceTextureID));
                 } else {
                     GL(glActiveTexture(GL_TEXTURE0));
                     GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
                 }
 
-                GL(glDrawElements(GL_TRIANGLES, TestMode.IndexCount, GL_UNSIGNED_SHORT, NULL));
+                GL(glDrawElements(GL_TRIANGLES, renderer->TestMode.IndexCount, GL_UNSIGNED_SHORT, NULL));
             }
         } else if (loading) {
-            GL(glBindVertexArray(Panel.VertexArrayObject));
+            GL(glBindVertexArray(renderer->Panel.VertexArrayObject));
             GL(glActiveTexture(GL_TEXTURE0));
-            GL(glBindTexture(GL_TEXTURE_2D, loadingTexture));
+            GL(glBindTexture(GL_TEXTURE_2D, renderer->LoadingTexture));
 
             // Display information message on front and back of user.
             for (int i = 0; i < 2; i++) {
@@ -1363,25 +1217,25 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
                 mvpMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ProjectionMatrix,
                                                     &mvpMatrix[1]);
 
-                GL(glUniformMatrix4fv(Program.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
+                GL(glUniformMatrix4fv(renderer->Program.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
                                       (float *) mvpMatrix));
 
-                GL(glDrawElements(GL_TRIANGLES, Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
+                GL(glDrawElements(GL_TRIANGLES, renderer->Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
             }
         } else {
             ovrMatrix4f mvpMatrix[2];
             mvpMatrix[0] = ovrMatrix4f_CreateIdentity();
             mvpMatrix[1] = ovrMatrix4f_CreateIdentity();
 
-            GL(glBindVertexArray(Panel.VertexArrayObject));
+            GL(glBindVertexArray(renderer->Panel.VertexArrayObject));
 
             GL(glActiveTexture(GL_TEXTURE0));
-            GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, SurfaceTextureID));
+            GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->SurfaceTextureID));
 
-            GL(glUniformMatrix4fv(Program.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
+            GL(glUniformMatrix4fv(renderer->Program.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
                                   (float *) mvpMatrix));
 
-            GL(glDrawElements(GL_TRIANGLES, Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
+            GL(glDrawElements(GL_TRIANGLES, renderer->Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
         }
 
         GL(glBindVertexArray(0));
@@ -1426,656 +1280,3 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const 
     return layer;
 }
 
-
-ovrRenderer Renderer;
-
-void onVrModeChange(JNIEnv *env) {
-    if (Resumed && window != NULL) {
-        if (Ovr == NULL) {
-            ALOGV("Entering VR mode.");
-            ovrModeParms parms = vrapi_DefaultModeParms(&java);
-
-            parms.Flags |= VRAPI_MODE_FLAG_RESET_WINDOW_FULLSCREEN;
-
-            parms.Flags |= VRAPI_MODE_FLAG_NATIVE_WINDOW;
-            parms.Display = (size_t) egl.Display;
-            parms.WindowSurface = (size_t) window;
-            parms.ShareContext = (size_t) egl.Context;
-
-            Ovr = vrapi_EnterVrMode(&parms);
-
-            if (Ovr == NULL) {
-                ALOGE("Invalid ANativeWindow");
-                return;
-            }
-
-            int CpuLevel = 2;
-            int GpuLevel = 3;
-            vrapi_SetClockLevels(Ovr, CpuLevel, GpuLevel);
-
-            ALOGV("		vrapi_SetClockLevels( %d, %d )", CpuLevel, GpuLevel);
-
-            vrapi_SetPerfThread(Ovr, VRAPI_PERF_THREAD_TYPE_MAIN, gettid());
-
-            ALOGV("		vrapi_SetPerfThread( MAIN, %d )", gettid());
-
-            //vrapi_SetTrackingTransform( Ovr, vrapi_GetTrackingTransform( Ovr, VRAPI_TRACKING_TRANSFORM_SYSTEM_CENTER_FLOOR_LEVEL ) );
-        }
-    } else {
-        if (Ovr != NULL) {
-            ALOGV("Leaving VR mode.");
-            vrapi_LeaveVrMode(Ovr);
-            Ovr = NULL;
-        }
-    }
-}
-
-static void ovrApp_PushBlackFinal()
-{
-    int frameFlags = 0;
-    frameFlags |= VRAPI_FRAME_FLAG_FLUSH | VRAPI_FRAME_FLAG_FINAL;
-
-    ovrLayerProjection2 layer = vrapi_DefaultLayerBlackProjection2();
-    layer.Header.Flags |= VRAPI_FRAME_LAYER_FLAG_INHIBIT_SRGB_FRAMEBUFFER;
-
-    const ovrLayerHeader2 * layers[] =
-            {
-                    &layer.Header
-            };
-
-    ovrSubmitFrameDescription2 frameDesc = {};
-    frameDesc.Flags = frameFlags;
-    frameDesc.SwapInterval = 1;
-    frameDesc.FrameIndex = FrameIndex;
-    frameDesc.DisplayTime = GetTimeInSeconds();
-    frameDesc.LayerCount = 1;
-    frameDesc.Layers = layers;
-
-    vrapi_SubmitFrame2( Ovr, &frameDesc );
-}
-
-static void ovrApp_BackButtonAction()
-{
-    if ( BackButtonState == BACK_BUTTON_STATE_PENDING_SHORT_PRESS && !BackButtonDown )
-    {
-        if ( ( GetTimeInSeconds() - BackButtonDownStartTime ) >
-             vrapi_GetSystemPropertyFloat( &java, VRAPI_SYS_PROP_BACK_BUTTON_SHORTPRESS_TIME ) )
-        {
-            ALOGV( "back button short press" );
-            ALOGV( "        ovrApp_PushBlackFinal()" );
-            ovrApp_PushBlackFinal();
-            ALOGV( "        vrapi_ShowSystemUI( confirmQuit )" );
-            vrapi_ShowSystemUI( &java, VRAPI_SYS_UI_CONFIRM_QUIT_MENU );
-            BackButtonState = BACK_BUTTON_STATE_NONE;
-        }
-    }
-}
-
-static int ovrApp_HandleKeyEvent( const int keyCode, const int action )
-{
-    LOG("HandleKeyEvent: keyCode=%d action=%d", keyCode, action);
-    // Handle back button.
-    if ( keyCode == AKEYCODE_BACK )
-    {
-        if ( action == AKEY_EVENT_ACTION_DOWN )
-        {
-            if ( !BackButtonDown )
-            {
-                BackButtonDownStartTime = GetTimeInSeconds();
-            }
-            BackButtonDown = true;
-        }
-        else if ( action == AKEY_EVENT_ACTION_UP )
-        {
-            if ( BackButtonState == BACK_BUTTON_STATE_NONE )
-            {
-                if ( ( GetTimeInSeconds() - BackButtonDownStartTime ) <
-                     vrapi_GetSystemPropertyFloat( &java, VRAPI_SYS_PROP_BACK_BUTTON_SHORTPRESS_TIME ) )
-                {
-                    BackButtonState = BACK_BUTTON_STATE_PENDING_SHORT_PRESS;
-                }
-            }
-            else if ( BackButtonState == BACK_BUTTON_STATE_SKIP_UP )
-            {
-                BackButtonState = BACK_BUTTON_STATE_NONE;
-            }
-            BackButtonDown = false;
-        }
-        return 1;
-    }
-    return 0;
-}
-
-void renderLoadingScene() {
-    double DisplayTime = GetTimeInSeconds();
-
-    ovrApp_BackButtonAction();
-
-    // Show a loading icon.
-    FrameIndex++;
-
-    double displayTime = vrapi_GetPredictedDisplayTime(Ovr, FrameIndex);
-    ovrTracking2 tracking = vrapi_GetPredictedTracking2(Ovr, displayTime);
-
-    unsigned long long completionFence = 0;
-
-    const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java,
-                                                                   &tracking,
-                                                                   Ovr, &completionFence, true);
-
-    const ovrLayerHeader2 *layers[] =
-            {
-                    &worldLayer.Header
-            };
-
-
-    ovrSubmitFrameDescription2 frameDesc = {};
-    frameDesc.Flags = 0;
-    frameDesc.SwapInterval = 1;
-    frameDesc.FrameIndex = FrameIndex;
-    frameDesc.DisplayTime = DisplayTime;
-    frameDesc.LayerCount = 1;
-    frameDesc.Layers = layers;
-
-    vrapi_SubmitFrame2(Ovr, &frameDesc);
-
-    if (!CreatedScene) {
-        ovrProgram_Create(&Program, VERTEX_SHADER, FRAGMENT_SHADER, UseMultiview);
-        ovrProgram_Create(&ProgramLoading, VERTEX_SHADER_LOADING, FRAGMENT_SHADER_LOADING,
-                          UseMultiview);
-        ovrGeometry_CreatePanel(&Panel);
-        ovrGeometry_CreateVAO(&Panel);
-        ovrGeometry_CreateTestMode(&TestMode);
-        ovrGeometry_CreateVAO(&TestMode);
-
-        CreatedScene = true;
-    }
-}
-
-
-void chooseRefreshRate(){
-    int numberOfRefreshRates = vrapi_GetSystemPropertyInt(&java, VRAPI_SYS_PROP_NUM_SUPPORTED_DISPLAY_REFRESH_RATES);
-    std::vector<float> refreshRates(numberOfRefreshRates);
-    vrapi_GetSystemPropertyFloatArray(&java, VRAPI_SYS_PROP_SUPPORTED_DISPLAY_REFRESH_RATES, &refreshRates[0], numberOfRefreshRates);
-
-    support72hz = false;
-    std::string refreshRateList = "";
-    char str[100];
-    for(int i = 0; i < numberOfRefreshRates; i++) {
-        snprintf(str, sizeof(str), "%f", refreshRates[i]);
-        refreshRateList += str;
-        if(i != numberOfRefreshRates - 1) {
-            refreshRateList += ", ";
-        }
-        if(((int)refreshRates[i]) == 72) {
-            support72hz = true;
-        }
-    }
-    LOG("Supported refresh rates: %s", refreshRateList.c_str());
-
-    if(support72hz) {
-        LOG("Use 72 Hz refresh rate.");
-        vrapi_SetDisplayRefreshRate(Ovr, 72.0f);
-    }else {
-        LOG("Use 60 Hz refresh rate.");
-    }
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_VrAPI_initialize(JNIEnv *env, jobject instance, jobject activity) {
-    LOG("Initializing EGL.");
-    eglInit();
-
-    EglInitExtensions();
-
-    java.Env = env;
-    env->GetJavaVM(&java.Vm);
-    java.ActivityObject = env->NewGlobalRef(activity);
-
-    const ovrInitParms initParms = vrapi_DefaultInitParms(&java);
-    int32_t initResult = vrapi_Initialize(&initParms);
-    if (initResult != VRAPI_INITIALIZE_SUCCESS) {
-        // If initialization failed, vrapi_* function calls will not be available.
-        ALOGE("vrapi_Initialize failed");
-        return;
-    }
-
-    UseMultiview &= (glExtensions.multi_view &&
-                     vrapi_GetSystemPropertyInt(&java, VRAPI_SYS_PROP_MULTIVIEW_AVAILABLE));
-    ALOGV("UseMultiview:%d", UseMultiview);
-
-    chooseRefreshRate();
-
-    FrameBufferWidth = vrapi_GetSystemPropertyInt(&java,
-                               VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_WIDTH);
-    FrameBufferHeight = vrapi_GetSystemPropertyInt(&java,
-                               VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_HEIGHT);
-    ovrRenderer_Create(&Renderer, &java, UseMultiview, FrameBufferWidth, FrameBufferHeight);
-
-    //
-    // Generate texture for SurfaceTexture which is output of MediaCodec.
-    //
-    GLuint textures[2];
-    glGenTextures(2, textures);
-
-    SurfaceTextureID = textures[0];
-    loadingTexture = textures[1];
-
-    glBindTexture(GL_TEXTURE_EXTERNAL_OES, SurfaceTextureID);
-
-    glTexParameterf(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER,
-                    GL_NEAREST);
-    glTexParameterf(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER,
-                    GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S,
-                    GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T,
-                    GL_CLAMP_TO_EDGE);
-
-    BackButtonState = BACK_BUTTON_STATE_NONE;
-    BackButtonDown = false;
-    BackButtonDownStartTime = 0.0;
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_VrAPI_destroy(JNIEnv *env, jobject instance) {
-    LOG("Destroying EGL.");
-
-    ovrRenderer_Destroy(&Renderer);
-
-    ovrProgram_Destroy(&Program);
-    ovrProgram_Destroy(&ProgramLoading);
-    ovrGeometry_DestroyVAO(&Panel);
-    ovrGeometry_Destroy(&Panel);
-    ovrGeometry_DestroyVAO(&TestMode);
-    ovrGeometry_Destroy(&TestMode);
-
-    GLuint textures[2] = {SurfaceTextureID, loadingTexture};
-    glDeleteTextures(2, textures);
-
-    CreatedScene = false;
-    eglDestroy();
-
-    vrapi_Shutdown();
-}
-
-
-extern "C"
-JNIEXPORT jint JNICALL
-Java_com_polygraphene_alvr_VrAPI_createLoadingTexture(JNIEnv *env, jobject instance) {
-    return loadingTexture;
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_VrAPI_render(JNIEnv *env, jobject instance, jobject callback, jobject latencyCollector) {
-    if (!CreatedScene) {
-        // Show a loading message.
-        renderLoadingScene();
-    }
-
-    ovrApp_BackButtonAction();
-
-    double currentTime = GetTimeInSeconds();
-
-    unsigned long long completionFence = 0;
-
-    jclass clazz = env->GetObjectClass(callback);
-    jmethodID waitFrame = env->GetMethodID(clazz, "waitFrame", "()J");
-    int64_t renderedFrameIndex = 0;
-    for (int i = 0; i < 10; i++) {
-        renderedFrameIndex = env->CallLongMethod(callback, waitFrame);
-        if (renderedFrameIndex == -1) {
-            // Activity has Paused or connection becomes idle
-            return;
-        }
-        FrameLog(renderedFrameIndex, "Got frame for render. wanted FrameIndex=%lu waiting=%.3f ms delay=%lu",
-              WantedFrameIndex,
-              (GetTimeInSeconds() - currentTime) * 1000,
-              WantedFrameIndex - renderedFrameIndex);
-        if (WantedFrameIndex <= renderedFrameIndex) {
-            break;
-        }
-        if ((enableTestMode & 4) != 0) {
-            break;
-        }
-    }
-
-    uint64_t mostOldFrame = 0;
-    uint64_t mostRecentFrame = 0;
-    std::shared_ptr<TrackingFrame> frame;
-    {
-        MutexLock lock(trackingFrameMutex);
-
-        if(trackingFrameMap.size() > 0) {
-            mostOldFrame = trackingFrameMap.cbegin()->second->frameIndex;
-            mostRecentFrame = trackingFrameMap.crbegin()->second->frameIndex;
-        }
-
-        const auto it = trackingFrameMap.find(renderedFrameIndex);
-        if(it != trackingFrameMap.end()) {
-            frame = it->second;
-        }else {
-            // No matching tracking info. Too old frame.
-            LOG("Too old frame has arrived. Instead, we use most old tracking data in trackingFrameMap. FrameIndex=%lu WantedFrameIndex=%lu trackingFrameMap=(%lu - %lu)",
-                renderedFrameIndex, WantedFrameIndex, mostOldFrame, mostRecentFrame);
-            if(trackingFrameMap.size() > 0) {
-                frame = trackingFrameMap.cbegin()->second;
-            } else {
-                return;
-            }
-        }
-    }
-
-    FrameLog(renderedFrameIndex, "Frame latency is %lu us. foundFrameIndex=%lu LatestFrameIndex=%lu", getTimestampUs() - frame->fetchTime,
-        frame->frameIndex, FrameIndex);
-
-// Render eye images and setup the primary layer using ovrTracking2.
-    const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java,
-                                                                   &frame->tracking,
-                                                                   Ovr, &completionFence, false);
-
-    clazz = env->GetObjectClass(latencyCollector);
-    jmethodID SubmitMethodID = env->GetMethodID(clazz, "Rendered2", "(J)V");
-    env->CallVoidMethod(latencyCollector, SubmitMethodID, renderedFrameIndex);
-
-    const ovrLayerHeader2 *layers2[] =
-            {
-                    &worldLayer.Header
-            };
-
-    // TODO
-    double DisplayTime = 0.0;
-
-    ovrSubmitFrameDescription2 frameDesc = {};
-    frameDesc.
-            Flags = 0;
-    frameDesc.
-            SwapInterval = SwapInterval;
-    frameDesc.
-            FrameIndex = renderedFrameIndex;
-    frameDesc.
-            CompletionFence = completionFence;
-    frameDesc.
-            DisplayTime = DisplayTime;
-    frameDesc.
-            LayerCount = 1;
-    frameDesc.
-            Layers = layers2;
-
-    WantedFrameIndex = renderedFrameIndex + 1;
-
-// Hand over the eye images to the time warp.
-    ovrResult res = vrapi_SubmitFrame2(Ovr, &frameDesc);
-
-    FrameLog(renderedFrameIndex, "vrapi_SubmitFrame2 Orientation=(%f, %f, %f, %f)"
-            , frame->tracking.HeadPose.Pose.Orientation.x
-            , frame->tracking.HeadPose.Pose.Orientation.y
-            , frame->tracking.HeadPose.Pose.Orientation.z
-            , frame->tracking.HeadPose.Pose.Orientation.w
-    );
-    if (suspend) {
-        ALOGV("submit enter suspend");
-        while (suspend) {
-            usleep(1000 * 10);
-        }
-        ALOGV("submit leave suspend");
-    }
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_VrAPI_renderLoading(JNIEnv *env, jobject instance) {
-    renderLoadingScene();
-}
-
-void setControllerInfo(TrackingInfo *packet, double displayTime) {
-    packet->enableController = 0;
-    packet->controllerFlags = 0;
-
-    for ( uint32_t deviceIndex = 0; ; deviceIndex++ )
-    {
-        ovrInputCapabilityHeader curCaps;
-
-        if ( vrapi_EnumerateInputDevices( Ovr, deviceIndex, &curCaps ) < 0 )
-        {
-            break;
-        }
-
-        //LOG("Device %d: Type=%d ID=%d", deviceIndex, curCaps.Type, curCaps.DeviceID);
-        if(curCaps.Type == ovrControllerType_TrackedRemote) {
-            // Gear VR / Oculus Go 3DoF Controller
-            ovrInputTrackedRemoteCapabilities remoteCapabilities;
-            remoteCapabilities.Header = curCaps;
-            ovrResult result = vrapi_GetInputDeviceCapabilities(Ovr, &remoteCapabilities.Header);
-            if(result == ovrSuccess) {
-                packet->enableController = 1;
-
-                //LOG("Device %d: Type=%d ID=%d Cap=%08X Buttons=%08X Max=%d,%d Size=%f,%f", deviceIndex, curCaps.Type, curCaps.DeviceID
-                //, remoteCapabilities.ControllerCapabilities, remoteCapabilities.ButtonCapabilities
-                //, remoteCapabilities.TrackpadMaxX, remoteCapabilities.TrackpadMaxY
-                //, remoteCapabilities.TrackpadSizeX, remoteCapabilities.TrackpadSizeY);
-
-                if((remoteCapabilities.ControllerCapabilities & ovrControllerCaps_LeftHand) != 0) {
-                    packet->controllerFlags |= TrackingInfo::CONTROLLER_FLAG_LEFTHAND;
-                }
-                if((remoteCapabilities.ControllerCapabilities & ovrControllerCaps_ModelOculusGo) != 0) {
-                    packet->controllerFlags |= TrackingInfo::CONTROLLER_FLAG_OCULUSGO;
-                }
-                ovrInputStateTrackedRemote remoteInputState;
-                remoteInputState.Header.ControllerType = remoteCapabilities.Header.Type;
-                ovrResult result = vrapi_GetCurrentInputState( Ovr, remoteCapabilities.Header.DeviceID, &remoteInputState.Header );
-
-                if(result == ovrSuccess) {
-                    packet->controllerButtons = remoteInputState.Buttons;
-                    if (remoteInputState.TrackpadStatus) {
-                        packet->controllerFlags |= TrackingInfo::CONTROLLER_FLAG_TRACKPAD_TOUCH;
-                    }
-                    // Normalize to -1.0 - +1.0 for OpenVR Input. y-asix should be reversed.
-                    packet->controllerTrackpadPosition.x = remoteInputState.TrackpadPosition.x / remoteCapabilities.TrackpadMaxX * 2.0f - 1.0f;
-                    packet->controllerTrackpadPosition.y = remoteInputState.TrackpadPosition.y / remoteCapabilities.TrackpadMaxY * 2.0f - 1.0f;
-                    packet->controllerTrackpadPosition.y = -packet->controllerTrackpadPosition.y;
-                    packet->controllerBatteryPercentRemaining = remoteInputState.BatteryPercentRemaining;
-                    packet->controllerRecenterCount = remoteInputState.RecenterCount;
-
-                    ovrTracking tracking;
-                    if (vrapi_GetInputTrackingState(Ovr, remoteCapabilities.Header.DeviceID,
-                                                    displayTime, &tracking) != ovrSuccess) {
-                        LOG("vrapi_GetInputTrackingState failed. Device was disconnected?");
-                    } else {
-                        memcpy(&packet->controller_Pose_Orientation,
-                               &tracking.HeadPose.Pose.Orientation,
-                               sizeof(tracking.HeadPose.Pose.Orientation));
-                        memcpy(&packet->controller_Pose_Position, &tracking.HeadPose.Pose.Position,
-                               sizeof(tracking.HeadPose.Pose.Position));
-                        memcpy(&packet->controller_AngularVelocity,
-                               &tracking.HeadPose.AngularVelocity,
-                               sizeof(tracking.HeadPose.AngularVelocity));
-                        memcpy(&packet->controller_LinearVelocity,
-                               &tracking.HeadPose.LinearVelocity,
-                               sizeof(tracking.HeadPose.LinearVelocity));
-                        memcpy(&packet->controller_AngularAcceleration,
-                               &tracking.HeadPose.AngularAcceleration,
-                               sizeof(tracking.HeadPose.AngularAcceleration));
-                        memcpy(&packet->controller_LinearAcceleration,
-                               &tracking.HeadPose.LinearAcceleration,
-                               sizeof(tracking.HeadPose.LinearAcceleration));
-                    }
-                }
-                // OK. Filled all controller info.
-                // Skip other devices.
-                break;
-            }
-        }
-    }
-}
-
-void sendTrackingInfo(JNIEnv *env, jobject callback, double displayTime, ovrTracking2 *tracking) {
-    jbyteArray array = env->NewByteArray(sizeof(TrackingInfo));
-    TrackingInfo *packet = (TrackingInfo *) env->GetByteArrayElements(array, 0);
-    memset(packet, 0, sizeof(TrackingInfo));
-
-    uint64_t clientTime = getTimestampUs();
-
-    packet->type = ALVR_PACKET_TYPE_TRACKING_INFO;
-    packet->clientTime = clientTime;
-    packet->FrameIndex = FrameIndex;
-    packet->predictedDisplayTime = displayTime;
-
-    memcpy(&packet->HeadPose_Pose_Orientation, &tracking->HeadPose.Pose.Orientation, sizeof(ovrQuatf));
-    memcpy(&packet->HeadPose_Pose_Position, &tracking->HeadPose.Pose.Position, sizeof(ovrVector3f));
-
-    memcpy(&packet->HeadPose_AngularVelocity, &tracking->HeadPose.AngularVelocity, sizeof(ovrVector3f));
-    memcpy(&packet->HeadPose_LinearVelocity, &tracking->HeadPose.LinearVelocity, sizeof(ovrVector3f));
-    memcpy(&packet->HeadPose_AngularAcceleration, &tracking->HeadPose.AngularAcceleration, sizeof(ovrVector3f));
-    memcpy(&packet->HeadPose_LinearAcceleration, &tracking->HeadPose.LinearAcceleration, sizeof(ovrVector3f));
-
-    setControllerInfo(packet, displayTime);
-
-    env->ReleaseByteArrayElements(array, (jbyte *) packet, 0);
-
-    FrameLog(FrameIndex, "Sending tracking info.");
-
-    jclass clazz = env->GetObjectClass(callback);
-    jmethodID sendTracking = env->GetMethodID(clazz, "onSendTracking", "([BIJ)V");
-
-    env->CallVoidMethod(callback, sendTracking, array, sizeof(TrackingInfo), FrameIndex);
-}
-
-// Called from TrackingThread
-extern "C"
-JNIEXPORT jlong JNICALL
-Java_com_polygraphene_alvr_VrAPI_fetchTrackingInfo(JNIEnv *env, jobject instance,
-                                                   jobject callback) {
-    std::shared_ptr<TrackingFrame> frame(new TrackingFrame());
-
-    FrameIndex++;
-
-    frame->frameIndex = FrameIndex;
-    frame->fetchTime = getTimestampUs();
-
-    frame->displayTime = vrapi_GetPredictedDisplayTime(Ovr, FrameIndex);
-    frame->tracking = vrapi_GetPredictedTracking2(Ovr, frame->displayTime);
-
-    {
-        MutexLock lock(trackingFrameMutex);
-        trackingFrameMap.insert(std::pair<uint64_t, std::shared_ptr<TrackingFrame> >(FrameIndex, frame));
-        if (trackingFrameMap.size() > MAXIMUM_TRACKING_FRAMES) {
-            trackingFrameMap.erase(trackingFrameMap.cbegin());
-        }
-    }
-
-    sendTrackingInfo(env, callback, frame->displayTime, &frame->tracking);
-
-    return FrameIndex;
-}
-
-extern "C"
-JNIEXPORT jint JNICALL
-Java_com_polygraphene_alvr_VrAPI_getSurfaceTextureID(JNIEnv *env, jobject instance) {
-    return SurfaceTextureID;
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_VrAPI_onChangeSettings(JNIEnv *env, jobject instance,
-                                                  jint EnableTestMode, jint Suspend) {
-    enableTestMode = EnableTestMode;
-    suspend = Suspend;
-}
-
-//
-// Life cycle management.
-//
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_VrAPI_onSurfaceCreated(JNIEnv *env, jobject instance,
-                                                  jobject surface) {
-    LOG("onSurfaceCreated called. Resumed=%d Window=%p Ovr=%p", Resumed, window, Ovr);
-    window = ANativeWindow_fromSurface(env, surface);
-
-    onVrModeChange(env);
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_VrAPI_onSurfaceDestroyed(JNIEnv *env, jobject instance) {
-    LOG("onSurfaceDestroyed called. Resumed=%d Window=%p Ovr=%p", Resumed, window, Ovr);
-    if (window != NULL) {
-        ANativeWindow_release(window);
-    }
-    window = NULL;
-
-    onVrModeChange(env);
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_VrAPI_onSurfaceChanged(JNIEnv *env, jobject instance, jobject surface) {
-    LOG("onSurfaceChanged called. Resumed=%d Window=%p Ovr=%p", Resumed, window, Ovr);
-    ANativeWindow *newWindow = ANativeWindow_fromSurface(env, surface);
-    if (newWindow != window) {
-        ANativeWindow_release(window);
-        window = NULL;
-        onVrModeChange(env);
-
-        window = newWindow;
-        if (window != NULL) {
-            onVrModeChange(env);
-        }
-    } else if (newWindow != NULL) {
-        ANativeWindow_release(newWindow);
-    }
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_VrAPI_onResume(JNIEnv *env, jobject instance) {
-    LOG("onResume called. Resumed=%d Window=%p Ovr=%p", Resumed, window, Ovr);
-    Resumed = true;
-    onVrModeChange(env);
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_VrAPI_onPause(JNIEnv *env, jobject instance) {
-    LOG("onPause called. Resumed=%d Window=%p Ovr=%p", Resumed, window, Ovr);
-    Resumed = false;
-    onVrModeChange(env);
-}
-
-extern "C"
-JNIEXPORT jboolean JNICALL
-Java_com_polygraphene_alvr_VrAPI_isVrMode(JNIEnv *env, jobject instance) {
-    return Ovr != NULL;
-}
-
-extern "C"
-JNIEXPORT jboolean JNICALL
-Java_com_polygraphene_alvr_VrAPI_is72Hz(JNIEnv *env, jobject instance) {
-    return support72hz;
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_VrAPI_setFrameGeometry(JNIEnv *env, jobject instance, jint width,
-                                                  jint height) {
-    int eye_width = width / 2;
-    if(eye_width != FrameBufferWidth || height != FrameBufferHeight) {
-        LOG("Changing FrameBuffer geometry. Old=%dx%d New=%dx%d", FrameBufferWidth, FrameBufferHeight, eye_width, height);
-        FrameBufferWidth = eye_width;
-        FrameBufferHeight = height;
-        ovrRenderer_Destroy(&Renderer);
-        ovrRenderer_Create(&Renderer, &java, UseMultiview, FrameBufferWidth, FrameBufferHeight);
-    }
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_VrAPI_onKeyEvent(JNIEnv *env, jobject instance, jint keyCode,
-                                            jint action) {
-    ovrApp_HandleKeyEvent(keyCode, action);
-}

@@ -6,6 +6,7 @@
 #include <android/log.h>
 #include <pthread.h>
 #include <string>
+#include <VrApi_Types.h>
 
 #define LOG(...) __android_log_print(ANDROID_LOG_DEBUG, "ALVR Native", __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "ALVR Native", __VA_ARGS__)
@@ -68,6 +69,25 @@ inline std::string GetStringFromJNIString(JNIEnv *env, jstring string){
     env->ReleaseStringUTFChars(string, buf);
 
     return ret;
+}
+
+inline double GetTimeInSeconds() {
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return (now.tv_sec * 1e9 + now.tv_nsec) * 0.000000001;
+}
+
+inline std::string DumpMatrix(const ovrMatrix4f *matrix) {
+    char buf[1000];
+    sprintf(buf, "%.5f, %.5f, %.5f, %.5f\n"
+                    "%.5f, %.5f, %.5f, %.5f\n"
+                    "%.5f, %.5f, %.5f, %.5f\n"
+                    "%.5f, %.5f, %.5f, %.5f\n", matrix->M[0][0], matrix->M[0][1], matrix->M[0][2],
+            matrix->M[0][3], matrix->M[1][0], matrix->M[1][1], matrix->M[1][2], matrix->M[1][3],
+            matrix->M[2][0], matrix->M[2][1], matrix->M[2][2], matrix->M[2][3], matrix->M[3][0],
+            matrix->M[3][1], matrix->M[3][2], matrix->M[3][3]
+    );
+    return std::string(buf);
 }
 
 #endif //ALVRCLIENT_UTILS_H
