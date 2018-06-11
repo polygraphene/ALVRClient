@@ -213,6 +213,11 @@ class VrThread extends Thread {
         mQueue.post(runnable);
     }
 
+    private void send(Runnable runnable) {
+        waitLooperPrepared();
+        mQueue.send(runnable);
+    }
+
     private void waitLooperPrepared() {
         synchronized (this) {
             while (mQueue == null) {
@@ -333,7 +338,9 @@ class VrThread extends Thread {
     private UdpReceiverThread.Callback mOnChangeSettingsCallback = new UdpReceiverThread.Callback() {
         @Override
         public void onConnected(final int width, final int height) {
-            post(new Runnable() {
+            // We must wait completion of notifyGeometryChange
+            // to ensure the first video frame arrives after notifyGeometryChange.
+            send(new Runnable() {
                 @Override
                 public void run() {
                     mVrAPI.setFrameGeometry(width, height);

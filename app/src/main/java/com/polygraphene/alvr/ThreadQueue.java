@@ -7,8 +7,30 @@ public class ThreadQueue {
     private boolean mStopped = false;
 
     synchronized public void post(Runnable runnable) {
+        if(mStopped) {
+            return;
+        }
         mQueue.addLast(runnable);
         notifyAll();
+    }
+
+    // Post runnable and wait completion.
+    public void send(Runnable runnable) {
+        synchronized (this) {
+            if(mStopped) {
+                return;
+            }
+            mQueue.addLast(runnable);
+            notifyAll();
+
+            while(mQueue.contains(runnable)) {
+                try {
+                    wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
     }
 
     public boolean waitIdle() {
@@ -17,9 +39,7 @@ public class ThreadQueue {
             if (mStopped) {
                 return false;
             }
-            if (runnable != null) {
-                runnable.run();
-            }
+            runnable.run();
         }
         if(mStopped) {
             return false;
@@ -36,6 +56,8 @@ public class ThreadQueue {
         if (mQueue.size() == 0) {
             return null;
         }
+        // Notify queue change for threads waiting completion of "send" method.
+        notifyAll();
         return mQueue.removeFirst();
     }
 

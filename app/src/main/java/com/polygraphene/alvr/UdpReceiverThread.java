@@ -148,8 +148,4 @@ class UdpReceiverThread implements NALParser {
     public native void flushNALList();
     @Override
     public native void notifyWaitingThread();
-    @Override
-    public native int getWidth();
-    @Override
-    public native int getHeight();
 }

@@ -614,18 +614,6 @@ Java_com_polygraphene_alvr_UdpReceiverThread_isConnected(JNIEnv *env, jobject in
 }
 
 extern "C"
-JNIEXPORT jint JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_getWidth(JNIEnv *env, jobject instance) {
-    return g_connectionMessage.videoWidth;
-}
-
-extern "C"
-JNIEXPORT jint JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_getHeight(JNIEnv *env, jobject instance) {
-    return g_connectionMessage.videoHeight;
-}
-
-extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_set72Hz(JNIEnv *env, jobject instance,
                                                      jboolean is72Hz) {

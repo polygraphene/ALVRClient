@@ -10,7 +10,4 @@ public interface NALParser {
     NAL peekNal();
     void flushNALList();
     void notifyWaitingThread();
-
-    int getWidth();
-    int getHeight();
 }
