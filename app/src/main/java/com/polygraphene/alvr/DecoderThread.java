@@ -50,6 +50,12 @@ class DecoderThread extends Thread {
     private NAL mSPSBuffer = null;
     private NAL mPPSBuffer = null;
 
+    // Dummy SPS/PPS for some decoders which crashes on not set csd-0/csd-1. (e.g. Galaxy S6 Exynos decoder)
+    byte[] DummySPS = new byte[]{ (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x01, (byte)0x67, (byte)0x64, (byte)0x00, (byte)0x20, (byte)0xac, (byte)0x2b, (byte)0x40, (byte)0x20,
+            0x02, (byte)0x0d, (byte)0x80, (byte)0x88, (byte)0x00, (byte)0x00, (byte)0x1f, (byte)0x40, (byte)0x00, (byte)0x0e, (byte)0xa6, (byte)0x04,
+            0x7a, (byte)0x55};
+    byte[] DummyPPS = new byte[]{ (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x01, (byte)0x68, (byte)0xee, (byte)0x3c, (byte)0xb0};
+
     private final List<Integer> mAvailableInputs = new LinkedList<>();
 
     public interface RenderCallback {
@@ -101,6 +107,8 @@ class DecoderThread extends Thread {
             String videoFormat = "video/avc";
             MediaFormat format = MediaFormat.createVideoFormat(videoFormat, 0, 0);
             format.setString("KEY_MIME", videoFormat);
+            format.setByteBuffer("csd-0", ByteBuffer.wrap(DummySPS, 0, DummySPS.length));
+            format.setByteBuffer("csd-1", ByteBuffer.wrap(DummyPPS, 0, DummyPPS.length));
 
             String codecName = mCodecInfo.getName();
             Log.v(TAG, "Create codec " + codecName);
