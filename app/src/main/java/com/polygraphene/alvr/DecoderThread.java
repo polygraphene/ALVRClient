@@ -55,6 +55,8 @@ class DecoderThread extends Thread {
             0x02, (byte)0x0d, (byte)0x80, (byte)0x88, (byte)0x00, (byte)0x00, (byte)0x1f, (byte)0x40, (byte)0x00, (byte)0x0e, (byte)0xa6, (byte)0x04,
             0x7a, (byte)0x55};
     byte[] DummyPPS = new byte[]{ (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x01, (byte)0x68, (byte)0xee, (byte)0x3c, (byte)0xb0};
+    int DummyWidth = 1024;
+    int DummyHeight = 512;
 
     private final List<Integer> mAvailableInputs = new LinkedList<>();
 
@@ -105,7 +107,7 @@ class DecoderThread extends Thread {
 
         try {
             String videoFormat = "video/avc";
-            MediaFormat format = MediaFormat.createVideoFormat(videoFormat, 0, 0);
+            MediaFormat format = MediaFormat.createVideoFormat(videoFormat, DummyWidth, DummyHeight);
             format.setString("KEY_MIME", videoFormat);
             format.setByteBuffer("csd-0", ByteBuffer.wrap(DummySPS, 0, DummySPS.length));
             format.setByteBuffer("csd-1", ByteBuffer.wrap(DummyPPS, 0, DummyPPS.length));
