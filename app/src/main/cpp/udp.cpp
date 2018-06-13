@@ -389,7 +389,7 @@ Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobje
     connected = false;
     TimeDiff = 0;
 
-    initNAL();
+    initNAL(env);
 
     sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
@@ -489,7 +489,7 @@ Java_com_polygraphene_alvr_UdpReceiverThread_send(JNIEnv *env, jobject instance,
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_getNalListSize(JNIEnv *env, jobject instance) {
-    return getNalListSize();
+    return getNalListSize(env);
 }
 
 extern "C"
@@ -505,9 +505,9 @@ Java_com_polygraphene_alvr_UdpReceiverThread_getNal(JNIEnv *env, jobject instanc
 }
 
 extern "C"
-JNIEXPORT jobject JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_peekNal(JNIEnv *env, jobject instance) {
-    return peekNal(env);
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_recycleNal(JNIEnv *env, jobject instance, jobject nal) {
+    recycleNal(env, nal);
 }
 
 extern "C"

@@ -143,7 +143,7 @@ class UdpReceiverThread implements NALParser {
     @Override
     public native NAL getNal();
     @Override
-    public native NAL peekNal();
+    public native void recycleNal(NAL nal);
     @Override
     public native void flushNALList();
     @Override

@@ -126,35 +126,45 @@ class DecoderThread extends Thread {
 
             while (!mStopped) {
                 NAL nal = mNalParser.waitNal();
-                if (mStopped || nal == null) {
+                if (mStopped) {
+                    mNalParser.recycleNal(nal);
+                    break;
+                }
+                if(nal == null) {
                     break;
                 }
 
                 int NALType = nal.buf[4] & 0x1F;
-                Utils.frameLog(nal.frameIndex,"Got NAL Type=" + NALType + " Length=" + nal.len + " QueueSize=" + mNalParser.getNalListSize());
+                Utils.frameLog(nal.frameIndex,"Got NAL Type=" + NALType + " Length=" + nal.length + " QueueSize=" + mNalParser.getNalListSize());
 
                 if (NALType == NAL_TYPE_SPS) {
                     // SPS
+                    if(mSPSBuffer != null) {
+                        mNalParser.recycleNal(mSPSBuffer);
+                    }
                     mSPSBuffer = nal;
                 } else if (NALType == NAL_TYPE_PPS) {
                     // PPS
+                    if(mPPSBuffer != null) {
+                        mNalParser.recycleNal(mPPSBuffer);
+                    }
                     mPPSBuffer = nal;
 
                     if (mWaitNextIDR && mSPSBuffer != null) {
-                        frameLog("Feed codec config. SPS Size=" + mSPSBuffer.len + " PPS Size=" + mPPSBuffer.len);
+                        frameLog("Feed codec config. SPS Size=" + mSPSBuffer.length + " PPS Size=" + mPPSBuffer.length);
 
                         mWaitNextIDR = false;
 
                         ByteBuffer buffer = getInputBuffer(nal);
 
-                        buffer.put(mSPSBuffer.buf, 0, mSPSBuffer.len);
-                        buffer.put(mPPSBuffer.buf, 0, mPPSBuffer.len);
+                        buffer.put(mSPSBuffer.buf, 0, mSPSBuffer.length);
+                        buffer.put(mPPSBuffer.buf, 0, mPPSBuffer.length);
 
                         sendInputBuffer(buffer, 0, MediaCodec.BUFFER_FLAG_CODEC_CONFIG);
                     }
                 } else if (NALType == NAL_TYPE_IDR) {
                     // IDR-Frame
-                    Utils.frameLog(nal.frameIndex,"Feed IDR-Frame. Size=" + nal.len + " PresentationTime=" + nal.presentationTime);
+                    Utils.frameLog(nal.frameIndex,"Feed IDR-Frame. Size=" + nal.length + " PresentationTime=" + nal.presentationTime);
 
                     debugIDRFrame(nal, mSPSBuffer, mPPSBuffer);
 
@@ -163,8 +173,10 @@ class DecoderThread extends Thread {
                     pushFramePresentationMap(nal);
 
                     ByteBuffer buffer = getInputBuffer(nal);
-                    buffer.put(nal.buf, 0, nal.len);
+                    buffer.put(nal.buf, 0, nal.length);
                     sendInputBuffer(buffer, nal.presentationTime, 0);
+
+                    mNalParser.recycleNal(nal);
                 } else {
                     if (NALType == NAL_TYPE_P) {
                         // PFrame
@@ -178,14 +190,15 @@ class DecoderThread extends Thread {
                         Utils.frameLog(nal.frameIndex,"Ignoring P-Frame");
                     } else {
                         // P-Frame
-                        Utils.frameLog(nal.frameIndex,"Feed P-Frame. Size=" + nal.len + " PresentationTime=" + nal.presentationTime);
+                        Utils.frameLog(nal.frameIndex,"Feed P-Frame. Size=" + nal.length + " PresentationTime=" + nal.presentationTime);
 
                         pushFramePresentationMap(nal);
 
                         ByteBuffer buffer = getInputBuffer(nal);
-                        buffer.put(nal.buf, 0, nal.len);
+                        buffer.put(nal.buf, 0, nal.length);
                         sendInputBuffer(buffer, nal.presentationTime, 0);
                     }
+                    mNalParser.recycleNal(nal);
                 }
             }
 
@@ -214,9 +227,9 @@ class DecoderThread extends Thread {
             try {
                 String path = mMainActivity.getExternalMediaDirs()[0].getAbsolutePath() + "/" + buf.frameIndex + ".h264";
                 FileOutputStream stream = new FileOutputStream(path);
-                stream.write(spsBuffer.buf, 0, spsBuffer.len);
-                stream.write(ppsBuffer.buf, 0, ppsBuffer.len);
-                stream.write(buf.buf, 0, buf.len);
+                stream.write(spsBuffer.buf, 0, spsBuffer.length);
+                stream.write(ppsBuffer.buf, 0, ppsBuffer.length);
+                stream.write(buf.buf, 0, buf.length);
                 stream.close();
             } catch (IOException e) {
                 e.printStackTrace();

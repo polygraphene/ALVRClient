@@ -13,6 +13,7 @@
 #include "packet_types.h"
 
 static const int MAXIMUM_NAL_BUFFER = 10;
+static const int MAXIMUM_NAL_OBJECT = 20;
 
 static bool initialized = false;
 static bool stopped = false;
@@ -25,28 +26,64 @@ int bufferPos = 0;
 
 // Current NAL meta data from packet
 uint64_t prevSequence;
-uint64_t presentationTime;
-uint64_t frameIndex;
 uint32_t frameByteSize;
+jobject currentNAL = NULL;
 
 static JNIEnv *env_;
 
 // Parsed NAL queue
-struct NALBuffer {
-    jbyteArray array;
-    int len;
-    uint64_t presentationTime;
-    uint64_t frameIndex;
-};
-std::list<NALBuffer> nalList;
+std::list<jobject> nalList;
+std::list<jobject> nalRecycleList;
 Mutex nalMutex;
 
 static pthread_cond_t cond_nonzero = PTHREAD_COND_INITIALIZER;
 
+jclass NAL_clazz;
+
+jfieldID NAL_length;
+jfieldID NAL_presentationTime;
+jfieldID NAL_frameIndex;
+jfieldID NAL_buf;
+
+static void releaseBuffer();
+
+static void dumpCurrentQueue() {
+    MutexLock lock(nalMutex);
+    LOG("Current Queue State:");
+    int i = 0;
+    for (auto it = nalRecycleList.begin(); it != nalRecycleList.end(); ++it, i++) {
+        jbyteArray buf = (jbyteArray) env_->GetObjectField(*it, NAL_buf);
+        if (buf != NULL) {
+            jsize len = env_->GetArrayLength(buf);
+            LOG("r:%d/%lu %d", i, nalRecycleList.size(), len);
+            env_->DeleteLocalRef(buf);
+        } else {
+            LOG("r:%d/%lu (NULL)", i, nalRecycleList.size());
+        }
+    }
+    i = 0;
+    for (auto it = nalList.begin(); it != nalList.end(); ++it, i++) {
+        jbyteArray buf = (jbyteArray) env_->GetObjectField(*it, NAL_buf);
+        if (buf != NULL) {
+            jsize len = env_->GetArrayLength(buf);
+            LOG("b:%d/%lu %d", i, nalList.size(), len);
+            env_->DeleteLocalRef(buf);
+        } else {
+            LOG("b:%d/%lu (NULL)", i, nalList.size());
+        }
+    }
+}
+
+static void recycleNalNoGlobal(jobject nal) {
+    MutexLock lock(nalMutex);
+    nalRecycleList.push_front(nal);
+}
+
 static void clearNalList(JNIEnv *env) {
+    MutexLock lock(nalMutex);
     for (auto it = nalList.begin();
          it != nalList.end(); ++it) {
-        env->DeleteGlobalRef(it->array);
+        nalRecycleList.push_back(*it);
     }
     nalList.clear();
 }
@@ -58,19 +95,51 @@ static void initializeBuffer(){
     bufferPos = 0;
 }
 
-static void allocateBuffer(int length) {
-    if (currentBuf != NULL) {
-        env_->ReleaseByteArrayElements(currentBuf, (jbyte *) cbuf, 0);
-        env_->DeleteGlobalRef(currentBuf);
+static void allocateBuffer(int length, uint64_t presentationTime, uint64_t frameIndex) {
+    if(currentNAL != NULL) {
+        releaseBuffer();
+        recycleNalNoGlobal(currentNAL);
+        currentNAL = NULL;
     }
-    currentBuf = env_->NewByteArray(length);
-    if(currentBuf == NULL){
-        LOG("Error: NewByteArray return NULL. Memory is full?");
-        return;
+
+    dumpCurrentQueue();
+    {
+        MutexLock lock(nalMutex);
+
+        if(nalRecycleList.size() == 0) {
+            LOGE("NAL Queue is full (nalRecycleList is empty).");
+            return;
+        }
+        currentNAL = nalRecycleList.front();
+        nalRecycleList.pop_front();
+    }
+
+    currentBuf = (jbyteArray) env_->GetObjectField(currentNAL, NAL_buf);
+
+    jsize len = 0;
+    if(currentBuf != NULL) {
+        len = env_->GetArrayLength(currentBuf);
+    }
+
+    if(len < length) {
+        if(currentBuf != NULL) {
+            env_->DeleteLocalRef(currentBuf);
+        }
+        currentBuf = env_->NewByteArray(length);
+        if(currentBuf == NULL){
+            LOGE("Error: NewByteArray return NULL. Memory is full?");
+            return;
+        }
+        env_->SetObjectField(currentNAL, NAL_buf, currentBuf);
     }
     jobject tmp = currentBuf;
     currentBuf = (jbyteArray) env_->NewGlobalRef(currentBuf);
     env_->DeleteLocalRef(tmp);
+
+    env_->SetIntField(currentNAL, NAL_length, length);
+    env_->SetLongField(currentNAL, NAL_presentationTime, presentationTime);
+    env_->SetLongField(currentNAL, NAL_frameIndex, frameIndex);
+
     bufferLength = length;
     bufferPos = 0;
 
@@ -91,42 +160,52 @@ static bool push(char *buf, int len) {
 static void releaseBuffer(){
     if (currentBuf != NULL) {
         env_->ReleaseByteArrayElements(currentBuf, (jbyte *) cbuf, 0);
-        currentBuf = NULL;
-    }
-}
-
-// Release buffer and destroy object.
-static void destroyBuffer(){
-    if (currentBuf != NULL) {
-        env_->ReleaseByteArrayElements(currentBuf, (jbyte *) cbuf, 0);
         env_->DeleteGlobalRef(currentBuf);
         currentBuf = NULL;
     }
 }
 
-void initNAL() {
+void initNAL(JNIEnv *env) {
     pthread_cond_init(&cond_nonzero, NULL);
 
     initializeBuffer();
     initialized = true;
     prevSequence = 0;
     stopped = false;
+
+    NAL_clazz = env->FindClass("com/polygraphene/alvr/NAL");
+    jmethodID NAL_ctor = env->GetMethodID(NAL_clazz, "<init>", "()V");
+
+    NAL_length = env->GetFieldID(NAL_clazz, "length", "I");
+    NAL_presentationTime = env->GetFieldID(NAL_clazz, "presentationTime", "J");
+    NAL_frameIndex = env->GetFieldID(NAL_clazz, "frameIndex", "J");
+    NAL_buf = env->GetFieldID(NAL_clazz, "buf", "[B");
+
+    for(int i = 0; i < MAXIMUM_NAL_OBJECT; i++){
+        jobject nal = env->NewObject(NAL_clazz, NAL_ctor);
+        jobject tmp = nal;
+        nal = env->NewGlobalRef(nal);
+        env->DeleteLocalRef(tmp);
+
+        LOGE("new nal obj:%p", nal);
+        nalRecycleList.push_back(nal);
+    }
 }
 
 void destroyNAL(JNIEnv *env){
     clearNalList(env);
-    destroyBuffer();
+
+    for (auto it = nalRecycleList.begin(); it != nalRecycleList.end(); ++it) {
+        env->DeleteGlobalRef(*it);
+    }
+    nalRecycleList.clear();
     stopped = true;
     pthread_cond_destroy(&cond_nonzero);
     initialized = false;
 }
 
-static void putNAL(int len) {
-    NALBuffer buf;
-    buf.len = len;
-    buf.array = currentBuf;
-    buf.presentationTime = presentationTime;
-    buf.frameIndex = frameIndex;
+static void putNAL() {
+    assert(currentNAL != NULL);
 
     releaseBuffer();
 
@@ -134,20 +213,21 @@ static void putNAL(int len) {
         MutexLock lock(nalMutex);
 
         if(nalList.size() < MAXIMUM_NAL_BUFFER) {
-            nalList.push_back(buf);
+            nalList.push_back(currentNAL);
 
             pthread_cond_broadcast(&cond_nonzero);
         }else {
             // Discard buffer
             LOG("NAL Queue is too large. Discard. Size=%lu Limit=%d", nalList.size(), MAXIMUM_NAL_BUFFER);
-            env_->DeleteGlobalRef(buf.array);
+            nalRecycleList.push_front(currentNAL);
         }
     }
+    currentNAL = NULL;
 }
 
 bool processPacket(JNIEnv *env, char *buf, int len) {
     if (!initialized) {
-        initNAL();
+        initNAL(env);
     }
 
     int pos = 0;
@@ -158,8 +238,8 @@ bool processPacket(JNIEnv *env, char *buf, int len) {
 
     if (type == ALVR_PACKET_TYPE_VIDEO_FRAME_START) {
         VideoFrameStart *header = (VideoFrameStart *)buf;
-        presentationTime = header->presentationTime;
-        frameIndex = header->frameIndex;
+        uint64_t presentationTime = header->presentationTime;
+        uint64_t frameIndex = header->frameIndex;
         prevSequence = header->packetCounter;
 
         pos = sizeof(VideoFrameStart);
@@ -198,26 +278,26 @@ bool processPacket(JNIEnv *env, char *buf, int len) {
                 LOG("Got invalid frame. Too large SPS or PPS?");
                 return false;
             }
-            allocateBuffer(SPSEnd - pos);
+            allocateBuffer(SPSEnd - pos, presentationTime, frameIndex);
             push(buf + pos, SPSEnd - pos);
-            putNAL(SPSEnd - pos);
+            putNAL();
 
             pos = SPSEnd;
 
-            allocateBuffer(PPSEnd - pos);
+            allocateBuffer(PPSEnd - pos, presentationTime, frameIndex);
             push(buf + pos, PPSEnd - pos);
 
-            putNAL(PPSEnd - pos);
+            putNAL();
 
             pos = PPSEnd;
 
             // Allocate IDR frame buffer
-            allocateBuffer(header->frameByteSize - (PPSEnd - sizeof(VideoFrameStart)));
+            allocateBuffer(header->frameByteSize - (PPSEnd - sizeof(VideoFrameStart)), presentationTime, frameIndex);
             frameByteSize = header->frameByteSize - (PPSEnd - sizeof(VideoFrameStart));
             // Note that if previous frame packet has lost, we dispose that incomplete buffer implicitly here.
         }else {
             // Allocate P-frame buffer
-            allocateBuffer(header->frameByteSize);
+            allocateBuffer(header->frameByteSize, presentationTime, frameIndex);
             frameByteSize = header->frameByteSize;
             // Note that if previous frame packet has lost, we dispose that incomplete buffer implicitly here.
         }
@@ -241,12 +321,14 @@ bool processPacket(JNIEnv *env, char *buf, int len) {
         // We ignore this frame.
         LOGE("Error: Too large frame. Current buffer pos=%d buffer length=%d added size=%d"
         , bufferPos, bufferLength, len - pos);
-        destroyBuffer();
+        releaseBuffer();
+        recycleNalNoGlobal(currentNAL);
+        currentNAL = NULL;
         return false;
     }
     if(bufferPos >= frameByteSize) {
         // End of frame.
-        putNAL(bufferPos);
+        putNAL();
         return true;
     }
 
@@ -256,10 +338,10 @@ bool processPacket(JNIEnv *env, char *buf, int len) {
 
 jobject waitNal(JNIEnv *env) {
     if (!initialized) {
-        initNAL();
+        initNAL(env);
     }
 
-    NALBuffer buf;
+    jobject nal;
 
     while (true) {
         MutexLock lock(nalMutex);
@@ -267,96 +349,54 @@ jobject waitNal(JNIEnv *env) {
             return NULL;
         }
         if (nalList.size() != 0) {
-            buf = nalList.front();
+            nal = nalList.front();
+            jobject tmp = nal;
+            nal = env->NewLocalRef(nal);
+            env->DeleteGlobalRef(tmp);
             nalList.pop_front();
             break;
         }
         nalMutex.CondWait(&cond_nonzero);
     }
-    jclass clazz = env->FindClass("com/polygraphene/alvr/NAL");
-    jmethodID ctor = env->GetMethodID(clazz, "<init>", "()V");
-
-    jobject nal = env->NewObject(clazz, ctor);
-    jfieldID len_ = env->GetFieldID(clazz, "len", "I");
-    jfieldID presentationTime_ = env->GetFieldID(clazz, "presentationTime", "J");
-    jfieldID frameIndex_ = env->GetFieldID(clazz, "frameIndex", "J");
-    jfieldID buf_ = env->GetFieldID(clazz, "buf", "[B");
-
-    env->SetIntField(nal, len_, buf.len);
-    env->SetLongField(nal, presentationTime_, buf.presentationTime);
-    env->SetLongField(nal, frameIndex_, buf.frameIndex);
-    env->SetObjectField(nal, buf_, env->NewLocalRef(buf.array));
-    env->DeleteGlobalRef(buf.array);
 
     return nal;
 }
 
 jobject getNal(JNIEnv *env) {
     if (!initialized) {
-        initNAL();
+        initNAL(env);
     }
 
-    NALBuffer buf;
+    jobject nal;
     {
         MutexLock lock(nalMutex);
         if (nalList.size() == 0) {
             return NULL;
         }
-        buf = nalList.front();
+        nal = nalList.front();
+        jobject tmp = nal;
+        nal = env->NewLocalRef(nal);
+        env->DeleteGlobalRef(tmp);
         nalList.pop_front();
     }
-    jclass clazz = env->FindClass("com/polygraphene/alvr/NAL");
-    jmethodID ctor = env->GetMethodID(clazz, "<init>", "()V");
-
-    jobject nal = env->NewObject(clazz, ctor);
-    jfieldID len_ = env->GetFieldID(clazz, "len", "I");
-    jfieldID presentationTime_ = env->GetFieldID(clazz, "presentationTime", "J");
-    jfieldID frameIndex_ = env->GetFieldID(clazz, "frameIndex", "J");
-    jfieldID buf_ = env->GetFieldID(clazz, "buf", "[B");
-
-    env->SetIntField(nal, len_, buf.len);
-    env->SetLongField(nal, presentationTime_, buf.presentationTime);
-    env->SetLongField(nal, frameIndex_, buf.frameIndex);
-    env->SetObjectField(nal, buf_, env->NewLocalRef(buf.array));
-    env->DeleteGlobalRef(buf.array);
 
     return nal;
 }
 
-jobject peekNal(JNIEnv *env) {
+void recycleNal(JNIEnv *env, jobject nal) {
     if (!initialized) {
-        initNAL();
+        initNAL(env);
     }
 
-    NALBuffer buf;
     {
         MutexLock lock(nalMutex);
-        if (nalList.size() == 0) {
-            return NULL;
-        }
-        buf = nalList.front();
+        nalRecycleList.push_front(env->NewGlobalRef(nal));
     }
-    jclass clazz = env->FindClass("com/polygraphene/alvr/NAL");
-    jmethodID ctor = env->GetMethodID(clazz, "<init>", "()V");
-
-    jobject nal = env->NewObject(clazz, ctor);
-    jfieldID len_ = env->GetFieldID(clazz, "len", "I");
-    jfieldID presentationTime_ = env->GetFieldID(clazz, "presentationTime", "J");
-    jfieldID frameIndex_ = env->GetFieldID(clazz, "frameIndex", "J");
-    jfieldID buf_ = env->GetFieldID(clazz, "buf", "[B");
-
-    env->SetIntField(nal, len_, buf.len);
-    env->SetLongField(nal, presentationTime_, buf.presentationTime);
-    env->SetLongField(nal, frameIndex_, buf.frameIndex);
-    env->SetObjectField(nal, buf_, env->NewLocalRef(buf.array));
-
-    return nal;
 }
 
-
-int getNalListSize() {
+int getNalListSize(JNIEnv *env) {
     if (!initialized) {
-        initNAL();
+        initNAL(env);
     }
     MutexLock lock(nalMutex);
     return nalList.size();
@@ -365,7 +405,7 @@ int getNalListSize() {
 
 void flushNalList(JNIEnv *env) {
     if (!initialized) {
-        initNAL();
+        initNAL(env);
     }
     MutexLock lock(nalMutex);
     clearNalList(env);
