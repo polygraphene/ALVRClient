@@ -39,7 +39,7 @@ void VrContext::onVrModeChange() {
                 return;
             }
 
-            int CpuLevel = 2;
+            int CpuLevel = 3;
             int GpuLevel = 3;
             vrapi_SetClockLevels(Ovr, CpuLevel, GpuLevel);
             vrapi_SetPerfThread(Ovr, VRAPI_PERF_THREAD_TYPE_MAIN, gettid());
