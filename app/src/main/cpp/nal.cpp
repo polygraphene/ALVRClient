@@ -102,7 +102,7 @@ static void allocateBuffer(int length, uint64_t presentationTime, uint64_t frame
         currentNAL = NULL;
     }
 
-    dumpCurrentQueue();
+    //dumpCurrentQueue();
     {
         MutexLock lock(nalMutex);
 
@@ -187,7 +187,6 @@ void initNAL(JNIEnv *env) {
         nal = env->NewGlobalRef(nal);
         env->DeleteLocalRef(tmp);
 
-        LOGE("new nal obj:%p", nal);
         nalRecycleList.push_back(nal);
     }
 }
