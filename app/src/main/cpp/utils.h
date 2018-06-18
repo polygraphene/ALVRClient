@@ -9,7 +9,12 @@
 #include <VrApi_Types.h>
 
 #define LOG(...) __android_log_print(ANDROID_LOG_DEBUG, "ALVR Native", __VA_ARGS__)
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "ALVR Native", __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "ALVR Native", __VA_ARGS__)
+
+#define LOGSOUND(...) __android_log_print(ANDROID_LOG_DEBUG, "ALVR Sound", __VA_ARGS__)
+#define LOGSOUNDI(...) __android_log_print(ANDROID_LOG_INFO, "ALVR Sound", __VA_ARGS__)
+#define LOGSOUNDE(...) __android_log_print(ANDROID_LOG_ERROR, "ALVR Sound", __VA_ARGS__)
 
 inline void FrameLog(uint64_t frameIndex, const char *format, ...)
 {

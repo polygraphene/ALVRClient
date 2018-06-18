@@ -18,6 +18,7 @@
 #include "nal.h"
 #include "utils.h"
 #include "packet_types.h"
+#include "sound.h"
 
 // Maximum UDP packet size
 static const int MAX_PACKET_SIZE = 2000;
@@ -40,7 +41,9 @@ static uint64_t lastFrameIndex = 0;
 static std::string deviceName;
 static ConnectionMessage g_connectionMessage;
 static bool g_is72Hz = false;
-static uint32_t prevSequence = 0;
+static uint32_t prevVideoSequence = 0;
+static uint32_t prevSoundSequence = 0;
+static std::shared_ptr<SoundPlayer> g_soundPlayer;
 
 static JNIEnv *env_;
 static jobject instance_;
@@ -99,15 +102,26 @@ static void resetAll() {
 }
 
 
-static void processSequence(uint32_t sequence) {
-    if (prevSequence != 0 && prevSequence + 1 != sequence) {
-        uint32_t lost = sequence - (prevSequence + 1);
+static void processVideoSequence(uint32_t sequence) {
+    if (prevVideoSequence != 0 && prevVideoSequence + 1 != sequence) {
+        uint32_t lost = sequence - (prevVideoSequence + 1);
         recordPacketLoss(lost);
 
-        LOG("Packet loss %d (%d -> %d)", lost, prevSequence + 1,
+        LOGE("VideoPacket loss %d (%d -> %d)", lost, prevVideoSequence + 1,
             sequence - 1);
     }
-    prevSequence = sequence;
+    prevVideoSequence = sequence;
+}
+
+static void processSoundSequence(uint32_t sequence) {
+    if (prevSoundSequence != 0 && prevSoundSequence + 1 != sequence) {
+        uint32_t lost = sequence - (prevSoundSequence + 1);
+        recordPacketLoss(lost);
+
+        LOGE("SoundPacket loss %d (%d -> %d)", lost, prevSoundSequence + 1,
+             sequence - 1);
+    }
+    prevSoundSequence = sequence;
 }
 
 static int processRecv(int sock) {
@@ -127,7 +141,7 @@ static int processRecv(int sock) {
             addr.sin_addr.s_addr != serverAddr.sin_addr.s_addr) {
             // Invalid source address. Ignore.
             inet_ntop(addr.sin_family, &addr.sin_addr, str, sizeof(str));
-            LOG("Received packet from invalid source address. Address=%s:%d", str,
+            LOGE("Received packet from invalid source address. Address=%s:%d", str,
                 htons(addr.sin_port));
             return 1;
         }
@@ -138,7 +152,7 @@ static int processRecv(int sock) {
             // First packet of a video frame
             VideoFrameStart *header = (VideoFrameStart *)buf;
 
-            processSequence(header->packetCounter);
+            processVideoSequence(header->packetCounter);
 
             lastFrameIndex = header->frameIndex;
 
@@ -156,7 +170,7 @@ static int processRecv(int sock) {
         } else if (type == ALVR_PACKET_TYPE_VIDEO_FRAME) {
             VideoFrame *header = (VideoFrame *)buf;
 
-            processSequence(header->packetCounter);
+            processVideoSequence(header->packetCounter);
 
             // Following packets of a video frame
             bool ret2 = processPacket(env_, (char *) buf, ret);
@@ -173,7 +187,7 @@ static int processRecv(int sock) {
             if (timeSync->mode == 1) {
                 uint64_t RTT = Current - timeSync->clientTime;
                 TimeDiff = ((int64_t) timeSync->serverTime + (int64_t) RTT / 2) - (int64_t) Current;
-                LOG("TimeSync: server - client = %ld us RTT = %lu us", TimeDiff, RTT);
+                LOGI("TimeSync: server - client = %ld us RTT = %lu us", TimeDiff, RTT);
 
                 TimeSync sendBuf = *timeSync;
                 sendBuf.mode = 2;
@@ -192,12 +206,41 @@ static int processRecv(int sock) {
             jmethodID method = env_->GetMethodID(clazz, "onChangeSettings", "(II)V");
             env_->CallVoidMethod(instance_, method, settings->enableTestMode, settings->suspend);
             env_->DeleteLocalRef(clazz);
+        } else if (type == ALVR_PACKET_TYPE_AUDIO_FRAME_START) {
+            // Change settings
+            if (ret < sizeof(AudioFrameStart)) {
+                return ret;
+            }
+            auto header = (AudioFrameStart *) buf;
+
+            processSoundSequence(header->packetCounter);
+
+            if(g_soundPlayer) {
+                g_soundPlayer->putData((uint8_t *) buf + sizeof(*header), ret - sizeof(*header));
+            }
+
+            LOG("Received audio frame start: Counter=%d Size=%d PresentationTime=%lu"
+            , header->packetCounter, header->frameByteSize, header->presentationTime);
+        } else if (type == ALVR_PACKET_TYPE_AUDIO_FRAME) {
+            // Change settings
+            if (ret < sizeof(AudioFrame)) {
+                return ret;
+            }
+            auto header = (AudioFrame *) buf;
+
+            processSoundSequence(header->packetCounter);
+
+            if(g_soundPlayer) {
+                g_soundPlayer->putData((uint8_t *) buf + sizeof(*header), ret - sizeof(*header));
+            }
+
+            LOG("Received audio frame: Counter=%d", header->packetCounter);
         }
     } else {
         uint32_t type = *(uint32_t *) buf;
         if (type == ALVR_PACKET_TYPE_BROADCAST_REQUEST_MESSAGE) {
             inet_ntop(addr.sin_family, &addr.sin_addr, str, sizeof(str));
-            LOG("Received broadcast packet from %s:%d.", str, htons(addr.sin_port));
+            LOGI("Received broadcast packet from %s:%d.", str, htons(addr.sin_port));
 
             // Respond with hello message.
             HelloMessage message = {};
@@ -207,14 +250,14 @@ static int processRecv(int sock) {
             sendto(sock, &message, sizeof(message), 0, (sockaddr *) &addr, sizeof(addr));
         } else if (type == ALVR_PACKET_TYPE_CONNECTION_MESSAGE) {
             inet_ntop(addr.sin_family, &addr.sin_addr, str, sizeof(str));
-            LOG("Received connection request packet from %s:%d.", str, htons(addr.sin_port));
+            LOGI("Received connection request packet from %s:%d.", str, htons(addr.sin_port));
             if (ret < sizeof(ConnectionMessage)) {
                 return ret;
             }
             ConnectionMessage *connectionMessage = (ConnectionMessage *) buf;
 
             if(connectionMessage->version != ALVR_PROTOCOL_VERSION) {
-                LOG("Received connection message which has unsupported version. Received Version=%d Our Version=%d", connectionMessage->version, ALVR_PROTOCOL_VERSION);
+                LOGE("Received connection message which has unsupported version. Received Version=%d Our Version=%d", connectionMessage->version, ALVR_PROTOCOL_VERSION);
                 return ret;
             }
             // Save video width and height
@@ -224,16 +267,17 @@ static int processRecv(int sock) {
             connected = true;
             hasServerAddress = true;
             lastReceived = getTimestampUs();
-            prevSequence = 0;
+            prevVideoSequence = 0;
+            prevSoundSequence = 0;
             TimeDiff = 0;
             resetAll();
 
-            LOG("Try setting recv buffer size = %d bytes", connectionMessage->bufferSize);
+            LOGI("Try setting recv buffer size = %d bytes", connectionMessage->bufferSize);
             int val = connectionMessage->bufferSize;
             setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &val, sizeof(val));
             socklen_t socklen = sizeof(val);
             getsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &val, &socklen);
-            LOG("Current socket recv buffer is %d bytes", val);
+            LOGI("Current socket recv buffer is %d bytes", val);
 
             jclass clazz = env_->GetObjectClass(instance_);
             jmethodID method = env_->GetMethodID(clazz, "onConnected", "(II)V");
@@ -286,10 +330,10 @@ static void processReadPipe(int pipefd) {
 static void sendTimeSync() {
     time_t current = time(NULL);
     if (prevSentSync != current && connected) {
-        LOG("Sending timesync.");
+        LOGI("Sending timesync.");
 
         TimeSync timeSync = {};
-        timeSync.type = 3;
+        timeSync.type = ALVR_PACKET_TYPE_TIME_SYNC;
         timeSync.mode = 0;
         timeSync.clientTime = getTimestampUs();
         timeSync.sequence = ++timeSyncSequence;
@@ -318,7 +362,7 @@ static void sendTimeSync() {
 static void sendBroadcast() {
     time_t current = time(NULL);
     if (prevSentBroadcast != current && !connected) {
-        LOG("Sending broadcast hello.");
+        LOGI("Sending broadcast hello.");
 
         HelloMessage helloMessage = {};
         helloMessage.type = 1;
@@ -337,8 +381,11 @@ static void checkConnection() {
     if(connected) {
         if(lastReceived + CONNECTION_TIMEOUT < getTimestampUs()) {
             // Timeout
-            LOG("Connection timeout.");
+            LOGE("Connection timeout.");
             connected = false;
+            if(g_soundPlayer){
+                g_soundPlayer->Stop();
+            }
             memset(&serverAddr, 0, sizeof(serverAddr));
         }
     }
@@ -351,7 +398,7 @@ static void doPeriodicWork() {
 }
 
 static void recoverConnection(std::string serverAddress, int serverPort) {
-    LOG("Sending recover connection request. server=%s:%d", serverAddress.c_str(), serverPort);
+    LOGI("Sending recover connection request. server=%s:%d", serverAddress.c_str(), serverPort);
     sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_port = htons(serverPort);
@@ -385,11 +432,19 @@ Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobje
     lastReceived = 0;
     prevSentSync = 0;
     prevSentBroadcast = 0;
-    prevSequence = 0;
+    prevVideoSequence = 0;
+    prevSoundSequence = 0;
     connected = false;
     TimeDiff = 0;
 
     initNAL(env);
+
+    g_soundPlayer = std::make_shared<SoundPlayer>();
+    if(g_soundPlayer->initialize() != 0) {
+        LOGE("Failed on SoundPlayer initialize.");
+        g_soundPlayer.reset();
+    }
+    LOGI("SoundPlayer successfully initialize.");
 
     sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
@@ -407,20 +462,20 @@ Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobje
     //setMaxSocketBuffer();
     // 30Mbps 50ms buffer
     getsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &val, &len);
-    LOG("Default socket recv buffer is %d bytes", val);
+    LOGI("Default socket recv buffer is %d bytes", val);
 
     val = 30 * 1000 * 500 / 8;
     setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &val, sizeof(val));
     len = sizeof(val);
     getsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &val, &len);
-    LOG("Current socket recv buffer is %d bytes", val);
+    LOGI("Current socket recv buffer is %d bytes", val);
 
     sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
     addr.sin_addr.s_addr = INADDR_ANY;
     if (bind(sock, (sockaddr *) &addr, sizeof(addr)) < 0) {
-        LOG("bind error : %d %s", errno, strerror(errno));
+        LOGE("bind error : %d %s", errno, strerror(errno));
     }
 
     memset(&broadcastAddr, 0, sizeof(broadcastAddr));
@@ -437,7 +492,7 @@ Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobje
 
     end:
 
-    LOG("Udp socket initialized.");
+    LOGI("Udp socket initialized.");
 
     if (ret != 0) {
         if (sock >= 0) {
@@ -577,6 +632,8 @@ Java_com_polygraphene_alvr_UdpReceiverThread_runLoop(JNIEnv *env, jobject instan
         doPeriodicWork();
     }
 
+    LOGI("Exited select loop.");
+
     if(connected) {
         // Stop stream.
         StreamControlMessage message = {};
@@ -585,7 +642,9 @@ Java_com_polygraphene_alvr_UdpReceiverThread_runLoop(JNIEnv *env, jobject instan
         sendto(sock, &message, sizeof(message), 0, (sockaddr *) &serverAddr, sizeof(serverAddr));
     }
 
-    LOG("Exiting UdpReceiverThread runLoop");
+    g_soundPlayer.reset();
+
+    LOGI("Exiting UdpReceiverThread runLoop");
 
     return;
 }
