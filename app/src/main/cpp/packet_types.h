@@ -18,7 +18,7 @@ enum ALVR_PACKET_TYPE {
 };
 
 enum {
-    ALVR_PROTOCOL_VERSION = 14
+    ALVR_PROTOCOL_VERSION = 15
 };
 #pragma pack(push, 1)
 // hello message
@@ -73,6 +73,7 @@ struct TrackingInfo {
     TrackingVector3 HeadPose_Pose_Position;
 
     TrackingVector3 Other_Tracking_Source_Position;
+    TrackingQuat Other_Tracking_Source_Orientation;
 
     uint32_t controllerButtons;
 

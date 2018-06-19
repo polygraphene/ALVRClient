@@ -65,10 +65,11 @@ android {
         }
         ARCore {
             dimension "ar"
-            versionNameSuffix ' (ARCore)'
             applicationIdSuffix '.ar'
-            manifestPlaceholders = [arcore_metadata:"<meta-data android:name=\"com.google.ar.core\" android:value=\"optional\" />"
-                                    , arcore_permission:"<uses-permission android:name=\"android.permission.CAMERA\" />"]
+            minSdkVersion 24
+            manifestPlaceholders = [arcore_permission:"<uses-feature android:name=\"android.hardware.camera.ar\" android:required=\"true\" />"
+                    + "<uses-permission android:name=\"android.permission.CAMERA\" />"
+                                    , arcore_metadata:"meta-data android:name=\"com.google.ar.core\" android:value=\"required\" />"]
         }
     }
 }

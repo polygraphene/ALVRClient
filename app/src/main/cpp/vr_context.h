@@ -14,7 +14,7 @@
 
 class VrContext {
 public:
-    void initialize(JNIEnv *env, jobject activity);
+    void initialize(JNIEnv *env, jobject activity, bool ARMode);
     void destroy();
 
     void onChangeSettings(int EnableTestMode, int Suspend);
@@ -36,8 +36,9 @@ public:
 
     void setControllerInfo(TrackingInfo *packet, double displayTime);
 
-    void sendTrackingInfo(JNIEnv *env_, jobject callback, double displayTime, ovrTracking2 *tracking, const ovrVector3f *other_tracking_position);
-    int64_t fetchTrackingInfo(JNIEnv *env_, jobject callback);
+    void sendTrackingInfo(JNIEnv *env_, jobject callback, double displayTime, ovrTracking2 *tracking
+            , const ovrVector3f *other_tracking_position, const ovrQuatf *other_tracking_orientation);
+    int64_t fetchTrackingInfo(JNIEnv *env_, jobject callback, jfloatArray position_, jfloatArray orientation_);
 
     void setFrameGeometry(int width, int height);
 
@@ -50,6 +51,9 @@ public:
     int getSurfaceTextureID(){
         return SurfaceTextureID;
     }
+    int getCameraTexture(){
+        return CameraTexture;
+    }
 
 private:
     ANativeWindow *window = NULL;
@@ -60,6 +64,7 @@ private:
     bool UseMultiview = true;
     GLuint SurfaceTextureID = 0;
     GLuint loadingTexture = 0;
+    GLuint CameraTexture = 0;
     int enableTestMode = 0;
     int suspend = 0;
     bool Resumed = false;
@@ -69,6 +74,13 @@ private:
 
     uint64_t FrameIndex = 0;
     uint64_t WantedFrameIndex = 0;
+
+    // For ARCore
+    bool m_ARMode = false;
+    float position_offset_y = 0.0f;
+    bool previousHeadsetTrackpad = false;
+    float previousHeadsetY = 0.0f;
+    int g_AROverlayMode = 0; // 0: VR only, 1: AR 30% 2: AR 70% 3: AR 100%
 
     static const int MAXIMUM_TRACKING_FRAMES = 180;
 

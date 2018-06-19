@@ -119,7 +119,7 @@ void VrContext::chooseRefreshRate() {
     }
 }
 
-void VrContext::initialize(JNIEnv *env, jobject activity) {
+void VrContext::initialize(JNIEnv *env, jobject activity, bool ARMode) {
     LOG("Initializing EGL.");
     this->env = env;
     java.Env = env;
@@ -147,8 +147,14 @@ void VrContext::initialize(JNIEnv *env, jobject activity) {
     //
     // Generate texture for SurfaceTexture which is output of MediaCodec.
     //
-    GLuint textures[2];
-    glGenTextures(2, textures);
+    m_ARMode = ARMode;
+
+    int textureCount = 2;
+    if(m_ARMode) {
+        textureCount++;
+    }
+    GLuint textures[textureCount];
+    glGenTextures(textureCount, textures);
 
     SurfaceTextureID = textures[0];
     loadingTexture = textures[1];
@@ -164,6 +170,19 @@ void VrContext::initialize(JNIEnv *env, jobject activity) {
     glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T,
                     GL_CLAMP_TO_EDGE);
 
+    if(m_ARMode) {
+        CameraTexture = textures[2];
+        glBindTexture(GL_TEXTURE_EXTERNAL_OES, CameraTexture);
+
+        glTexParameterf(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER,
+                        GL_NEAREST);
+        glTexParameterf(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER,
+                        GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S,
+                        GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T,
+                        GL_CLAMP_TO_EDGE);
+    }
 
     FrameBufferWidth = vrapi_GetSystemPropertyInt(&java,
                                                   VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_WIDTH);
@@ -186,6 +205,9 @@ void VrContext::destroy() {
 
     GLuint textures[2] = {SurfaceTextureID, loadingTexture};
     glDeleteTextures(2, textures);
+    if (m_ARMode){
+        glDeleteTextures(1, &CameraTexture);
+    }
 
     eglDestroy();
 
@@ -258,12 +280,68 @@ void VrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
                        &tracking.HeadPose.LinearAcceleration,
                        sizeof(tracking.HeadPose.LinearAcceleration));
             }
+        }else if(curCaps.Type == ovrControllerType_Headset) {
+            // Gear VR Headset
+            ovrInputHeadsetCapabilities capabilities;
+            capabilities.Header = curCaps;
+            ovrResult result = vrapi_GetInputDeviceCapabilities(Ovr, &capabilities.Header);
+            if(result == ovrSuccess) {
+                LOG("Device(Headset) %d: Type=%d ID=%d Cap=%08X Buttons=%08X Max=%d,%d Size=%f,%f", deviceIndex, curCaps.Type, curCaps.DeviceID
+                , capabilities.ControllerCapabilities, capabilities.ButtonCapabilities
+                , capabilities.TrackpadMaxX, capabilities.TrackpadMaxY
+                , capabilities.TrackpadSizeX, capabilities.TrackpadSizeY);
+
+                ovrInputStateHeadset remoteInputState;
+                remoteInputState.Header.ControllerType = capabilities.Header.Type;
+                ovrResult result = vrapi_GetCurrentInputState(Ovr,
+                                                              capabilities.Header.DeviceID,
+                                                              &remoteInputState.Header);
+
+                if (result == ovrSuccess) {
+                    float normalized_x = remoteInputState.TrackpadPosition.x / capabilities.TrackpadMaxX;
+                    float normalized_y = remoteInputState.TrackpadPosition.y / capabilities.TrackpadMaxY;
+                    LOG("Headset trackpad: status=%d %f, %f (%f, %f) (%08X)", remoteInputState.TrackpadStatus
+                    , remoteInputState.TrackpadPosition.x
+                    , remoteInputState.TrackpadPosition.y
+                    , normalized_x, normalized_y
+                    , remoteInputState.Buttons);
+
+                    // Change overlay mode and height on AR mode by the trackpad of headset.
+                    if(m_ARMode) {
+                        if (previousHeadsetTrackpad && remoteInputState.TrackpadStatus != 0) {
+                            position_offset_y += (normalized_y - previousHeadsetY) * 2.0f;
+                            LOG("Changing position_offset_y: %f", position_offset_y);
+                        }
+
+                        if (previousHeadsetTrackpad && remoteInputState.TrackpadStatus == 0) {
+                            if (normalized_x < 0.4) {
+                                if (g_AROverlayMode > 0) {
+                                    g_AROverlayMode--;
+                                } else {
+                                    g_AROverlayMode = 3;
+                                }
+                            }
+                            if (normalized_x > 0.6) {
+                                if (g_AROverlayMode < 3) {
+                                    g_AROverlayMode++;
+                                } else {
+                                    g_AROverlayMode = 0;
+                                }
+                            }
+                        }
+                    }
+
+                    previousHeadsetTrackpad = remoteInputState.TrackpadStatus != 0;
+                    previousHeadsetY = normalized_y;
+                }
+            }
         }
     }
 }
 
 // Called TrackingThread. So, we can't use this->env.
-void VrContext::sendTrackingInfo(JNIEnv *env_, jobject callback, double displayTime, ovrTracking2 *tracking, const ovrVector3f *other_tracking_position) {
+void VrContext::sendTrackingInfo(JNIEnv *env_, jobject callback, double displayTime, ovrTracking2 *tracking
+        , const ovrVector3f *other_tracking_position, const ovrQuatf *other_tracking_orientation) {
     jbyteArray array = env_->NewByteArray(sizeof(TrackingInfo));
     TrackingInfo *packet = (TrackingInfo *) env_->GetByteArrayElements(array, 0);
     memset(packet, 0, sizeof(TrackingInfo));
@@ -279,9 +357,10 @@ void VrContext::sendTrackingInfo(JNIEnv *env_, jobject callback, double displayT
     memcpy(&packet->HeadPose_Pose_Orientation, &tracking->HeadPose.Pose.Orientation, sizeof(ovrQuatf));
     memcpy(&packet->HeadPose_Pose_Position, &tracking->HeadPose.Pose.Position, sizeof(ovrVector3f));
 
-    if(other_tracking_position) {
+    if(other_tracking_position && other_tracking_orientation) {
         packet->flags |= TrackingInfo::FLAG_OTHER_TRACKING_SOURCE;
         memcpy(&packet->Other_Tracking_Source_Position, other_tracking_position, sizeof(ovrVector3f));
+        memcpy(&packet->Other_Tracking_Source_Orientation, other_tracking_orientation, sizeof(ovrQuatf));
     }
 
     setControllerInfo(packet, displayTime);
@@ -297,7 +376,7 @@ void VrContext::sendTrackingInfo(JNIEnv *env_, jobject callback, double displayT
 }
 
 // Called TrackingThread. So, we can't use this->env.
-int64_t VrContext::fetchTrackingInfo(JNIEnv *env_, jobject callback){
+int64_t VrContext::fetchTrackingInfo(JNIEnv *env_, jobject callback, jfloatArray position_, jfloatArray orientation_){
     std::shared_ptr<TrackingFrame> frame(new TrackingFrame());
 
     FrameIndex++;
@@ -316,7 +395,33 @@ int64_t VrContext::fetchTrackingInfo(JNIEnv *env_, jobject callback){
         }
     }
 
-    sendTrackingInfo(env_, callback, frame->displayTime, &frame->tracking, NULL);
+    if(position_ != NULL) {
+        // AR mode
+        ovrVector3f position;
+        ovrQuatf orientation;
+
+        jfloat *position_c = env->GetFloatArrayElements(position_, NULL);
+        memcpy(&position, position_c, sizeof(float) * 3);
+        env->ReleaseFloatArrayElements(position_, position_c, 0);
+
+        jfloat *orientation_c = env->GetFloatArrayElements(orientation_, NULL);
+        memcpy(&orientation, orientation_c, sizeof(float) * 4);
+        env->ReleaseFloatArrayElements(orientation_, orientation_c, 0);
+
+        // Rotate PI/2 around (0, 0, -1)
+        // Orientation provided by ARCore is portrait mode orientation.
+        ovrQuatf quat;
+        quat.x = 0;
+        quat.y = 0;
+        quat.z = -sqrtf(0.5);
+        quat.w = sqrtf(0.5);
+        ovrQuatf orientation_rotated = quatMultipy(&orientation, &quat);
+
+        sendTrackingInfo(env_, callback, frame->displayTime, &frame->tracking, &position, &orientation_rotated);
+    } else {
+        // Non AR
+        sendTrackingInfo(env_, callback, frame->displayTime, &frame->tracking, NULL, NULL);
+    }
 
     return FrameIndex;
 }
@@ -468,7 +573,7 @@ void VrContext::render(jobject callback, jobject latencyCollector){
     const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java,
                                                                    &frame->tracking,
                                                                    Ovr, &completionFence, false,
-                                                                   enableTestMode);
+                                                                   enableTestMode, g_AROverlayMode);
 
     clazz = env->GetObjectClass(latencyCollector);
     jmethodID SubmitMethodID = env->GetMethodID(clazz, "Rendered2", "(J)V");
@@ -529,7 +634,7 @@ void VrContext::renderLoading() {
     const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java,
                                                                    &tracking,
                                                                    Ovr, &completionFence, true,
-                                                                   enableTestMode);
+                                                                   enableTestMode, g_AROverlayMode);
 
     const ovrLayerHeader2 *layers[] =
             {
@@ -563,9 +668,9 @@ void VrContext::setFrameGeometry(int width, int height){
 
 extern "C"
 JNIEXPORT jlong JNICALL
-Java_com_polygraphene_alvr_VrContext_initializeNative(JNIEnv *env, jobject instance, jobject activity) {
+Java_com_polygraphene_alvr_VrContext_initializeNative(JNIEnv *env, jobject instance, jobject activity, bool ARMode) {
     VrContext *context = new VrContext();
-    context->initialize(env, activity);
+    context->initialize(env, activity, ARMode);
     return (jlong)context;
 }
 
@@ -589,6 +694,12 @@ Java_com_polygraphene_alvr_VrContext_getSurfaceTextureIDNative(JNIEnv *env, jobj
 }
 
 extern "C"
+JNIEXPORT jint JNICALL
+Java_com_polygraphene_alvr_VrContext_getCameraTextureNative(JNIEnv *env, jobject instance, jlong handle) {
+    return ((VrContext *)handle)->getCameraTexture();
+}
+
+extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_VrContext_renderNative(JNIEnv *env, jobject instance, jlong handle, jobject callback, jobject latencyCollector) {
     return ((VrContext *)handle)->render(callback, latencyCollector);
@@ -604,8 +715,8 @@ Java_com_polygraphene_alvr_VrContext_renderLoadingNative(JNIEnv *env, jobject in
 extern "C"
 JNIEXPORT jlong JNICALL
 Java_com_polygraphene_alvr_VrContext_fetchTrackingInfoNative(JNIEnv *env, jobject instance, jlong handle,
-                                                   jobject callback) {
-    return ((VrContext *)handle)->fetchTrackingInfo(env, callback);
+                                                   jobject callback, jfloatArray position_, jfloatArray orientation_) {
+    return ((VrContext *)handle)->fetchTrackingInfo(env, callback, position_, orientation_);
 }
 
 extern "C"

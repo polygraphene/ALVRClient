@@ -4,6 +4,8 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.SurfaceTexture;
 import android.media.MediaCodec;
+import android.opengl.EGL14;
+import android.opengl.EGLContext;
 import android.util.Log;
 import android.view.Surface;
 
@@ -35,6 +37,7 @@ class VrThread extends Thread {
 
     // Worker threads
     private TrackingThread mTrackingThread;
+    private ArThread mArThread;
     private DecoderThread mDecoderThread;
     private UdpReceiverThread mReceiverThread;
 
@@ -42,6 +45,7 @@ class VrThread extends Thread {
     private LatencyCollector mLatencyCollector = new LatencyCollector();
 
     private int m_RefreshRate = 60;
+    private EGLContext mEGLContext;
 
     // Called from native
     public interface VrFrameCallback {
@@ -112,6 +116,14 @@ class VrThread extends Thread {
                 e.printStackTrace();
             }
         }
+        if (mArThread != null) {
+            mArThread.interrupt();
+            try {
+                mArThread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
 
         send(new Runnable() {
             @Override
@@ -125,6 +137,9 @@ class VrThread extends Thread {
                 mDecoderThread = new DecoderThread(mReceiverThread
                         , mMainActivity.getAvcDecoder(), mCounter, mRenderCallback, mMainActivity, mLatencyCollector);
                 mTrackingThread = new TrackingThread();
+                mArThread = ArThreadHelper.newArThread(VrThread.this, mEGLContext);
+                mArThread.initialize(mMainActivity);
+                mArThread.setCameraTexture(mVrContext.getCameraTexture());
 
                 try {
                     mDecoderThread.start();
@@ -134,6 +149,7 @@ class VrThread extends Thread {
                     }
                     // TrackingThread relies on ReceiverThread.
                     mTrackingThread.start();
+                    mArThread.start(mMainActivity);
                 } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
                     e.printStackTrace();
                 }
@@ -174,6 +190,15 @@ class VrThread extends Thread {
             mTrackingThread.interrupt();
             try {
                 mTrackingThread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        if (mArThread != null) {
+            Log.v(TAG, "VrThread.onPause: Stopping ArThread.");
+            mArThread.interrupt();
+            try {
+                mArThread.join();
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -247,7 +272,7 @@ class VrThread extends Thread {
             notifyAll();
         }
 
-        mVrContext.initialize(mMainActivity);
+        mVrContext.initialize(mMainActivity, ArThreadHelper.requireCameraTexture());
 
         if(mVrContext.is72Hz()) {
             m_RefreshRate = 72;
@@ -273,6 +298,8 @@ class VrThread extends Thread {
         mLoadingTexture.initializeMessageCanvas(mVrContext.getLoadingTexture());
         mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\nLoading...");
 
+        mEGLContext = EGL14.eglGetCurrentContext();
+
         Log.v(TAG, "Start loop of VrThread.");
         while(mQueue.waitIdle()) {
             if(!mVrContext.isVrMode() || !mResumed) {
@@ -287,7 +314,7 @@ class VrThread extends Thread {
     }
 
     private void render(){
-        if (mReceiverThread.isConnected() && mDecoderThread.isFrameAvailable()) {
+        if (mReceiverThread.isConnected() && mDecoderThread.isFrameAvailable() && mArThread.getErrorMessage() == null) {
             mVrContext.render(new VrFrameCallback() {
                 @Override
                 public long waitFrame() {
@@ -329,10 +356,14 @@ class VrThread extends Thread {
             }, mLatencyCollector);
             mLatencyCollector.Submit(mFrameIndex);
         } else {
-            if(mReceiverThread.isConnected()) {
-                mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \nConnected!\nStreaming will begin soon!");
-            }else {
-                mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \nPress CONNECT button\non ALVR server.");
+            if (mArThread.getErrorMessage() != null) {
+                mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \n!!! Error on ARCore initialization !!!\n" + mArThread.getErrorMessage());
+            } else {
+                if (mReceiverThread.isConnected()) {
+                    mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \nConnected!\nStreaming will begin soon!");
+                } else {
+                    mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \nPress CONNECT button\non ALVR server.");
+                }
             }
             mVrContext.renderLoading();
             try {
@@ -411,8 +442,8 @@ class VrThread extends Thread {
         public void run() {
             long previousFetchTime = System.nanoTime();
             while (!mStopped) {
-                if (mVrContext.isVrMode() && mReceiverThread.isConnected()) {
-                    long frameIndex = mVrContext.fetchTrackingInfo(mOnSendTrackingCallback);
+                if (isTracking()) {
+                    long frameIndex = mVrContext.fetchTrackingInfo(mOnSendTrackingCallback, mArThread.getPosition(), mArThread.getOrientation());
                     mLatencyCollector.Tracking(frameIndex);
                 }
                 try {
@@ -460,4 +491,16 @@ class VrThread extends Thread {
         mReceiverThread.recoverConnectionState(serverAddress, serverPort);
     }
 
+    public boolean isTracking() {
+        return mVrContext != null && mReceiverThread != null
+                && mVrContext.isVrMode() && mReceiverThread.isConnected();
+    }
+
+    public boolean onRequestPermissionsResult(MainActivity activity) {
+        return mArThread.onRequestPermissionsResult(activity);
+    }
+
+    public void requestPermissions(MainActivity activity) {
+        ArThreadHelper.requestPermissions(activity);
+    }
 }

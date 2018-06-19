@@ -241,11 +241,21 @@ static const char FRAGMENT_SHADER[] =
                 "in lowp vec4 fragmentColor;\n"
                 "out lowp vec4 outColor;\n"
                 "uniform samplerExternalOES sTexture;\n"
+                "uniform samplerExternalOES sTextureAr;\n"
                 "uniform lowp int EnableTestMode;\n"
+                "uniform lowp float alpha;\n"
                 "void main()\n"
                 "{\n"
                 "   if(EnableTestMode % 2 == 0){\n"
-                "	    outColor = texture(sTexture, uv);\n"
+                "       if(alpha > 1.0f){ // Non AR\n"
+                "	        outColor = texture(sTexture, uv);\n"
+                "       } else if(alpha < -0.5f){ // Completely AR\n"
+                "	        outColor = texture(sTextureAr, uv);\n"
+                "       }else{ // VR+AR\n"
+                "	        outColor = texture(sTexture, uv) * alpha\n"
+                "                      + texture(sTextureAr, uv) * (1.0f - alpha);\n"
+                "           outColor.a = alpha;\n"
+                "       }\n"
                 "   } else {\n"
                 "       outColor = fragmentColor;\n"
                 "   }\n"
@@ -878,12 +888,14 @@ enum E1test {
     UNIFORM_VIEW_ID,
     UNIFORM_MVP_MATRIX,
     UNIFORM_ENABLE_TEST_MODE,
+    UNIFORM_ALPHA,
 };
 enum E2test {
     UNIFORM_TYPE_VECTOR4,
     UNIFORM_TYPE_MATRIX4X4,
     UNIFORM_TYPE_INT,
     UNIFORM_TYPE_BUFFER,
+    UNIFORM_TYPE_FLOAT,
 };
 typedef struct {
     E1test index;
@@ -896,6 +908,7 @@ static ovrUniform ProgramUniforms[] =
                 {UNIFORM_VIEW_ID,          UNIFORM_TYPE_INT,       "ViewID"},
                 {UNIFORM_MVP_MATRIX,       UNIFORM_TYPE_MATRIX4X4, "mvpMatrix"},
                 {UNIFORM_ENABLE_TEST_MODE, UNIFORM_TYPE_INT,       "EnableTestMode"},
+                {UNIFORM_ALPHA, UNIFORM_TYPE_FLOAT,       "alpha"},
         };
 
 static const char *programVersion = "#version 300 es\n";
@@ -1085,7 +1098,8 @@ void ovrRenderer_Destroy(ovrRenderer *renderer) {
 ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava *java,
                                                    const ovrTracking2 *tracking, ovrMobile *ovr,
                                                    unsigned long long *completionFence,
-                                                   bool loading, int enableTestMode) {
+                                                   bool loading, int enableTestMode,
+                                            int AROverlayMode) {
     ovrTracking2 updatedTracking = *tracking;
 
     ovrLayerProjection2 layer = vrapi_DefaultLayerProjection2();
@@ -1229,19 +1243,42 @@ ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava
 
             GL(glBindVertexArray(renderer->Panel.VertexArrayObject));
 
-            GL(glActiveTexture(GL_TEXTURE0));
-            GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->SurfaceTextureID));
-
             GL(glUniformMatrix4fv(renderer->Program.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
                                   (float *) mvpMatrix));
 
-            GL(glDrawElements(GL_TRIANGLES, renderer->Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
+            if(AROverlayMode == 0) {
+                // VR 100%
+                GL(glUniform1f(renderer->Program.UniformLocation[UNIFORM_ALPHA], 2.0f));
+                GL(glActiveTexture(GL_TEXTURE0));
+                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->SurfaceTextureID));
+
+                GL(glDrawElements(GL_TRIANGLES, renderer->Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
+            }else {
+                if(AROverlayMode == 1) {
+                    // AR 30% VR 70%
+                    GL(glUniform1f(renderer->Program.UniformLocation[UNIFORM_ALPHA], 0.7f));
+                }else if(AROverlayMode == 2) {
+                    // AR 70% VR 30%
+                    GL(glUniform1f(renderer->Program.UniformLocation[UNIFORM_ALPHA], 0.3f));
+                }else if(AROverlayMode == 3) {
+                    // AR 100%
+                    GL(glUniform1f(renderer->Program.UniformLocation[UNIFORM_ALPHA], -2.0f));
+                }
+                GL(glActiveTexture(GL_TEXTURE0));
+                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->SurfaceTextureID));
+                GL(glActiveTexture(GL_TEXTURE1));
+                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->CameraTexture));
+                GL(glDrawElements(GL_TRIANGLES, renderer->Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
+            }
         }
 
         GL(glBindVertexArray(0));
         if (loading) {
             GL(glBindTexture(GL_TEXTURE_2D, 0));
         } else {
+            GL(glActiveTexture(GL_TEXTURE0));
+            GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
+            GL(glActiveTexture(GL_TEXTURE1));
             GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
         }
         GL(glUseProgram(0));
