@@ -54,6 +54,7 @@ class VrThread extends Thread {
     }
 
     public void onSurfaceCreated(final Surface surface) {
+        Log.v(TAG, "VrThread.onSurfaceCreated.");
         post(new Runnable() {
             @Override
             public void run() {
@@ -63,6 +64,7 @@ class VrThread extends Thread {
     }
 
     public void onSurfaceChanged(final Surface surface) {
+        Log.v(TAG, "VrThread.onSurfaceChanged.");
         post(new Runnable() {
             @Override
             public void run() {
@@ -72,6 +74,7 @@ class VrThread extends Thread {
     }
 
     public void onSurfaceDestroyed() {
+        Log.v(TAG, "VrThread.onSurfaceDestroyed.");
         post(new Runnable() {
             @Override
             public void run() {
@@ -110,7 +113,7 @@ class VrThread extends Thread {
             }
         }
 
-        post(new Runnable() {
+        send(new Runnable() {
             @Override
             public void run() {
                 Log.v(TAG, "VrThread.onResume: Starting worker threads.");
@@ -135,11 +138,11 @@ class VrThread extends Thread {
                     e.printStackTrace();
                 }
 
-                Log.v(TAG, "VrThread.onResume: Worker threads has started.");
-
+                Log.v(TAG, "VrThread.onResume: mVrContext.onResume().");
                 mVrContext.onResume();
             }
         });
+        Log.v(TAG, "VrThread.onResume: Worker threads has started.");
     }
     public void onPause() {
         Log.v(TAG, "VrThread.onPause: Stopping worker threads.");
@@ -149,6 +152,7 @@ class VrThread extends Thread {
         }
         // DecoderThread must be stopped before ReceiverThread
         if (mDecoderThread != null) {
+            Log.v(TAG, "VrThread.onPause: Stopping DecoderThread.");
             mDecoderThread.interrupt();
             try {
                 mDecoderThread.join();
@@ -157,6 +161,7 @@ class VrThread extends Thread {
             }
         }
         if (mReceiverThread != null) {
+            Log.v(TAG, "VrThread.onPause: Stopping ReceiverThread.");
             mReceiverThread.interrupt();
             try {
                 mReceiverThread.join();
@@ -165,6 +170,7 @@ class VrThread extends Thread {
             }
         }
         if (mTrackingThread != null) {
+            Log.v(TAG, "VrThread.onPause: Stopping TrackingThread.");
             mTrackingThread.interrupt();
             try {
                 mTrackingThread.join();
@@ -178,13 +184,14 @@ class VrThread extends Thread {
                     , mReceiverThread.getServerPort());
         }
 
-        Log.v(TAG, "VrThread.onPause: All worker threads has stopped.");
-        post(new Runnable() {
+        Log.v(TAG, "VrThread.onPause: mVrContext.onPause().");
+        send(new Runnable() {
             @Override
             public void run() {
                 mVrContext.onPause();
             }
         });
+        Log.v(TAG, "VrThread.onPause: All worker threads has stopped.");
     }
 
     public void onKeyEvent(final int keyCode, final int action) {
@@ -233,6 +240,7 @@ class VrThread extends Thread {
     @Override
     public void run() {
         setName("VrThread");
+        Log.v(TAG, "VrThread started.");
 
         synchronized (this) {
             mQueue = new ThreadQueue();
