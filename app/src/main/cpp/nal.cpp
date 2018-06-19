@@ -80,7 +80,6 @@ static void recycleNalNoGlobal(jobject nal) {
 }
 
 static void clearNalList(JNIEnv *env) {
-    MutexLock lock(nalMutex);
     for (auto it = nalList.begin();
          it != nalList.end(); ++it) {
         nalRecycleList.push_back(*it);
