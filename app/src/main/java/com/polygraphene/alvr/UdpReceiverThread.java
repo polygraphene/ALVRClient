@@ -2,6 +2,14 @@ package com.polygraphene.alvr;
 
 import android.util.Log;
 
+import java.net.InetAddress;
+import java.net.InterfaceAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.List;
+
 class UdpReceiverThread implements NALParser {
     private static final String TAG = "UdpReceiverThread";
 
@@ -80,7 +88,8 @@ class UdpReceiverThread implements NALParser {
         mThread.setName(UdpReceiverThread.class.getName());
 
         try {
-            int ret = initializeSocket(mPort, getDeviceName(), BROADCAST_ADDRESS);
+            String[] broadcastList = getBroadcastAddressList();
+            int ret = initializeSocket(mPort, getDeviceName(), broadcastList);
             if (ret != 0) {
                 Log.e(TAG, "Error on initializing socket. Code=" + ret + ".");
                 synchronized (this) {
@@ -103,6 +112,45 @@ class UdpReceiverThread implements NALParser {
         Log.v(TAG, "UdpReceiverThread stopped.");
     }
 
+    // List broadcast address from all interfaces except for mobile network.
+    // We should send all broadcast address to use USB tethering or VPN.
+    private String[] getBroadcastAddressList() {
+        List<String> ret = new ArrayList<>();
+        try {
+            Enumeration<NetworkInterface> networkInterfaces = NetworkInterface.getNetworkInterfaces();
+            while(networkInterfaces.hasMoreElements()){
+                NetworkInterface networkInterface = networkInterfaces.nextElement();
+
+                if(networkInterface.getName().startsWith("rmnet")) {
+                    // Ignore mobile network interfaces.
+                    Log.v(TAG, "Ignore interface. Name=" + networkInterface.getName());
+                    continue;
+                }
+
+                List<InterfaceAddress> interfaceAddresses = networkInterface.getInterfaceAddresses();
+                String address = "";
+                for(InterfaceAddress interfaceAddress : interfaceAddresses) {
+                    address += interfaceAddress.toString() + ", ";
+                    // getBroadcast() return non-null only when ipv4.
+                    if(interfaceAddress.getBroadcast() != null) {
+                        ret.add(interfaceAddress.getBroadcast().getHostAddress());
+                    }
+                }
+                Log.v(TAG, "Interface: Name=" + networkInterface.getName() + " Address=" + address + " 2=" + address);
+            }
+            Log.v(TAG, ret.size() + " broadcast addresses were found.");
+            for(String address : ret) {
+                Log.v(TAG, address);
+            }
+        } catch (SocketException e) {
+            e.printStackTrace();
+        }
+        if(ret.size() == 0) {
+            ret.add(BROADCAST_ADDRESS);
+        }
+        return ret.toArray(new String[]{});
+    }
+
     public void join() throws InterruptedException {
         mThread.join();
     }
@@ -117,7 +165,7 @@ class UdpReceiverThread implements NALParser {
         mCallback.onChangeSettings(EnableTestMode, suspend);
     }
 
-    native int initializeSocket(int port, String deviceName, String broadcastAddr);
+    native int initializeSocket(int port, String deviceName, String[] broadcastAddrList);
 
     native void closeSocket();
 

@@ -27,7 +27,7 @@ static const uint64_t CONNECTION_TIMEOUT = 3 * 1000 * 1000;
 
 static int sock = -1;
 static sockaddr_in serverAddr;
-static sockaddr_in broadcastAddr;
+static std::list<sockaddr_in> broadcastAddrList;
 static int notify_pipe[2];
 static time_t prevSentSync = 0;
 static time_t prevSentBroadcast = 0;
@@ -371,8 +371,10 @@ static void sendBroadcast() {
                std::min(deviceName.length(), sizeof(helloMessage.deviceName)));
         helloMessage.refreshRate = g_is72Hz ? 72 : 60;
 
-        sendto(sock, &helloMessage, sizeof(helloMessage), 0, (sockaddr *) &broadcastAddr,
-               sizeof(broadcastAddr));
+        for(const sockaddr_in &address : broadcastAddrList) {
+            sendto(sock, &helloMessage, sizeof(helloMessage), 0, (sockaddr *) &address,
+                   sizeof(address));
+        }
     }
     prevSentBroadcast = current;
 }
@@ -415,18 +417,15 @@ JNIEXPORT jint JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobject instance,
                                                               jint port,
                                                               jstring deviceName_,
-                                                              jstring broadcastAddrStr_) {
+                                                              jobjectArray broadcastAddrList_) {
     int ret = 0;
     int val;
     socklen_t len;
+    int broadcastCount;
 
-    const char *deviceName_c = env->GetStringUTFChars(deviceName_, 0);
-    deviceName = deviceName_c;
-    env->ReleaseStringUTFChars(deviceName_, deviceName_c);
-
-    const char *broadcastAddrStr_c = env->GetStringUTFChars(broadcastAddrStr_, 0);
-    std::string broadcastAddrStr = broadcastAddrStr_c;
-    env->ReleaseStringUTFChars(broadcastAddrStr_, broadcastAddrStr_c);
+    //
+    // Initialize variables
+    //
 
     stopped = false;
     lastReceived = 0;
@@ -437,7 +436,13 @@ Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobje
     connected = false;
     TimeDiff = 0;
 
+    deviceName = GetStringFromJNIString(env, deviceName_);
+
     initNAL(env);
+
+    //
+    // Sound
+    //
 
     g_soundPlayer = std::make_shared<SoundPlayer>();
     if(g_soundPlayer->initialize() != 0) {
@@ -445,6 +450,10 @@ Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobje
         g_soundPlayer.reset();
     }
     LOGI("SoundPlayer successfully initialize.");
+
+    //
+    // Socket
+    //
 
     sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
@@ -457,7 +466,9 @@ Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobje
     val = 1;
     setsockopt(sock, SOL_SOCKET, SO_BROADCAST, (char *) &val, sizeof(val));
 
-    // Set socket recv buffer
+    //
+    // Socket recv buffer
+    //
 
     //setMaxSocketBuffer();
     // 30Mbps 50ms buffer
@@ -478,10 +489,28 @@ Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobje
         LOGE("bind error : %d %s", errno, strerror(errno));
     }
 
-    memset(&broadcastAddr, 0, sizeof(broadcastAddr));
-    broadcastAddr.sin_family = AF_INET;
-    broadcastAddr.sin_port = htons(port);
-    inet_pton(broadcastAddr.sin_family, broadcastAddrStr.c_str(), &broadcastAddr.sin_addr);
+    //
+    // Parse broadcast address list.
+    //
+
+    broadcastAddrList.clear();
+    broadcastCount = env->GetArrayLength(broadcastAddrList_);
+    for(int i = 0; i < broadcastCount; i++) {
+        jstring address = (jstring) env->GetObjectArrayElement(broadcastAddrList_, i);
+        auto addressStr = GetStringFromJNIString(env, address);
+        env->DeleteLocalRef(address);
+
+        sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(port);
+        inet_pton(addr.sin_family, addressStr.c_str(), &addr.sin_addr);
+        broadcastAddrList.push_back(addr);
+    }
+
+    //
+    // Pipe used for send buffer notification.
+    //
 
     pthread_mutex_init(&pipeMutex, NULL);
 
