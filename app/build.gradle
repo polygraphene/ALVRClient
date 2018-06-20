@@ -67,9 +67,6 @@ android {
             dimension "ar"
             applicationIdSuffix '.ar'
             minSdkVersion 24
-            manifestPlaceholders = [arcore_permission:"<uses-feature android:name=\"android.hardware.camera.ar\" android:required=\"true\" />"
-                    + "<uses-permission android:name=\"android.permission.CAMERA\" />"
-                                    , arcore_metadata:"meta-data android:name=\"com.google.ar.core\" android:value=\"required\" />"]
         }
     }
 }
