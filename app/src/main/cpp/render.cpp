@@ -944,6 +944,7 @@ ovrProgram_Create(ovrProgram *program, const char *vertexSource, const char *fra
     if (r == GL_FALSE) {
         GLchar msg[4096];
         GL(glGetShaderInfoLog(program->VertexShader, sizeof(msg), 0, msg));
+        LOGE("Error on compiling vertex shader. Message=%s", msg);
         LOGE("%s\n%s\n", vertexSource, msg);
         return false;
     }
@@ -956,6 +957,7 @@ ovrProgram_Create(ovrProgram *program, const char *vertexSource, const char *fra
     if (r == GL_FALSE) {
         GLchar msg[4096];
         GL(glGetShaderInfoLog(program->FragmentShader, sizeof(msg), 0, msg));
+        LOGE("Error on compiling fragment shader. Message=%s", msg);
         LOGE("%s\n%s\n", fragmentSource, msg);
         return false;
     }
