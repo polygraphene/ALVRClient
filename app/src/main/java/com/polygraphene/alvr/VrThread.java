@@ -118,11 +118,7 @@ class VrThread extends Thread {
         }
         if (mArThread != null) {
             mArThread.interrupt();
-            try {
-                mArThread.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+            mArThread.join();
         }
 
         send(new Runnable() {
@@ -137,7 +133,7 @@ class VrThread extends Thread {
                 mDecoderThread = new DecoderThread(mReceiverThread
                         , mMainActivity.getAvcDecoder(), mCounter, mRenderCallback, mMainActivity, mLatencyCollector);
                 mTrackingThread = new TrackingThread();
-                mArThread = ArThreadHelper.newArThread(VrThread.this, mEGLContext);
+                mArThread = new ArThread(VrThread.this, mEGLContext);
                 mArThread.initialize(mMainActivity);
                 mArThread.setCameraTexture(mVrContext.getCameraTexture());
 
@@ -160,6 +156,7 @@ class VrThread extends Thread {
         });
         Log.v(TAG, "VrThread.onResume: Worker threads has started.");
     }
+
     public void onPause() {
         Log.v(TAG, "VrThread.onPause: Stopping worker threads.");
         synchronized (mWaiter) {
@@ -197,11 +194,7 @@ class VrThread extends Thread {
         if (mArThread != null) {
             Log.v(TAG, "VrThread.onPause: Stopping ArThread.");
             mArThread.interrupt();
-            try {
-                mArThread.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+            mArThread.join();
         }
 
         if(mReceiverThread != null){
@@ -272,7 +265,7 @@ class VrThread extends Thread {
             notifyAll();
         }
 
-        mVrContext.initialize(mMainActivity, ArThreadHelper.requireCameraTexture());
+        mVrContext.initialize(mMainActivity, Constants.IS_ARCORE_BUILD);
 
         if(mVrContext.is72Hz()) {
             m_RefreshRate = 72;
@@ -498,9 +491,5 @@ class VrThread extends Thread {
 
     public boolean onRequestPermissionsResult(MainActivity activity) {
         return mArThread.onRequestPermissionsResult(activity);
-    }
-
-    public void requestPermissions(MainActivity activity) {
-        ArThreadHelper.requestPermissions(activity);
     }
 }

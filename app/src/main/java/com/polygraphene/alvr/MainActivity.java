@@ -78,7 +78,7 @@ public class MainActivity extends Activity {
         mVrThread = new VrThread(this);
         mVrThread.start();
 
-        mVrThread.requestPermissions(this);
+        ArThread.requestPermissions(this);
     }
 
     @Override
