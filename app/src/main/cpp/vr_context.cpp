@@ -189,7 +189,7 @@ void VrContext::initialize(JNIEnv *env, jobject activity, bool ARMode) {
     FrameBufferHeight = vrapi_GetSystemPropertyInt(&java,
                                                    VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_HEIGHT);
     ovrRenderer_Create(&Renderer, &java, UseMultiview, FrameBufferWidth, FrameBufferHeight
-            , SurfaceTextureID, loadingTexture);
+            , SurfaceTextureID, loadingTexture, CameraTexture);
     ovrRenderer_CreateScene(&Renderer);
 
     BackButtonState = BACK_BUTTON_STATE_NONE;
@@ -322,6 +322,7 @@ void VrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
                                 } else {
                                     g_AROverlayMode = 3;
                                 }
+                                LOG("Changing AROverlayMode. New=%d", g_AROverlayMode);
                             }
                             if (normalized_x > 0.6) {
                                 if (g_AROverlayMode < 3) {
@@ -329,6 +330,7 @@ void VrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
                                 } else {
                                     g_AROverlayMode = 0;
                                 }
+                                LOG("Changing AROverlayMode. New=%d", g_AROverlayMode);
                             }
                         }
                     }
@@ -665,7 +667,7 @@ void VrContext::setFrameGeometry(int width, int height){
         FrameBufferHeight = height;
         ovrRenderer_Destroy(&Renderer);
         ovrRenderer_Create(&Renderer, &java, UseMultiview, FrameBufferWidth, FrameBufferHeight
-        , SurfaceTextureID, loadingTexture);
+        , SurfaceTextureID, loadingTexture, CameraTexture);
         ovrRenderer_CreateScene(&Renderer);
     }
 }

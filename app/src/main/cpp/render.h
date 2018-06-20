@@ -153,7 +153,7 @@ typedef struct {
 
 void ovrRenderer_Clear(ovrRenderer *renderer);
 void ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMultiview, int width, int height,
-                        int SurfaceTextureID, int LoadingTexture);
+                        int SurfaceTextureID, int LoadingTexture, int CameraTexture);
 void ovrRenderer_Destroy(ovrRenderer *renderer);
 void ovrRenderer_CreateScene(ovrRenderer *renderer);
 ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava *java,

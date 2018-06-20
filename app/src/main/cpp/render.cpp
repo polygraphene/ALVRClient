@@ -240,21 +240,30 @@ static const char FRAGMENT_SHADER[] =
                 "in lowp vec2 uv;\n"
                 "in lowp vec4 fragmentColor;\n"
                 "out lowp vec4 outColor;\n"
-                "uniform samplerExternalOES sTexture;\n"
-                "uniform samplerExternalOES sTextureAr;\n"
+                "uniform samplerExternalOES Texture0;\n"
+                "uniform samplerExternalOES Texture1;\n"
                 "uniform lowp int EnableTestMode;\n"
                 "uniform lowp float alpha;\n"
                 "void main()\n"
                 "{\n"
                 "   if(EnableTestMode % 2 == 0){\n"
                 "       if(alpha > 1.0f){ // Non AR\n"
-                "	        outColor = texture(sTexture, uv);\n"
+                "	        outColor = texture(Texture0, uv);\n"
                 "       } else if(alpha < -0.5f){ // Completely AR\n"
-                "	        outColor = texture(sTextureAr, uv);\n"
+                "           if(uv.x < 0.5f){\n"
+                "	            outColor = texture(Texture1, vec2(uv.x * 2.0f, uv.y));\n"
+                "           }else{\n"
+                "	            outColor = texture(Texture1, vec2(uv.x * 2.0f - 1.0f, uv.y));\n"
+                "           }\n"
                 "       }else{ // VR+AR\n"
-                "	        outColor = texture(sTexture, uv) * alpha\n"
-                "                      + texture(sTextureAr, uv) * (1.0f - alpha);\n"
-                "           outColor.a = alpha;\n"
+                "           vec4 arColor;\n"
+                "           if(uv.x < 0.5f){\n"
+                "	            arColor = texture(Texture1, vec2(uv.x * 2.0f, uv.y));\n"
+                "           }else{\n"
+                "	            arColor = texture(Texture1, vec2(uv.x * 2.0f - 1.0f, uv.y));\n"
+                "           }\n"
+                "	        outColor = texture(Texture0, uv) * alpha\n"
+                "                      + arColor * (1.0f - alpha);\n"
                 "       }\n"
                 "   } else {\n"
                 "       outColor = fragmentColor;\n"
@@ -1039,7 +1048,7 @@ void ovrRenderer_Clear(ovrRenderer *renderer) {
 
 void
 ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMultiview, int width, int height
-        , int SurfaceTextureID, int LoadingTexture) {
+        , int SurfaceTextureID, int LoadingTexture, int CameraTexture) {
     renderer->NumBuffers = useMultiview ? 1 : VRAPI_FRAME_LAYER_EYE_MAX;
     renderer->UseMultiview = useMultiview;
     // Create the frame buffers.
@@ -1057,6 +1066,7 @@ ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMul
     }
     renderer->SurfaceTextureID = SurfaceTextureID;
     renderer->LoadingTexture = LoadingTexture;
+    renderer->CameraTexture = CameraTexture;
     renderer->SceneCreated = false;
 }
 

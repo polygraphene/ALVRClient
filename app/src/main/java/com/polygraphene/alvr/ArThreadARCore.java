@@ -9,6 +9,8 @@ import android.opengl.EGLConfig;
 import android.opengl.EGLContext;
 import android.opengl.EGLDisplay;
 import android.opengl.EGLSurface;
+import android.opengl.GLES11Ext;
+import android.opengl.GLES20;
 import android.provider.Settings;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
@@ -18,6 +20,7 @@ import android.widget.Toast;
 import com.google.ar.core.ArCoreApk;
 import com.google.ar.core.Config;
 import com.google.ar.core.Frame;
+import com.google.ar.core.Pose;
 import com.google.ar.core.Session;
 import com.google.ar.core.exceptions.CameraNotAvailableException;
 import com.google.ar.core.exceptions.UnavailableApkTooOldException;
@@ -26,6 +29,9 @@ import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException;
 import com.google.ar.core.exceptions.UnavailableException;
 import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
 
+import java.io.FileOutputStream;
+import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 import java.util.concurrent.TimeUnit;
 
 public class ArThreadARCore implements ArThread {
@@ -133,8 +139,8 @@ public class ArThreadARCore implements ArThread {
         Log.v(TAG, "ArThread started.");
         if (mSession != null) {
             Log.v(TAG, "setCameraTextureName texture=" + mCameraTexture);
-            mSession.setCameraTextureName(mCameraTexture);
             makeContext(mEGLContext);
+            mSession.setCameraTextureName(mCameraTexture);
             try {
                 mSession.resume();
                 Log.e(TAG, "ArSession resumed");
@@ -151,9 +157,10 @@ public class ArThreadARCore implements ArThread {
                     try {
                         Log.v(TAG, "Update ArSession.");
                         Frame frame = mSession.update();
-                        System.arraycopy(frame.getCamera().getDisplayOrientedPose().getTranslation(), 0
+                        Pose pose = frame.getCamera().getDisplayOrientedPose();
+                        System.arraycopy(pose.getTranslation(), 0
                                 , mPosition, 0, 3);
-                        frame.getCamera().getDisplayOrientedPose().getRotationQuaternion(mOrientation, 0);
+                        pose.getRotationQuaternion(mOrientation, 0);
                         Log.v(TAG, "New position fed. Position=(" + mPosition[0] + ", " + mPosition[1] + ", " + mPosition[2] + ")");
                     } catch (CameraNotAvailableException e) {
                         e.printStackTrace();
@@ -277,6 +284,36 @@ public class ArThreadARCore implements ArThread {
 
         if (!EGL14.eglMakeCurrent(display, surface, surface, context)) {
             throw new IllegalStateException("Error making GL context.");
+        }
+    }
+
+    public void debugReadPixel(MainActivity activity){
+        //Generate a new FBO. It will contain your texture.
+        int fb[] = new int[1];
+        GLES11Ext.glGenFramebuffersOES(1, IntBuffer.wrap(fb));
+        GLES11Ext.glBindFramebufferOES(GLES11Ext.GL_FRAMEBUFFER_OES, fb[0]);
+
+        GLES11Ext.glFramebufferTexture2DOES(GLES11Ext.GL_FRAMEBUFFER_OES, GLES11Ext.GL_COLOR_ATTACHMENT0_OES, GLES11Ext.GL_TEXTURE_EXTERNAL_OES, mCameraTexture, 0);
+
+
+        GLES11Ext.glBindFramebufferOES(GLES11Ext.GL_FRAMEBUFFER_OES, fb[0]);
+        GLES20.glViewport(0, 0, 500, 500);
+
+        final int pixels[] = new int[500 * 500];
+        final IntBuffer buffer = IntBuffer.wrap(pixels);
+        buffer.position(0);
+
+        GLES20.glReadPixels(0, 0, 500, 500, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, buffer);
+
+        ByteBuffer byteBuffer = ByteBuffer.allocate(pixels.length * 4);
+        IntBuffer intBuffer = byteBuffer.asIntBuffer();
+        intBuffer.put(pixels);
+        try {
+            FileOutputStream fileOutputStream = new FileOutputStream(activity.getExternalMediaDirs()[0].getAbsolutePath() + "/test.binf");
+            fileOutputStream.write(byteBuffer.array(), 0, pixels.length * 4);
+            fileOutputStream.close();
+        } catch (java.io.IOException e) {
+            e.printStackTrace();
         }
     }
 }
