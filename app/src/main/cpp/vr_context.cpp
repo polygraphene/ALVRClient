@@ -400,13 +400,13 @@ int64_t VrContext::fetchTrackingInfo(JNIEnv *env_, jobject callback, jfloatArray
         ovrVector3f position;
         ovrQuatf orientation;
 
-        jfloat *position_c = env->GetFloatArrayElements(position_, NULL);
+        jfloat *position_c = env_->GetFloatArrayElements(position_, NULL);
         memcpy(&position, position_c, sizeof(float) * 3);
-        env->ReleaseFloatArrayElements(position_, position_c, 0);
+        env_->ReleaseFloatArrayElements(position_, position_c, 0);
 
-        jfloat *orientation_c = env->GetFloatArrayElements(orientation_, NULL);
+        jfloat *orientation_c = env_->GetFloatArrayElements(orientation_, NULL);
         memcpy(&orientation, orientation_c, sizeof(float) * 4);
-        env->ReleaseFloatArrayElements(orientation_, orientation_c, 0);
+        env_->ReleaseFloatArrayElements(orientation_, orientation_c, 0);
 
         // Rotate PI/2 around (0, 0, -1)
         // Orientation provided by ARCore is portrait mode orientation.
