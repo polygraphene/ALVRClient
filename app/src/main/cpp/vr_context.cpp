@@ -142,6 +142,13 @@ void VrContext::initialize(JNIEnv *env, jobject activity, bool ARMode) {
     UseMultiview = (multi_view && vrapi_GetSystemPropertyInt(&java, VRAPI_SYS_PROP_MULTIVIEW_AVAILABLE));
     LOG("UseMultiview:%d", UseMultiview);
 
+    GLint textureUnits;
+    glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &textureUnits);
+    LOGI("GL_VENDOR=%s", glGetString(GL_VENDOR));
+    LOGI("GL_RENDERER=%s", glGetString(GL_RENDERER));
+    LOGI("GL_VERSION=%s", glGetString(GL_VERSION));
+    LOGI("GL_MAX_TEXTURE_IMAGE_UNITS=%d", textureUnits);
+
     chooseRefreshRate();
 
     //
@@ -189,7 +196,7 @@ void VrContext::initialize(JNIEnv *env, jobject activity, bool ARMode) {
     FrameBufferHeight = vrapi_GetSystemPropertyInt(&java,
                                                    VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_HEIGHT);
     ovrRenderer_Create(&Renderer, &java, UseMultiview, FrameBufferWidth, FrameBufferHeight
-            , SurfaceTextureID, loadingTexture, CameraTexture);
+            , SurfaceTextureID, loadingTexture, CameraTexture, m_ARMode);
     ovrRenderer_CreateScene(&Renderer);
 
     BackButtonState = BACK_BUTTON_STATE_NONE;
@@ -667,7 +674,7 @@ void VrContext::setFrameGeometry(int width, int height){
         FrameBufferHeight = height;
         ovrRenderer_Destroy(&Renderer);
         ovrRenderer_Create(&Renderer, &java, UseMultiview, FrameBufferWidth, FrameBufferHeight
-        , SurfaceTextureID, loadingTexture, CameraTexture);
+        , SurfaceTextureID, loadingTexture, CameraTexture, m_ARMode);
         ovrRenderer_CreateScene(&Renderer);
     }
 }

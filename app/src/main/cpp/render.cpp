@@ -241,6 +241,23 @@ static const char FRAGMENT_SHADER[] =
                 "in lowp vec4 fragmentColor;\n"
                 "out lowp vec4 outColor;\n"
                 "uniform samplerExternalOES Texture0;\n"
+                "uniform lowp int EnableTestMode;\n"
+                "void main()\n"
+                "{\n"
+                "   if(EnableTestMode % 2 == 0){\n"
+                "	    outColor = texture(Texture0, uv);\n"
+                "   } else {\n"
+                "       outColor = fragmentColor;\n"
+                "   }\n"
+                "}\n";
+
+static const char FRAGMENT_SHADER_AR[] =
+        "#extension GL_OES_EGL_image_external_essl3 : require\n"
+                "#extension GL_OES_EGL_image_external : require\n"
+                "in lowp vec2 uv;\n"
+                "in lowp vec4 fragmentColor;\n"
+                "out lowp vec4 outColor;\n"
+                "uniform samplerExternalOES Texture0;\n"
                 "uniform samplerExternalOES Texture1;\n"
                 "uniform lowp int EnableTestMode;\n"
                 "uniform lowp float alpha;\n"
@@ -1050,7 +1067,7 @@ void ovrRenderer_Clear(ovrRenderer *renderer) {
 
 void
 ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMultiview, int width, int height
-        , int SurfaceTextureID, int LoadingTexture, int CameraTexture) {
+        , int SurfaceTextureID, int LoadingTexture, int CameraTexture, bool ARMode) {
     renderer->NumBuffers = useMultiview ? 1 : VRAPI_FRAME_LAYER_EYE_MAX;
     renderer->UseMultiview = useMultiview;
     // Create the frame buffers.
@@ -1070,6 +1087,7 @@ ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMul
     renderer->LoadingTexture = LoadingTexture;
     renderer->CameraTexture = CameraTexture;
     renderer->SceneCreated = false;
+    renderer->ARMode = ARMode;
 }
 
 
@@ -1077,7 +1095,11 @@ void ovrRenderer_CreateScene(ovrRenderer *renderer) {
     if(renderer->SceneCreated) {
         return;
     }
-    ovrProgram_Create(&renderer->Program, VERTEX_SHADER, FRAGMENT_SHADER, renderer->UseMultiview);
+    const char *fragment_shader = FRAGMENT_SHADER;
+    if(renderer->ARMode) {
+        fragment_shader = FRAGMENT_SHADER_AR;
+    }
+    ovrProgram_Create(&renderer->Program, VERTEX_SHADER, fragment_shader, renderer->UseMultiview);
     ovrProgram_Create(&renderer->ProgramLoading, VERTEX_SHADER_LOADING, FRAGMENT_SHADER_LOADING,
                       renderer->UseMultiview);
     ovrGeometry_CreatePanel(&renderer->Panel);
