@@ -126,11 +126,11 @@ class DecoderThread extends Thread {
 
             while (!mStopped) {
                 NAL nal = mNalParser.waitNal();
-                if (mStopped) {
-                    mNalParser.recycleNal(nal);
+                if(nal == null) {
                     break;
                 }
-                if(nal == null) {
+                if (mStopped) {
+                    mNalParser.recycleNal(nal);
                     break;
                 }
 
