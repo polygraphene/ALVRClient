@@ -195,6 +195,8 @@ void VrContext::initialize(JNIEnv *env, jobject activity, bool ARMode) {
     BackButtonState = BACK_BUTTON_STATE_NONE;
     BackButtonDown = false;
     BackButtonDownStartTime = 0.0;
+
+    position_offset_y = 0.0;
 }
 
 
@@ -416,6 +418,8 @@ int64_t VrContext::fetchTrackingInfo(JNIEnv *env_, jobject callback, jfloatArray
         quat.z = -sqrtf(0.5);
         quat.w = sqrtf(0.5);
         ovrQuatf orientation_rotated = quatMultipy(&orientation, &quat);
+
+        position.y += position_offset_y;
 
         sendTrackingInfo(env_, callback, frame->displayTime, &frame->tracking, &position, &orientation_rotated);
     } else {
