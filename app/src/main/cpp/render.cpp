@@ -273,7 +273,7 @@ static const char FRAGMENT_SHADER_AR[] =
                 "	            outColor = texture(Texture1, vec2(uv.x * 2.0f - 1.0f, uv.y));\n"
                 "           }\n"
                 "       }else{ // VR+AR\n"
-                "           vec4 arColor;\n"
+                "           lowp vec4 arColor;\n"
                 "           if(uv.x < 0.5f){\n"
                 "	            arColor = texture(Texture1, vec2(uv.x * 2.0f, uv.y));\n"
                 "           }else{\n"
@@ -944,6 +944,7 @@ ovrProgram_Create(ovrProgram *program, const char *vertexSource, const char *fra
                   const bool useMultiview) {
     GLint r;
 
+    LOGI("Compiling shaders.");
     GL(program->VertexShader = glCreateShader(GL_VERTEX_SHADER));
     if (program->VertexShader == 0) {
         LOGE("glCreateShader error: %d", glGetError());
@@ -963,7 +964,7 @@ ovrProgram_Create(ovrProgram *program, const char *vertexSource, const char *fra
         GL(glGetShaderInfoLog(program->VertexShader, sizeof(msg), 0, msg));
         LOGE("Error on compiling vertex shader. Message=%s", msg);
         LOGE("%s\n%s\n", vertexSource, msg);
-        return false;
+        // Ignore compile error. If this error is only a warning, we can proceed to next.
     }
 
     const char *fragmentSources[2] = {programVersion, fragmentSource};
@@ -976,7 +977,7 @@ ovrProgram_Create(ovrProgram *program, const char *vertexSource, const char *fra
         GL(glGetShaderInfoLog(program->FragmentShader, sizeof(msg), 0, msg));
         LOGE("Error on compiling fragment shader. Message=%s", msg);
         LOGE("%s\n%s\n", fragmentSource, msg);
-        return false;
+        // Ignore compile error. If this error is only a warning, we can proceed to next.
     }
 
     GL(program->Program = glCreateProgram());
@@ -1031,6 +1032,7 @@ ovrProgram_Create(ovrProgram *program, const char *vertexSource, const char *fra
 
     GL(glUseProgram(0));
 
+    LOGI("Successfully compiled shader.");
     return true;
 }
 
