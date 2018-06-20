@@ -59,7 +59,7 @@ class VrThread extends Thread {
 
     public void onSurfaceCreated(final Surface surface) {
         Log.v(TAG, "VrThread.onSurfaceCreated.");
-        post(new Runnable() {
+        send(new Runnable() {
             @Override
             public void run() {
                 mVrContext.onSurfaceCreated(surface);
@@ -69,7 +69,7 @@ class VrThread extends Thread {
 
     public void onSurfaceChanged(final Surface surface) {
         Log.v(TAG, "VrThread.onSurfaceChanged.");
-        post(new Runnable() {
+        send(new Runnable() {
             @Override
             public void run() {
                 mVrContext.onSurfaceChanged(surface);
@@ -79,7 +79,7 @@ class VrThread extends Thread {
 
     public void onSurfaceDestroyed() {
         Log.v(TAG, "VrThread.onSurfaceDestroyed.");
-        post(new Runnable() {
+        send(new Runnable() {
             @Override
             public void run() {
                 mVrContext.onSurfaceDestroyed();

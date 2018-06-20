@@ -22,7 +22,7 @@
 void VrContext::onVrModeChange() {
     if (Resumed && window != NULL) {
         if (Ovr == NULL) {
-            LOG("Entering VR mode.");
+            LOGI("Entering VR mode.");
             ovrModeParms parms = vrapi_DefaultModeParms(&java);
 
             parms.Flags |= VRAPI_MODE_FLAG_RESET_WINDOW_FULLSCREEN;
@@ -46,8 +46,10 @@ void VrContext::onVrModeChange() {
         }
     } else {
         if (Ovr != NULL) {
-            LOG("Leaving VR mode.");
+            LOGI("Leaving VR mode.");
             vrapi_LeaveVrMode(Ovr);
+
+            LOGI("Leaved VR mode.");
             Ovr = NULL;
         }
     }
@@ -466,6 +468,7 @@ void VrContext::onSurfaceChanged(jobject surface){
     LOG("onSurfaceChanged called. Resumed=%d Window=%p Ovr=%p", Resumed, window, Ovr);
     ANativeWindow *newWindow = ANativeWindow_fromSurface(env, surface);
     if (newWindow != window) {
+        LOG("Replacing ANativeWindow. %p != %p", newWindow, window);
         ANativeWindow_release(window);
         window = NULL;
         onVrModeChange();
@@ -475,6 +478,7 @@ void VrContext::onSurfaceChanged(jobject surface){
             onVrModeChange();
         }
     } else if (newWindow != NULL) {
+        LOG("Got same ANativeWindow. %p == %p", newWindow, window);
         ANativeWindow_release(newWindow);
     }
 }
