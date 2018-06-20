@@ -8,7 +8,6 @@ import android.content.pm.PackageManager;
 import android.media.AudioManager;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
-import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.util.Log;
@@ -31,7 +30,6 @@ public class MainActivity extends Activity {
     private List<MediaCodecInfo> mAvcDecoderList;
 
     private VrThread mVrThread = null;
-    WifiManager.WifiLock mWifiLock = null;
 
     public MediaCodecInfo getAvcDecoder() {
         return mAvcDecoderList.get(0);
@@ -86,15 +84,6 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-
-        if( mWifiLock == null )
-            mWifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, TAG);
-
-        mWifiLock.setReferenceCounted(false);
-
-        if( !mWifiLock.isHeld() )
-            mWifiLock.acquire();
 
         if(mVrThread != null) {
             mVrThread.onResume();
@@ -104,14 +93,6 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
-
-        if( mWifiLock == null )
-            Log.w(TAG, "#releaseWifiLock mWifiLock was not created previously");
-
-        if( mWifiLock != null && mWifiLock.isHeld() ){
-            mWifiLock.release();
-            //mWifiLock = null;
-        }
 
         if(mVrThread != null) {
             mVrThread.onPause();
