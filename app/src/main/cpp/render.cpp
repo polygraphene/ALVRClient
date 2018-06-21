@@ -1136,7 +1136,7 @@ ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava
                                                    unsigned long long *completionFence,
                                                    bool loading, int enableTestMode,
                                             int AROverlayMode) {
-    ovrTracking2 updatedTracking = *tracking;
+    const ovrTracking2& updatedTracking = *tracking;
 
     ovrLayerProjection2 layer = vrapi_DefaultLayerProjection2();
     layer.HeadPose = updatedTracking.HeadPose;
