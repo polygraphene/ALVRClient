@@ -7,7 +7,7 @@ public interface NALParser {
     // If notifyWaitingThread was called, interrupt call and return null.
     NAL waitNal();
     NAL getNal();
-    NAL peekNal();
+    void recycleNal(NAL nal);
     void flushNALList();
     void notifyWaitingThread();
 }

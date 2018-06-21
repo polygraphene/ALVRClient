@@ -240,12 +240,48 @@ static const char FRAGMENT_SHADER[] =
                 "in lowp vec2 uv;\n"
                 "in lowp vec4 fragmentColor;\n"
                 "out lowp vec4 outColor;\n"
-                "uniform samplerExternalOES sTexture;\n"
+                "uniform samplerExternalOES Texture0;\n"
                 "uniform lowp int EnableTestMode;\n"
                 "void main()\n"
                 "{\n"
                 "   if(EnableTestMode % 2 == 0){\n"
-                "	    outColor = texture(sTexture, uv);\n"
+                "	    outColor = texture(Texture0, uv);\n"
+                "   } else {\n"
+                "       outColor = fragmentColor;\n"
+                "   }\n"
+                "}\n";
+
+static const char FRAGMENT_SHADER_AR[] =
+        "#extension GL_OES_EGL_image_external_essl3 : require\n"
+                "#extension GL_OES_EGL_image_external : require\n"
+                "in lowp vec2 uv;\n"
+                "in lowp vec4 fragmentColor;\n"
+                "out lowp vec4 outColor;\n"
+                "uniform samplerExternalOES Texture0;\n"
+                "uniform samplerExternalOES Texture1;\n"
+                "uniform lowp int EnableTestMode;\n"
+                "uniform lowp float alpha;\n"
+                "void main()\n"
+                "{\n"
+                "   if(EnableTestMode % 2 == 0){\n"
+                "       if(alpha > 1.0f){ // Non AR\n"
+                "	        outColor = texture(Texture0, uv);\n"
+                "       } else if(alpha < -0.5f){ // Completely AR\n"
+                "           if(uv.x < 0.5f){\n"
+                "	            outColor = texture(Texture1, vec2(uv.x * 2.0f, uv.y));\n"
+                "           }else{\n"
+                "	            outColor = texture(Texture1, vec2(uv.x * 2.0f - 1.0f, uv.y));\n"
+                "           }\n"
+                "       }else{ // VR+AR\n"
+                "           lowp vec4 arColor;\n"
+                "           if(uv.x < 0.5f){\n"
+                "	            arColor = texture(Texture1, vec2(uv.x * 2.0f, uv.y));\n"
+                "           }else{\n"
+                "	            arColor = texture(Texture1, vec2(uv.x * 2.0f - 1.0f, uv.y));\n"
+                "           }\n"
+                "	        outColor = texture(Texture0, uv) * alpha\n"
+                "                      + arColor * (1.0f - alpha);\n"
+                "       }\n"
                 "   } else {\n"
                 "       outColor = fragmentColor;\n"
                 "   }\n"
@@ -878,12 +914,14 @@ enum E1test {
     UNIFORM_VIEW_ID,
     UNIFORM_MVP_MATRIX,
     UNIFORM_ENABLE_TEST_MODE,
+    UNIFORM_ALPHA,
 };
 enum E2test {
     UNIFORM_TYPE_VECTOR4,
     UNIFORM_TYPE_MATRIX4X4,
     UNIFORM_TYPE_INT,
     UNIFORM_TYPE_BUFFER,
+    UNIFORM_TYPE_FLOAT,
 };
 typedef struct {
     E1test index;
@@ -896,6 +934,7 @@ static ovrUniform ProgramUniforms[] =
                 {UNIFORM_VIEW_ID,          UNIFORM_TYPE_INT,       "ViewID"},
                 {UNIFORM_MVP_MATRIX,       UNIFORM_TYPE_MATRIX4X4, "mvpMatrix"},
                 {UNIFORM_ENABLE_TEST_MODE, UNIFORM_TYPE_INT,       "EnableTestMode"},
+                {UNIFORM_ALPHA, UNIFORM_TYPE_FLOAT,       "alpha"},
         };
 
 static const char *programVersion = "#version 300 es\n";
@@ -905,6 +944,7 @@ ovrProgram_Create(ovrProgram *program, const char *vertexSource, const char *fra
                   const bool useMultiview) {
     GLint r;
 
+    LOGI("Compiling shaders.");
     GL(program->VertexShader = glCreateShader(GL_VERTEX_SHADER));
     if (program->VertexShader == 0) {
         LOGE("glCreateShader error: %d", glGetError());
@@ -922,8 +962,9 @@ ovrProgram_Create(ovrProgram *program, const char *vertexSource, const char *fra
     if (r == GL_FALSE) {
         GLchar msg[4096];
         GL(glGetShaderInfoLog(program->VertexShader, sizeof(msg), 0, msg));
+        LOGE("Error on compiling vertex shader. Message=%s", msg);
         LOGE("%s\n%s\n", vertexSource, msg);
-        return false;
+        // Ignore compile error. If this error is only a warning, we can proceed to next.
     }
 
     const char *fragmentSources[2] = {programVersion, fragmentSource};
@@ -934,8 +975,9 @@ ovrProgram_Create(ovrProgram *program, const char *vertexSource, const char *fra
     if (r == GL_FALSE) {
         GLchar msg[4096];
         GL(glGetShaderInfoLog(program->FragmentShader, sizeof(msg), 0, msg));
+        LOGE("Error on compiling fragment shader. Message=%s", msg);
         LOGE("%s\n%s\n", fragmentSource, msg);
-        return false;
+        // Ignore compile error. If this error is only a warning, we can proceed to next.
     }
 
     GL(program->Program = glCreateProgram());
@@ -990,6 +1032,7 @@ ovrProgram_Create(ovrProgram *program, const char *vertexSource, const char *fra
 
     GL(glUseProgram(0));
 
+    LOGI("Successfully compiled shader.");
     return true;
 }
 
@@ -1026,7 +1069,7 @@ void ovrRenderer_Clear(ovrRenderer *renderer) {
 
 void
 ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMultiview, int width, int height
-        , int SurfaceTextureID, int LoadingTexture) {
+        , int SurfaceTextureID, int LoadingTexture, int CameraTexture, bool ARMode) {
     renderer->NumBuffers = useMultiview ? 1 : VRAPI_FRAME_LAYER_EYE_MAX;
     renderer->UseMultiview = useMultiview;
     // Create the frame buffers.
@@ -1044,7 +1087,9 @@ ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMul
     }
     renderer->SurfaceTextureID = SurfaceTextureID;
     renderer->LoadingTexture = LoadingTexture;
+    renderer->CameraTexture = CameraTexture;
     renderer->SceneCreated = false;
+    renderer->ARMode = ARMode;
 }
 
 
@@ -1052,7 +1097,11 @@ void ovrRenderer_CreateScene(ovrRenderer *renderer) {
     if(renderer->SceneCreated) {
         return;
     }
-    ovrProgram_Create(&renderer->Program, VERTEX_SHADER, FRAGMENT_SHADER, renderer->UseMultiview);
+    const char *fragment_shader = FRAGMENT_SHADER;
+    if(renderer->ARMode) {
+        fragment_shader = FRAGMENT_SHADER_AR;
+    }
+    ovrProgram_Create(&renderer->Program, VERTEX_SHADER, fragment_shader, renderer->UseMultiview);
     ovrProgram_Create(&renderer->ProgramLoading, VERTEX_SHADER_LOADING, FRAGMENT_SHADER_LOADING,
                       renderer->UseMultiview);
     ovrGeometry_CreatePanel(&renderer->Panel);
@@ -1085,7 +1134,8 @@ void ovrRenderer_Destroy(ovrRenderer *renderer) {
 ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava *java,
                                                    const ovrTracking2 *tracking, ovrMobile *ovr,
                                                    unsigned long long *completionFence,
-                                                   bool loading, int enableTestMode) {
+                                                   bool loading, int enableTestMode,
+                                            int AROverlayMode) {
     const ovrTracking2& updatedTracking = *tracking;
 
     ovrLayerProjection2 layer = vrapi_DefaultLayerProjection2();
@@ -1229,19 +1279,42 @@ ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava
 
             GL(glBindVertexArray(renderer->Panel.VertexArrayObject));
 
-            GL(glActiveTexture(GL_TEXTURE0));
-            GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->SurfaceTextureID));
-
             GL(glUniformMatrix4fv(renderer->Program.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
                                   (float *) mvpMatrix));
 
-            GL(glDrawElements(GL_TRIANGLES, renderer->Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
+            if(AROverlayMode == 0) {
+                // VR 100%
+                GL(glUniform1f(renderer->Program.UniformLocation[UNIFORM_ALPHA], 2.0f));
+                GL(glActiveTexture(GL_TEXTURE0));
+                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->SurfaceTextureID));
+
+                GL(glDrawElements(GL_TRIANGLES, renderer->Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
+            }else {
+                if(AROverlayMode == 1) {
+                    // AR 30% VR 70%
+                    GL(glUniform1f(renderer->Program.UniformLocation[UNIFORM_ALPHA], 0.7f));
+                }else if(AROverlayMode == 2) {
+                    // AR 70% VR 30%
+                    GL(glUniform1f(renderer->Program.UniformLocation[UNIFORM_ALPHA], 0.3f));
+                }else if(AROverlayMode == 3) {
+                    // AR 100%
+                    GL(glUniform1f(renderer->Program.UniformLocation[UNIFORM_ALPHA], -2.0f));
+                }
+                GL(glActiveTexture(GL_TEXTURE0));
+                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->SurfaceTextureID));
+                GL(glActiveTexture(GL_TEXTURE1));
+                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->CameraTexture));
+                GL(glDrawElements(GL_TRIANGLES, renderer->Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
+            }
         }
 
         GL(glBindVertexArray(0));
         if (loading) {
             GL(glBindTexture(GL_TEXTURE_2D, 0));
         } else {
+            GL(glActiveTexture(GL_TEXTURE0));
+            GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
+            GL(glActiveTexture(GL_TEXTURE1));
             GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
         }
         GL(glUseProgram(0));

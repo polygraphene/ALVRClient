@@ -2,14 +2,20 @@
 #define ALVRCLIENT_UTILS_H
 
 #include <stdint.h>
+#include <math.h>
 #include <time.h>
-#include <android/log.h>
 #include <pthread.h>
+#include <android/log.h>
 #include <string>
 #include <VrApi_Types.h>
 
 #define LOG(...) __android_log_print(ANDROID_LOG_DEBUG, "ALVR Native", __VA_ARGS__)
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "ALVR Native", __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "ALVR Native", __VA_ARGS__)
+
+#define LOGSOUND(...) __android_log_print(ANDROID_LOG_DEBUG, "ALVR Sound", __VA_ARGS__)
+#define LOGSOUNDI(...) __android_log_print(ANDROID_LOG_INFO, "ALVR Sound", __VA_ARGS__)
+#define LOGSOUNDE(...) __android_log_print(ANDROID_LOG_ERROR, "ALVR Sound", __VA_ARGS__)
 
 inline void FrameLog(uint64_t frameIndex, const char *format, ...)
 {
@@ -88,6 +94,15 @@ inline std::string DumpMatrix(const ovrMatrix4f *matrix) {
             matrix->M[3][1], matrix->M[3][2], matrix->M[3][3]
     );
     return std::string(buf);
+}
+
+inline ovrQuatf quatMultipy(const ovrQuatf *a, const ovrQuatf *b){
+    ovrQuatf dest;
+    dest.x = a->x * b->w + a->w * b->x + a->y * b->z - a->z * b->y;
+    dest.y = a->y * b->w + a->w * b->y + a->z * b->x - a->x * b->z;
+    dest.z = a->z * b->w + a->w * b->z + a->x * b->y - a->y * b->x;
+    dest.w = a->w * b->w - a->x * b->x - a->y * b->y - a->z * b->z;
+    return dest;
 }
 
 #endif //ALVRCLIENT_UTILS_H

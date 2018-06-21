@@ -55,6 +55,7 @@ target_link_libraries( # Specifies the target library.
                        vrapi
                        GLESv3
                        EGL
-                       android)
+                       android
+                       OpenSLES)
 
 include_directories(include)

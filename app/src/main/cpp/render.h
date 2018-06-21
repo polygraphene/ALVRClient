@@ -147,17 +147,20 @@ typedef struct {
     ovrGeometry Panel;
     ovrGeometry TestMode;
     int SurfaceTextureID;
+    int CameraTexture;
     int LoadingTexture;
+    bool ARMode;
 } ovrRenderer;
 
 void ovrRenderer_Clear(ovrRenderer *renderer);
 void ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMultiview, int width, int height,
-                        int SurfaceTextureID, int LoadingTexture);
+                        int SurfaceTextureID, int LoadingTexture, int CameraTexture, bool ARMode);
 void ovrRenderer_Destroy(ovrRenderer *renderer);
 void ovrRenderer_CreateScene(ovrRenderer *renderer);
 ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava *java,
                                                    const ovrTracking2 *tracking, ovrMobile *ovr,
                                                    unsigned long long *completionFence,
-                                                   bool loading, int enableTestMode);
+                                                   bool loading, int enableTestMode,
+                                            int AROverlayMode);
 
 #endif //ALVRCLIENT_RENDER_H

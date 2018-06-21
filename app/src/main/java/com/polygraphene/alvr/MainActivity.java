@@ -9,6 +9,7 @@ import android.media.AudioManager;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.SurfaceHolder;
@@ -76,6 +77,8 @@ public class MainActivity extends Activity {
         Log.v(TAG, "onCreate: Starting VrThread");
         mVrThread = new VrThread(this);
         mVrThread.start();
+
+        ArThread.requestPermissions(this);
     }
 
     @Override
@@ -175,6 +178,13 @@ public class MainActivity extends Activity {
         } catch (PackageManager.NameNotFoundException e) {
             e.printStackTrace();
             return getString(R.string.app_name) + " Unknown version";
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        if (!mVrThread.onRequestPermissionsResult(this)) {
+            finish();
         }
     }
 }

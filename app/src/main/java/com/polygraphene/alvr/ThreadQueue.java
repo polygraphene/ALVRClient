@@ -40,6 +40,11 @@ public class ThreadQueue {
                 return false;
             }
             runnable.run();
+            synchronized (this) {
+                // Notify queue change for threads waiting completion of "send" method.
+                notifyAll();
+                mQueue.removeFirst();
+            }
         }
         if(mStopped) {
             return false;
@@ -56,9 +61,7 @@ public class ThreadQueue {
         if (mQueue.size() == 0) {
             return null;
         }
-        // Notify queue change for threads waiting completion of "send" method.
-        notifyAll();
-        return mQueue.removeFirst();
+        return mQueue.getFirst();
     }
 
     synchronized public void waitNext() {

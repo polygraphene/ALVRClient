@@ -4,6 +4,8 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.SurfaceTexture;
 import android.media.MediaCodec;
+import android.opengl.EGL14;
+import android.opengl.EGLContext;
 import android.util.Log;
 import android.view.Surface;
 
@@ -35,6 +37,7 @@ class VrThread extends Thread {
 
     // Worker threads
     private TrackingThread mTrackingThread;
+    private ArThread mArThread;
     private DecoderThread mDecoderThread;
     private UdpReceiverThread mReceiverThread;
 
@@ -42,6 +45,7 @@ class VrThread extends Thread {
     private LatencyCollector mLatencyCollector = new LatencyCollector();
 
     private int m_RefreshRate = 60;
+    private EGLContext mEGLContext;
 
     // Called from native
     public interface VrFrameCallback {
@@ -54,7 +58,8 @@ class VrThread extends Thread {
     }
 
     public void onSurfaceCreated(final Surface surface) {
-        post(new Runnable() {
+        Log.v(TAG, "VrThread.onSurfaceCreated.");
+        send(new Runnable() {
             @Override
             public void run() {
                 mVrContext.onSurfaceCreated(surface);
@@ -63,7 +68,8 @@ class VrThread extends Thread {
     }
 
     public void onSurfaceChanged(final Surface surface) {
-        post(new Runnable() {
+        Log.v(TAG, "VrThread.onSurfaceChanged.");
+        send(new Runnable() {
             @Override
             public void run() {
                 mVrContext.onSurfaceChanged(surface);
@@ -72,7 +78,8 @@ class VrThread extends Thread {
     }
 
     public void onSurfaceDestroyed() {
-        post(new Runnable() {
+        Log.v(TAG, "VrThread.onSurfaceDestroyed.");
+        send(new Runnable() {
             @Override
             public void run() {
                 mVrContext.onSurfaceDestroyed();
@@ -109,8 +116,12 @@ class VrThread extends Thread {
                 e.printStackTrace();
             }
         }
+        if (mArThread != null) {
+            mArThread.interrupt();
+            mArThread.join();
+        }
 
-        post(new Runnable() {
+        send(new Runnable() {
             @Override
             public void run() {
                 Log.v(TAG, "VrThread.onResume: Starting worker threads.");
@@ -122,6 +133,9 @@ class VrThread extends Thread {
                 mDecoderThread = new DecoderThread(mReceiverThread
                         , mMainActivity.getAvcDecoder(), mCounter, mRenderCallback, mMainActivity, mLatencyCollector);
                 mTrackingThread = new TrackingThread();
+                mArThread = new ArThread(VrThread.this, mEGLContext);
+                mArThread.initialize(mMainActivity);
+                mArThread.setCameraTexture(mVrContext.getCameraTexture());
 
                 try {
                     mDecoderThread.start();
@@ -131,16 +145,18 @@ class VrThread extends Thread {
                     }
                     // TrackingThread relies on ReceiverThread.
                     mTrackingThread.start();
+                    mArThread.start(mMainActivity);
                 } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
                     e.printStackTrace();
                 }
 
-                Log.v(TAG, "VrThread.onResume: Worker threads has started.");
-
+                Log.v(TAG, "VrThread.onResume: mVrContext.onResume().");
                 mVrContext.onResume();
             }
         });
+        Log.v(TAG, "VrThread.onResume: Worker threads has started.");
     }
+
     public void onPause() {
         Log.v(TAG, "VrThread.onPause: Stopping worker threads.");
         synchronized (mWaiter) {
@@ -149,6 +165,7 @@ class VrThread extends Thread {
         }
         // DecoderThread must be stopped before ReceiverThread
         if (mDecoderThread != null) {
+            Log.v(TAG, "VrThread.onPause: Stopping DecoderThread.");
             mDecoderThread.interrupt();
             try {
                 mDecoderThread.join();
@@ -157,6 +174,7 @@ class VrThread extends Thread {
             }
         }
         if (mReceiverThread != null) {
+            Log.v(TAG, "VrThread.onPause: Stopping ReceiverThread.");
             mReceiverThread.interrupt();
             try {
                 mReceiverThread.join();
@@ -165,6 +183,7 @@ class VrThread extends Thread {
             }
         }
         if (mTrackingThread != null) {
+            Log.v(TAG, "VrThread.onPause: Stopping TrackingThread.");
             mTrackingThread.interrupt();
             try {
                 mTrackingThread.join();
@@ -172,19 +191,25 @@ class VrThread extends Thread {
                 e.printStackTrace();
             }
         }
+        if (mArThread != null) {
+            Log.v(TAG, "VrThread.onPause: Stopping ArThread.");
+            mArThread.interrupt();
+            mArThread.join();
+        }
 
         if(mReceiverThread != null){
             saveConnectionState(mReceiverThread.getServerAddress()
                     , mReceiverThread.getServerPort());
         }
 
-        Log.v(TAG, "VrThread.onPause: All worker threads has stopped.");
-        post(new Runnable() {
+        Log.v(TAG, "VrThread.onPause: mVrContext.onPause().");
+        send(new Runnable() {
             @Override
             public void run() {
                 mVrContext.onPause();
             }
         });
+        Log.v(TAG, "VrThread.onPause: All worker threads has stopped.");
     }
 
     public void onKeyEvent(final int keyCode, final int action) {
@@ -233,13 +258,14 @@ class VrThread extends Thread {
     @Override
     public void run() {
         setName("VrThread");
+        Log.v(TAG, "VrThread started.");
 
         synchronized (this) {
             mQueue = new ThreadQueue();
             notifyAll();
         }
 
-        mVrContext.initialize(mMainActivity);
+        mVrContext.initialize(mMainActivity, Constants.IS_ARCORE_BUILD);
 
         if(mVrContext.is72Hz()) {
             m_RefreshRate = 72;
@@ -265,6 +291,8 @@ class VrThread extends Thread {
         mLoadingTexture.initializeMessageCanvas(mVrContext.getLoadingTexture());
         mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\nLoading...");
 
+        mEGLContext = EGL14.eglGetCurrentContext();
+
         Log.v(TAG, "Start loop of VrThread.");
         while(mQueue.waitIdle()) {
             if(!mVrContext.isVrMode() || !mResumed) {
@@ -279,7 +307,7 @@ class VrThread extends Thread {
     }
 
     private void render(){
-        if (mReceiverThread.isConnected() && mDecoderThread.isFrameAvailable()) {
+        if (mReceiverThread.isConnected() && mDecoderThread.isFrameAvailable() && mArThread.getErrorMessage() == null) {
             mVrContext.render(new VrFrameCallback() {
                 @Override
                 public long waitFrame() {
@@ -321,10 +349,14 @@ class VrThread extends Thread {
             }, mLatencyCollector);
             mLatencyCollector.Submit(mFrameIndex);
         } else {
-            if(mReceiverThread.isConnected()) {
-                mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \nConnected!\nStreaming will begin soon!");
-            }else {
-                mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \nPress CONNECT button\non ALVR server.");
+            if (mArThread.getErrorMessage() != null) {
+                mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \n!!! Error on ARCore initialization !!!\n" + mArThread.getErrorMessage());
+            } else {
+                if (mReceiverThread.isConnected()) {
+                    mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \nConnected!\nStreaming will begin soon!");
+                } else {
+                    mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \nPress CONNECT button\non ALVR server.");
+                }
             }
             mVrContext.renderLoading();
             try {
@@ -403,8 +435,8 @@ class VrThread extends Thread {
         public void run() {
             long previousFetchTime = System.nanoTime();
             while (!mStopped) {
-                if (mVrContext.isVrMode() && mReceiverThread.isConnected()) {
-                    long frameIndex = mVrContext.fetchTrackingInfo(mOnSendTrackingCallback);
+                if (isTracking()) {
+                    long frameIndex = mVrContext.fetchTrackingInfo(mOnSendTrackingCallback, mArThread.getPosition(), mArThread.getOrientation());
                     mLatencyCollector.Tracking(frameIndex);
                 }
                 try {
@@ -452,4 +484,12 @@ class VrThread extends Thread {
         mReceiverThread.recoverConnectionState(serverAddress, serverPort);
     }
 
+    public boolean isTracking() {
+        return mVrContext != null && mReceiverThread != null
+                && mVrContext.isVrMode() && mReceiverThread.isConnected();
+    }
+
+    public boolean onRequestPermissionsResult(MainActivity activity) {
+        return mArThread.onRequestPermissionsResult(activity);
+    }
 }

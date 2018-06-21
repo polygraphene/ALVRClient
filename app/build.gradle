@@ -6,8 +6,8 @@ android {
         applicationId "com.polygraphene.alvr"
         minSdkVersion 21
         targetSdkVersion 26
-        versionCode 15
-        versionName "2.0.2"
+        versionCode 19
+        versionName "2.1.3"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
         externalNativeBuild {
             cmake {
@@ -48,21 +48,25 @@ android {
             }
         }
     }
-    flavorDimensions "distribute"
+    flavorDimensions "distribute", "ar"
     productFlavors {
         Github {
-            minSdkVersion 21
             applicationId 'com.polygraphene.alvr'
-            targetSdkVersion 26
             dimension "distribute"
             manifestPlaceholders = [filter:"android.intent.category.LAUNCHER"]
         }
         OculusStore {
-            minSdkVersion 21
             applicationId 'com.polygraphene.alvr.oculus'
-            targetSdkVersion 26
             dimension "distribute"
             manifestPlaceholders = [filter:"android.intent.category.INFO"]
+        }
+        Normal {
+            dimension "ar"
+        }
+        ARCore {
+            dimension "ar"
+            applicationIdSuffix '.ar'
+            minSdkVersion 24
         }
     }
 }
@@ -74,4 +78,5 @@ dependencies {
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'com.android.support.test:runner:1.0.1'
     androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.1'
+    ARCoreImplementation('com.google.ar:core:1.2.1')
 }
