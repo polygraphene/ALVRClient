@@ -6,6 +6,7 @@ void initNAL(JNIEnv *env);
 void destroyNAL(JNIEnv *env);
 
 bool processPacket(JNIEnv *env, char *buf, int len);
+bool processingIDRFrame();
 jobject waitNal(JNIEnv *env);
 jobject getNal(JNIEnv *env);
 void recycleNal(JNIEnv *env, jobject nal);

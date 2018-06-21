@@ -101,11 +101,25 @@ static void resetAll() {
     env_->CallVoidMethod(latencyCollector_, latencyCollectorResetAll_);
 }
 
+static void sendPacketLossReport(ALVR_LOST_FRAME_TYPE frameType, uint32_t fromPacketCounter, uint32_t toPacketCounter) {
+    PacketErrorReport report;
+    report.type = ALVR_PACKET_TYPE_PACKET_ERROR_REPORT;
+    report.lostFrameType = frameType;
+    report.fromPacketCounter = fromPacketCounter;
+    report.toPacketCounter = toPacketCounter;
+    sendto(sock, &report, sizeof(report), 0, (sockaddr *) &serverAddr,
+           sizeof(serverAddr));
+}
 
 static void processVideoSequence(uint32_t sequence) {
     if (prevVideoSequence != 0 && prevVideoSequence + 1 != sequence) {
         uint32_t lost = sequence - (prevVideoSequence + 1);
         recordPacketLoss(lost);
+
+        if(processingIDRFrame()) {
+            sendPacketLossReport(processingIDRFrame() ? ALVR_LOST_FRAME_TYPE_IDR : ALVR_LOST_FRAME_TYPE_P
+            , prevVideoSequence + 1, sequence - 1);
+        }
 
         LOGE("VideoPacket loss %d (%d -> %d)", lost, prevVideoSequence + 1,
             sequence - 1);
@@ -117,6 +131,9 @@ static void processSoundSequence(uint32_t sequence) {
     if (prevSoundSequence != 0 && prevSoundSequence + 1 != sequence) {
         uint32_t lost = sequence - (prevSoundSequence + 1);
         recordPacketLoss(lost);
+
+        sendPacketLossReport(ALVR_LOST_FRAME_TYPE_AUDIO
+                , prevSoundSequence + 1, sequence - 1);
 
         LOGE("SoundPacket loss %d (%d -> %d)", lost, prevSoundSequence + 1,
              sequence - 1);

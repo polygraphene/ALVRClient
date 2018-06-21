@@ -28,6 +28,7 @@ int bufferPos = 0;
 uint64_t prevSequence;
 uint32_t frameByteSize;
 jobject currentNAL = NULL;
+bool processingIDR = false;
 
 static JNIEnv *env_;
 
@@ -171,6 +172,7 @@ void initNAL(JNIEnv *env) {
     initialized = true;
     prevSequence = 0;
     stopped = false;
+    processingIDR = false;
 
     NAL_clazz = env->FindClass("com/polygraphene/alvr/NAL");
     jmethodID NAL_ctor = env->GetMethodID(NAL_clazz, "<init>", "()V");
@@ -289,11 +291,14 @@ bool processPacket(JNIEnv *env, char *buf, int len) {
 
             pos = PPSEnd;
 
+            processingIDR = true;
+
             // Allocate IDR frame buffer
             allocateBuffer(header->frameByteSize - (PPSEnd - sizeof(VideoFrameStart)), presentationTime, frameIndex);
             frameByteSize = header->frameByteSize - (PPSEnd - sizeof(VideoFrameStart));
             // Note that if previous frame packet has lost, we dispose that incomplete buffer implicitly here.
         }else {
+            processingIDR = false;
             // Allocate P-frame buffer
             allocateBuffer(header->frameByteSize, presentationTime, frameIndex);
             frameByteSize = header->frameByteSize;
@@ -333,6 +338,9 @@ bool processPacket(JNIEnv *env, char *buf, int len) {
     return false;
 }
 
+bool processingIDRFrame() {
+    return processingIDR;
+}
 
 jobject waitNal(JNIEnv *env) {
     if (!initialized) {
