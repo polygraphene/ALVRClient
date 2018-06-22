@@ -107,8 +107,9 @@ static void sendPacketLossReport(ALVR_LOST_FRAME_TYPE frameType, uint32_t fromPa
     report.lostFrameType = frameType;
     report.fromPacketCounter = fromPacketCounter;
     report.toPacketCounter = toPacketCounter;
-    sendto(sock, &report, sizeof(report), 0, (sockaddr *) &serverAddr,
+    int ret = sendto(sock, &report, sizeof(report), 0, (sockaddr *) &serverAddr,
            sizeof(serverAddr));
+    LOGI("Sent packet loss report. ret=%d errno=%d", ret, errno);
 }
 
 static void processVideoSequence(uint32_t sequence) {
@@ -116,10 +117,8 @@ static void processVideoSequence(uint32_t sequence) {
         uint32_t lost = sequence - (prevVideoSequence + 1);
         recordPacketLoss(lost);
 
-        if(processingIDRFrame()) {
-            sendPacketLossReport(processingIDRFrame() ? ALVR_LOST_FRAME_TYPE_IDR : ALVR_LOST_FRAME_TYPE_P
-            , prevVideoSequence + 1, sequence - 1);
-        }
+        sendPacketLossReport(processingIDRFrame() ? ALVR_LOST_FRAME_TYPE_IDR : ALVR_LOST_FRAME_TYPE_P
+                , prevVideoSequence + 1, sequence - 1);
 
         LOGE("VideoPacket loss %d (%d -> %d)", lost, prevVideoSequence + 1,
             sequence - 1);
