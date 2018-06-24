@@ -4,7 +4,7 @@
 #include "render.h"
 #include "utils.h"
 
-static const int NUM_MULTI_SAMPLES = 4;
+static const int NUM_MULTI_SAMPLES = 1;
 Render_EGL egl;
 
 #define CHECK_GL_ERRORS 1
