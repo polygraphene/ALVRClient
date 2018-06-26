@@ -27,8 +27,6 @@ public:
 
     void onVrModeChange();
 
-    void PushBlackFinal();
-    void BackButtonAction();
     void chooseRefreshRate();
 
     void render(jobject callback, jobject latencyCollector);

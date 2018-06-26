@@ -55,44 +55,6 @@ void VrContext::onVrModeChange() {
     }
 }
 
-void VrContext::PushBlackFinal() {
-    int frameFlags = 0;
-    frameFlags |= VRAPI_FRAME_FLAG_FLUSH | VRAPI_FRAME_FLAG_FINAL;
-
-    ovrLayerProjection2 layer = vrapi_DefaultLayerBlackProjection2();
-    layer.Header.Flags |= VRAPI_FRAME_LAYER_FLAG_INHIBIT_SRGB_FRAMEBUFFER;
-
-    const ovrLayerHeader2 * layers[] =
-            {
-                    &layer.Header
-            };
-
-    ovrSubmitFrameDescription2 frameDesc = {};
-    frameDesc.Flags = frameFlags;
-    frameDesc.SwapInterval = 1;
-    frameDesc.FrameIndex = FrameIndex;
-    frameDesc.DisplayTime = GetTimeInSeconds();
-    frameDesc.LayerCount = 1;
-    frameDesc.Layers = layers;
-
-    vrapi_SubmitFrame2(Ovr, &frameDesc);
-}
-
-void VrContext::BackButtonAction() {
-    if ( BackButtonState == BACK_BUTTON_STATE_PENDING_SHORT_PRESS && !BackButtonDown )
-    {
-        if ( ( GetTimeInSeconds() - BackButtonDownStartTime ) >
-             vrapi_GetSystemPropertyFloat( &java, VRAPI_SYS_PROP_BACK_BUTTON_SHORTPRESS_TIME ) )
-        {
-            LOG("Detect back button short press.");
-            PushBlackFinal();
-            vrapi_ShowSystemUI( &java, VRAPI_SYS_UI_CONFIRM_QUIT_MENU );
-            BackButtonState = BACK_BUTTON_STATE_NONE;
-        }
-    }
-}
-
-
 void VrContext::chooseRefreshRate() {
     int numberOfRefreshRates = vrapi_GetSystemPropertyInt(&java, VRAPI_SYS_PROP_NUM_SUPPORTED_DISPLAY_REFRESH_RATES);
     std::vector<float> refreshRates(numberOfRefreshRates);
@@ -229,6 +191,10 @@ void VrContext::destroy() {
 void VrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
     ovrInputCapabilityHeader curCaps;
     ovrResult result;
+
+    if (BackButtonDown) {
+        packet->flags |= TrackingInfo::FLAG_CONTROLLER_BACK;
+    }
 
     for (uint32_t deviceIndex = 0; vrapi_EnumerateInputDevices(Ovr, deviceIndex, &curCaps) >= 0; deviceIndex++) {
         //LOG("Device %d: Type=%d ID=%d", deviceIndex, curCaps.Type, curCaps.DeviceID);
@@ -529,8 +495,6 @@ bool VrContext::onKeyEvent(int keyCode, int action){
 
 
 void VrContext::render(jobject callback, jobject latencyCollector){
-    BackButtonAction();
-
     double currentTime = GetTimeInSeconds();
 
     unsigned long long completionFence = 0;
@@ -637,8 +601,6 @@ void VrContext::render(jobject callback, jobject latencyCollector){
 
 void VrContext::renderLoading() {
     double DisplayTime = GetTimeInSeconds();
-
-    BackButtonAction();
 
     // Show a loading icon.
     FrameIndex++;
