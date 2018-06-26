@@ -287,6 +287,7 @@ static int processRecv(int sock) {
             prevSoundSequence = 0;
             TimeDiff = 0;
             resetAll();
+            setNalCodec(g_connectionMessage.codec);
 
             LOGI("Try setting recv buffer size = %d bytes", connectionMessage->bufferSize);
             int val = connectionMessage->bufferSize;
@@ -296,8 +297,8 @@ static int processRecv(int sock) {
             LOGI("Current socket recv buffer is %d bytes", val);
 
             jclass clazz = env_->GetObjectClass(instance_);
-            jmethodID method = env_->GetMethodID(clazz, "onConnected", "(II)V");
-            env_->CallVoidMethod(instance_, method, g_connectionMessage.videoWidth, g_connectionMessage.videoHeight);
+            jmethodID method = env_->GetMethodID(clazz, "onConnected", "(III)V");
+            env_->CallVoidMethod(instance_, method, g_connectionMessage.videoWidth, g_connectionMessage.videoHeight, g_connectionMessage.codec);
             env_->DeleteLocalRef(clazz);
 
             // Start stream.

@@ -5,6 +5,7 @@
 void initNAL(JNIEnv *env);
 void destroyNAL(JNIEnv *env);
 
+void setNalCodec(int codec);
 bool processPacket(JNIEnv *env, char *buf, int len);
 bool processingIDRFrame();
 jobject waitNal(JNIEnv *env);

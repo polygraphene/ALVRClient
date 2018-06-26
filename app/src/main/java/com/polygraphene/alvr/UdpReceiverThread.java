@@ -32,7 +32,7 @@ class UdpReceiverThread implements NALParser {
     public native boolean isConnected();
 
     interface Callback {
-        void onConnected(int width, int height);
+        void onConnected(int width, int height, int codec);
         void onChangeSettings(int enableTestMode, int suspend);
     }
     private Callback mCallback;
@@ -157,8 +157,8 @@ class UdpReceiverThread implements NALParser {
 
     // called from native
     @SuppressWarnings("unused")
-    public void onConnected(int width, int height) {
-        mCallback.onConnected(width, height);
+    public void onConnected(int width, int height, int codec) {
+        mCallback.onConnected(width, height, codec);
     }
     @SuppressWarnings("unused")
     public void onChangeSettings(int EnableTestMode, int suspend) {

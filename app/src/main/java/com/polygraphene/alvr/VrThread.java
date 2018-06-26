@@ -369,14 +369,14 @@ class VrThread extends Thread {
 
     private UdpReceiverThread.Callback mOnChangeSettingsCallback = new UdpReceiverThread.Callback() {
         @Override
-        public void onConnected(final int width, final int height) {
+        public void onConnected(final int width, final int height, final int codec) {
             // We must wait completion of notifyGeometryChange
             // to ensure the first video frame arrives after notifyGeometryChange.
             send(new Runnable() {
                 @Override
                 public void run() {
                     mVrContext.setFrameGeometry(width, height);
-                    mDecoderThread.notifyGeometryChange();
+                    mDecoderThread.notifyCodecChange(codec);
                 }
             });
         }

@@ -15,6 +15,10 @@
 static const int MAXIMUM_NAL_BUFFER = 10;
 static const int MAXIMUM_NAL_OBJECT = 20;
 
+static const int NAL_TYPE_SPS = 7;
+
+static const int H265_NAL_TYPE_VPS = 32;
+
 static bool initialized = false;
 static bool stopped = false;
 
@@ -29,6 +33,7 @@ uint64_t prevSequence;
 uint32_t frameByteSize;
 jobject currentNAL = NULL;
 bool processingIDR = false;
+int g_codec = 1;
 
 static JNIEnv *env_;
 
@@ -204,6 +209,10 @@ void destroyNAL(JNIEnv *env){
     initialized = false;
 }
 
+void setNalCodec(int codec) {
+    g_codec = codec;
+}
+
 static void putNAL() {
     assert(currentNAL != NULL);
 
@@ -245,8 +254,12 @@ bool processPacket(JNIEnv *env, char *buf, int len) {
         pos = sizeof(VideoFrameStart);
 
         uint8_t NALType = buf[pos + 4] & 0x1F;
-        if(NALType == 7) {
-            // SPS NAL
+        if(g_codec == ALVR_CODEC_H265) {
+            NALType = ((buf[pos + 4] >> 1) & 0x3F);
+        }
+
+        if(g_codec == ALVR_CODEC_H264 && NALType == NAL_TYPE_SPS) {
+            // H264 SPS NAL
 
             // This frame contains SPS + PPS + IDR on NVENC H.264 stream.
             // SPS + PPS has short size (8bytes + 28bytes in some environment), so we can assume SPS + PPS is contained in first fragment.
@@ -255,25 +268,25 @@ bool processPacket(JNIEnv *env, char *buf, int len) {
             bool parsingSPS = true;
             int SPSEnd = -1;
             int PPSEnd = -1;
-            for(int i = pos + 4; i < len; i++) {
-                if(buf[i] == 0) {
+            for (int i = pos + 4; i < len; i++) {
+                if (buf[i] == 0) {
                     zeroes++;
-                }else if(buf[i] == 1) {
+                } else if (buf[i] == 1) {
                     if (zeroes == 3) {
                         if (parsingSPS) {
                             parsingSPS = false;
                             SPSEnd = i - 3;
-                        }else{
+                        } else {
                             PPSEnd = i - 3;
                             break;
                         }
                     }
                     zeroes = 0;
-                }else {
+                } else {
                     zeroes = 0;
                 }
             }
-            if(SPSEnd == -1 || PPSEnd == -1) {
+            if (SPSEnd == -1 || PPSEnd == -1) {
                 // Invalid frame.
                 LOG("Got invalid frame. Too large SPS or PPS?");
                 return false;
@@ -294,9 +307,48 @@ bool processPacket(JNIEnv *env, char *buf, int len) {
             processingIDR = true;
 
             // Allocate IDR frame buffer
-            allocateBuffer(header->frameByteSize - (PPSEnd - sizeof(VideoFrameStart)), presentationTime, frameIndex);
+            allocateBuffer(header->frameByteSize - (PPSEnd - sizeof(VideoFrameStart)),
+                           presentationTime, frameIndex);
             frameByteSize = header->frameByteSize - (PPSEnd - sizeof(VideoFrameStart));
             // Note that if previous frame packet has lost, we dispose that incomplete buffer implicitly here.
+        }else if(g_codec == ALVR_CODEC_H265 && NALType == H265_NAL_TYPE_VPS) {
+            int zeroes = 0;
+            int foundNals = 0;
+            int end = -1;
+            for (int i = pos; i < len; i++) {
+                if (buf[i] == 0) {
+                    zeroes++;
+                } else if (buf[i] == 1) {
+                    if (zeroes == 3) {
+                        foundNals++;
+                        if(foundNals >= 4) {
+                            // NAL header of IDR frame
+                            end = i - 3;
+                            break;
+                        }
+                    }
+                    zeroes = 0;
+                } else {
+                    zeroes = 0;
+                }
+            }
+            if(end < 0) {
+                LOG("Got invalid frame. Too large VPS?");
+                return false;
+            }
+            // Allocate VPS+SPS+PPS NAL buffer
+            allocateBuffer(end - pos, presentationTime, frameIndex);
+            push(buf + pos, end - pos);
+            putNAL();
+
+            pos = end;
+
+            LOG("Parsing H265 IDR frame. total frameByteSize=%d VPS+SPS+PPS Size=%d", header->frameByteSize, pos - sizeof(VideoFrameStart));
+
+            // Allocate IDR frame buffer
+            allocateBuffer(header->frameByteSize - (pos - sizeof(VideoFrameStart)),
+                           presentationTime, frameIndex);
+            frameByteSize = header->frameByteSize - (pos - sizeof(VideoFrameStart));
         }else {
             processingIDR = false;
             // Allocate P-frame buffer

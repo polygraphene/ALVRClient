@@ -22,6 +22,11 @@ enum {
     ALVR_PROTOCOL_VERSION = 16
 };
 
+enum ALVR_CODEC {
+    ALVR_CODEC_H264 = 0,
+    ALVR_CODEC_H265 = 1,
+};
+
 enum ALVR_LOST_FRAME_TYPE {
     ALVR_LOST_FRAME_TYPE_P = 0,
     ALVR_LOST_FRAME_TYPE_IDR = 1,
@@ -39,6 +44,7 @@ struct HelloMessage {
 struct ConnectionMessage {
     uint32_t type; // 2
     uint32_t version; // ALVR_PROTOCOL_VERSION
+    uint32_t codec; // enum ALVR_CODEC
     uint32_t videoWidth; // in pixels
     uint32_t videoHeight; // in pixels
     uint32_t bufferSize; // in bytes
@@ -86,6 +92,9 @@ struct TrackingInfo {
     TrackingVector3 Other_Tracking_Source_Position;
     TrackingQuat Other_Tracking_Source_Orientation;
 
+    static const int CONTROLLER_BUTTON_TRIGGER_CLICK = 0x00000001;
+    static const int CONTROLLER_BUTTON_TRACKPAD_CLICK = 0x00100000;
+    static const int CONTROLLER_BUTTON_BACK = 0x00200000;
     uint32_t controllerButtons;
 
     struct {
