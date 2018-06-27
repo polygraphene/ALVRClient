@@ -85,7 +85,7 @@ static void recordFirstPacketReceived(uint64_t frameIndex){
 static void recordLastPacketReceived(uint64_t frameIndex){
     env_->CallVoidMethod(latencyCollector_, latencyCollectorReceivedLast_, frameIndex);
 }
-static void recordPacketLoss(uint64_t lost) {
+static void recordPacketLoss(int64_t lost) {
     env_->CallVoidMethod(latencyCollector_, latencyCollectorPacketLoss_, lost);
 }
 static uint64_t getLatency(uint32_t i, uint32_t j) {
@@ -114,7 +114,12 @@ static void sendPacketLossReport(ALVR_LOST_FRAME_TYPE frameType, uint32_t fromPa
 
 static void processVideoSequence(uint32_t sequence) {
     if (prevVideoSequence != 0 && prevVideoSequence + 1 != sequence) {
-        uint32_t lost = sequence - (prevVideoSequence + 1);
+        int32_t lost = sequence - (prevVideoSequence + 1);
+        if(lost < 0) {
+            // lost become negative on out-of-order packet.
+            // TODO: This is not accurate statistics.
+            lost = -lost;
+        }
         recordPacketLoss(lost);
 
         sendPacketLossReport(processingIDRFrame() ? ALVR_LOST_FRAME_TYPE_IDR : ALVR_LOST_FRAME_TYPE_P
@@ -128,7 +133,12 @@ static void processVideoSequence(uint32_t sequence) {
 
 static void processSoundSequence(uint32_t sequence) {
     if (prevSoundSequence != 0 && prevSoundSequence + 1 != sequence) {
-        uint32_t lost = sequence - (prevSoundSequence + 1);
+        int32_t lost = sequence - (prevSoundSequence + 1);
+        if(lost < 0) {
+            // lost become negative on out-of-order packet.
+            // TODO: This is not accurate statistics.
+            lost = -lost;
+        }
         recordPacketLoss(lost);
 
         sendPacketLossReport(ALVR_LOST_FRAME_TYPE_AUDIO
