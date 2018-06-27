@@ -14,5 +14,6 @@ void recycleNal(JNIEnv *env, jobject nal);
 int getNalListSize(JNIEnv *env);
 void flushNalList(JNIEnv *env);
 void notifyNALWaitingThread(JNIEnv *env);
+void nalClearStopped();
 
 #endif //ALVRCLIENT_NAL_H

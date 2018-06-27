@@ -13,13 +13,18 @@ import java.nio.ByteBuffer;
 import java.util.LinkedList;
 import java.util.List;
 
-class DecoderThread extends Thread {
+class DecoderThread {
     private static final String TAG = "DecoderThread";
 
     private static final int CODEC_H264 = 0;
     private static final int CODEC_H265 = 1;
     private int mCodec = CODEC_H265;
 
+    private static final String VIDEO_FORMAT_H264 = "video/avc";
+    private static final String VIDEO_FORMAT_H265 = "video/hevc";
+    private String mFormat = VIDEO_FORMAT_H265;
+
+    private Thread mThread;
     private final MediaCodecInfo mCodecInfo;
     private NALParser mNalParser;
     private MediaCodec mDecoder = null;
@@ -57,28 +62,23 @@ class DecoderThread extends Thread {
     private static final int H265_NAL_TYPE_SPS = 33;
     private static final int H265_NAL_TYPE_PPS = 34;
 
-    private NAL mSPSBuffer = null;
-    private NAL mPPSBuffer = null;
-
-    private NAL mVPSBuffer = null;
-
     // Dummy SPS/PPS for some decoders which crashes on not set csd-0/csd-1. (e.g. Galaxy S6 Exynos decoder)
-    byte[] DummySPS = new byte[]{ (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x01, (byte)0x67, (byte)0x64, (byte)0x00, (byte)0x20, (byte)0xac, (byte)0x2b, (byte)0x40, (byte)0x20,
-            0x02, (byte)0x0d, (byte)0x80, (byte)0x88, (byte)0x00, (byte)0x00, (byte)0x1f, (byte)0x40, (byte)0x00, (byte)0x0e, (byte)0xa6, (byte)0x04,
-            0x7a, (byte)0x55};
-    byte[] DummyPPS = new byte[]{ (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x01, (byte)0x68, (byte)0xee, (byte)0x3c, (byte)0xb0};
+    byte[] DummySPS = new byte[]{(byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x01, (byte) 0x67, (byte) 0x64, (byte) 0x00, (byte) 0x20, (byte) 0xac, (byte) 0x2b, (byte) 0x40, (byte) 0x20,
+            0x02, (byte) 0x0d, (byte) 0x80, (byte) 0x88, (byte) 0x00, (byte) 0x00, (byte) 0x1f, (byte) 0x40, (byte) 0x00, (byte) 0x0e, (byte) 0xa6, (byte) 0x04,
+            0x7a, (byte) 0x55};
+    byte[] DummyPPS = new byte[]{(byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x01, (byte) 0x68, (byte) 0xee, (byte) 0x3c, (byte) 0xb0};
     int DummyWidth = 1024;
     int DummyHeight = 512;
 
-    byte[] DummyCSD_H265 = new byte[] {
-            (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x01, (byte)0x40, (byte)0x01, (byte)0x0c, (byte)0x01, (byte)0xff, (byte)0xff, (byte)0x21, (byte)0x40,
-            (byte)0x00, (byte)0x00, (byte)0x03, (byte)0x00, (byte)0x00, (byte)0x03, (byte)0x00, (byte)0x00, (byte)0x03, (byte)0x00, (byte)0x00, (byte)0x03,
-            (byte)0x00, (byte)0x78, (byte)0xac, (byte)0x09, (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x01, (byte)0x42, (byte)0x01, (byte)0x01, (byte)0x21,
-            (byte)0x40, (byte)0x00, (byte)0x00, (byte)0x03, (byte)0x00, (byte)0x00, (byte)0x03, (byte)0x00, (byte)0x00, (byte)0x03, (byte)0x00, (byte)0x00,
-            (byte)0x03, (byte)0x00, (byte)0x78, (byte)0xa0, (byte)0x02, (byte)0x00, (byte)0x80, (byte)0x20, (byte)0x16, (byte)0x5a, (byte)0xd2, (byte)0x90,
-            (byte)0x96, (byte)0x4b, (byte)0x8c, (byte)0x04, (byte)0x04, (byte)0x00, (byte)0x00, (byte)0x03, (byte)0x00, (byte)0x04, (byte)0x00, (byte)0x00,
-            (byte)0x03, (byte)0x00, (byte)0xf0, (byte)0x20, (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x01, (byte)0x44, (byte)0x01, (byte)0xc0, (byte)0xf7,
-            (byte)0xc0, (byte)0xcc, (byte)0x90
+    byte[] DummyCSD_H265 = new byte[]{
+            (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x01, (byte) 0x40, (byte) 0x01, (byte) 0x0c, (byte) 0x01, (byte) 0xff, (byte) 0xff, (byte) 0x21, (byte) 0x40,
+            (byte) 0x00, (byte) 0x00, (byte) 0x03, (byte) 0x00, (byte) 0x00, (byte) 0x03, (byte) 0x00, (byte) 0x00, (byte) 0x03, (byte) 0x00, (byte) 0x00, (byte) 0x03,
+            (byte) 0x00, (byte) 0x78, (byte) 0xac, (byte) 0x09, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x01, (byte) 0x42, (byte) 0x01, (byte) 0x01, (byte) 0x21,
+            (byte) 0x40, (byte) 0x00, (byte) 0x00, (byte) 0x03, (byte) 0x00, (byte) 0x00, (byte) 0x03, (byte) 0x00, (byte) 0x00, (byte) 0x03, (byte) 0x00, (byte) 0x00,
+            (byte) 0x03, (byte) 0x00, (byte) 0x78, (byte) 0xa0, (byte) 0x02, (byte) 0x00, (byte) 0x80, (byte) 0x20, (byte) 0x16, (byte) 0x5a, (byte) 0xd2, (byte) 0x90,
+            (byte) 0x96, (byte) 0x4b, (byte) 0x8c, (byte) 0x04, (byte) 0x04, (byte) 0x00, (byte) 0x00, (byte) 0x03, (byte) 0x00, (byte) 0x04, (byte) 0x00, (byte) 0x00,
+            (byte) 0x03, (byte) 0x00, (byte) 0xf0, (byte) 0x20, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x01, (byte) 0x44, (byte) 0x01, (byte) 0xc0, (byte) 0xf7,
+            (byte) 0xc0, (byte) 0xcc, (byte) 0x90
     };
 
     private final List<Integer> mAvailableInputs = new LinkedList<>();
@@ -121,13 +121,22 @@ class DecoderThread extends Thread {
 
     public void stopAndWait() {
         interrupt();
-        while(isAlive()){
+        while (mThread.isAlive()) {
             try {
-                join();
+                mThread.join();
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
         }
+    }
+
+    public void start() {
+        mThread = new MyThread();
+        mStopped = false;
+        synchronized (mAvailableInputs) {
+            mAvailableInputs.clear();
+        }
+        mThread.start();
     }
 
     public void interrupt() {
@@ -135,32 +144,15 @@ class DecoderThread extends Thread {
         mNalParser.notifyWaitingThread();
     }
 
-    @Override
     public void run() {
-        setName(DecoderThread.class.getName());
+        mThread.setName(DecoderThread.class.getName());
 
         try {
-            if(mCodec == CODEC_H264) {
-                decodeLoopH264();
-            }else if(mCodec == CODEC_H265) {
-                decodeLoopH265();
-            }
+            decodeLoop();
         } catch (IOException | InterruptedException | IllegalStateException e) {
             e.printStackTrace();
             Log.v(TAG, "DecoderThread stopped by Exception.");
         } finally {
-            if(mSPSBuffer != null) {
-                mNalParser.recycleNal(mSPSBuffer);
-                mSPSBuffer = null;
-            }
-            if(mPPSBuffer != null) {
-                mNalParser.recycleNal(mPPSBuffer);
-                mPPSBuffer = null;
-            }
-            if(mVPSBuffer != null) {
-                mNalParser.recycleNal(mVPSBuffer);
-                mVPSBuffer = null;
-            }
             Log.v(TAG, "Stopping decoder.");
             if (mDecoder != null) {
                 try {
@@ -173,165 +165,90 @@ class DecoderThread extends Thread {
         Log.v(TAG, "DecoderThread stopped.");
     }
 
-    private void decodeLoopH264() throws InterruptedException, IOException {
-        String videoFormat = "video/avc";
-        MediaFormat format = MediaFormat.createVideoFormat(videoFormat, DummyWidth, DummyHeight);
-        format.setString("KEY_MIME", videoFormat);
-        format.setByteBuffer("csd-0", ByteBuffer.wrap(DummySPS, 0, DummySPS.length));
-        format.setByteBuffer("csd-1", ByteBuffer.wrap(DummyPPS, 0, DummyPPS.length));
-
-        mDecoder = MediaCodec.createDecoderByType(videoFormat);
-
-        mDecoder.setVideoScalingMode(MediaCodec.VIDEO_SCALING_MODE_SCALE_TO_FIT);
-        mDecoder.setCallback(new Callback());
-        mDecoder.configure(format, mRenderCallback.getSurface(), null, 0);
-        mDecoder.start();
-
-        Log.v(TAG, "Codec created. Type=" + videoFormat + " Name=" + mDecoder.getCodecInfo().getName());
-
-        // We don't need to wait IDR first time.
-        mWaitNextIDR = true;
-
-        while (!mStopped) {
-            NAL nal = mNalParser.waitNal();
-            if(nal == null) {
-                break;
-            }
-            if (mStopped) {
-                mNalParser.recycleNal(nal);
-                break;
-            }
-
-            int NALType = nal.buf[4] & 0x1F;
-            Utils.frameLog(nal.frameIndex,"Got NAL Type=" + NALType + " Length=" + nal.length + " QueueSize=" + mNalParser.getNalListSize());
-
-            if (NALType == NAL_TYPE_SPS) {
-                // SPS
-                if(mSPSBuffer != null) {
-                    mNalParser.recycleNal(mSPSBuffer);
-                }
-                mSPSBuffer = nal;
-            } else if (NALType == NAL_TYPE_PPS) {
-                // PPS
-                if(mPPSBuffer != null) {
-                    mNalParser.recycleNal(mPPSBuffer);
-                }
-                mPPSBuffer = nal;
-
-                if (mWaitNextIDR && mSPSBuffer != null) {
-                    frameLog("Feed codec config. SPS Size=" + mSPSBuffer.length + " PPS Size=" + mPPSBuffer.length);
-
-                    mWaitNextIDR = false;
-
-                    ByteBuffer buffer = getInputBuffer(nal);
-
-                    buffer.put(mSPSBuffer.buf, 0, mSPSBuffer.length);
-                    buffer.put(mPPSBuffer.buf, 0, mPPSBuffer.length);
-
-                    sendInputBuffer(buffer, 0, MediaCodec.BUFFER_FLAG_CODEC_CONFIG);
-                }
-            } else if (NALType == NAL_TYPE_IDR) {
-                // IDR-Frame
-                Utils.frameLog(nal.frameIndex,"Feed IDR-Frame. Size=" + nal.length + " PresentationTime=" + nal.presentationTime);
-
-                debugIDRFrame(nal, mSPSBuffer, mPPSBuffer);
-
-                mLatencyCollector.DecoderInput(nal.frameIndex);
-
-                pushFramePresentationMap(nal);
-
-                ByteBuffer buffer = getInputBuffer(nal);
-                buffer.put(nal.buf, 0, nal.length);
-                sendInputBuffer(buffer, nal.presentationTime, 0);
-
-                mNalParser.recycleNal(nal);
-            } else {
-                if (NALType == NAL_TYPE_P) {
-                    // PFrame
-                    mCounter.countPFrame();
-                }
-
-                mLatencyCollector.DecoderInput(nal.frameIndex);
-
-                if (mWaitNextIDR) {
-                    // Ignore P-Frame until next I-Frame
-                    Utils.frameLog(nal.frameIndex,"Ignoring P-Frame");
-                } else {
-                    // P-Frame
-                    Utils.frameLog(nal.frameIndex,"Feed P-Frame. Size=" + nal.length + " PresentationTime=" + nal.presentationTime);
-
-                    pushFramePresentationMap(nal);
-
-                    ByteBuffer buffer = getInputBuffer(nal);
-                    buffer.put(nal.buf, 0, nal.length);
-                    sendInputBuffer(buffer, nal.presentationTime, 0);
-                }
-                mNalParser.recycleNal(nal);
-            }
+    private void decodeLoop() throws InterruptedException, IOException {
+        MediaFormat format = MediaFormat.createVideoFormat(mFormat, DummyWidth, DummyHeight);
+        format.setString("KEY_MIME", mFormat);
+        if (mCodec == CODEC_H264) {
+            format.setByteBuffer("csd-0", ByteBuffer.wrap(DummySPS, 0, DummySPS.length));
+            format.setByteBuffer("csd-1", ByteBuffer.wrap(DummyPPS, 0, DummyPPS.length));
+        } else {
+            format.setByteBuffer("csd-0", ByteBuffer.wrap(DummyCSD_H265, 0, DummyCSD_H265.length));
         }
 
-    }
-
-    private void decodeLoopH265() throws IOException, InterruptedException {
-        String videoFormat = "video/hevc";
-        MediaFormat format = MediaFormat.createVideoFormat(videoFormat, DummyWidth, DummyHeight);
-        format.setString("KEY_MIME", videoFormat);
-        format.setByteBuffer("csd-0", ByteBuffer.wrap(DummyCSD_H265, 0, DummyCSD_H265.length));
-
-        mDecoder = MediaCodec.createDecoderByType(videoFormat);
+        mDecoder = MediaCodec.createDecoderByType(mFormat);
 
         mDecoder.setVideoScalingMode(MediaCodec.VIDEO_SCALING_MODE_SCALE_TO_FIT);
         mDecoder.setCallback(new Callback());
         mDecoder.configure(format, mRenderCallback.getSurface(), null, 0);
         mDecoder.start();
 
-        Log.v(TAG, "Codec created. Type=" + videoFormat + " Name=" + mDecoder.getCodecInfo().getName());
+        Log.v(TAG, "Codec created. Type=" + mFormat + " Name=" + mDecoder.getCodecInfo().getName());
 
-        // We don't need to wait IDR first time.
         mWaitNextIDR = true;
 
         while (!mStopped) {
             NAL nal = mNalParser.waitNal();
-            if(nal == null) {
+            if (nal == null) {
+                Log.v(TAG, "decodeLoop Stopped. nal==null.");
                 break;
             }
             if (mStopped) {
+                Log.v(TAG, "decodeLoop Stopped. mStopped==true.");
                 mNalParser.recycleNal(nal);
                 break;
             }
 
-            int NALType = (nal.buf[4] >> 1) & 0x3F;
-            Utils.frameLog(nal.frameIndex,"Got NAL Type=" + NALType + " Length=" + nal.length + " QueueSize=" + mNalParser.getNalListSize());
+            int NALType;
 
-            if (NALType == H265_NAL_TYPE_VPS) {
-                // VPS + SPS + PPS
-                if(mVPSBuffer != null) {
-                    mNalParser.recycleNal(mVPSBuffer);
-                }
-                mVPSBuffer = nal;
+            if (mCodec == CODEC_H264) {
+                NALType = nal.buf[4] & 0x1F;
+            } else {
+                NALType = (nal.buf[4] >> 1) & 0x3F;
+            }
+            Utils.frameLog(nal.frameIndex, "Got NAL Type=" + NALType + " Length=" + nal.length + " QueueSize=" + mNalParser.getNalListSize());
 
-                if (mWaitNextIDR && mVPSBuffer != null) {
-                    frameLog("Feed codec config. VPS+SPS+PPS Size=" + mVPSBuffer.length);
+            if (mCodec == CODEC_H264 && NALType == NAL_TYPE_SPS) {
+                // SPS + PPS
+                if (mWaitNextIDR) {
+                    Utils.frameLog(nal.frameIndex, "Feed codec config. SPS+PPS Size=" + nal.length);
 
                     mWaitNextIDR = false;
 
-                    ByteBuffer buffer = getInputBuffer(nal);
-
-                    buffer.put(mVPSBuffer.buf, 0, mVPSBuffer.length);
-
-                    sendInputBuffer(buffer, 0, MediaCodec.BUFFER_FLAG_CODEC_CONFIG);
+                    sendInputBuffer(nal, 0, MediaCodec.BUFFER_FLAG_CODEC_CONFIG);
                 }
-            } else if (NALType == H265_NAL_TYPE_IDR_W_RADL) {
+                mNalParser.recycleNal(nal);
+            } else if (mCodec == CODEC_H264 && NALType == NAL_TYPE_IDR) {
                 // IDR-Frame
-                Utils.frameLog(nal.frameIndex,"Feed IDR-Frame. Size=" + nal.length + " PresentationTime=" + nal.presentationTime);
+                Utils.frameLog(nal.frameIndex, "Feed IDR-Frame. Size=" + nal.length + " PresentationTime=" + nal.presentationTime);
+
+                //debugIDRFrame(nal, mSPSBuffer, mPPSBuffer);
 
                 mLatencyCollector.DecoderInput(nal.frameIndex);
 
                 pushFramePresentationMap(nal);
 
-                ByteBuffer buffer = getInputBuffer(nal);
-                buffer.put(nal.buf, 0, nal.length);
-                sendInputBuffer(buffer, nal.presentationTime, 0);
+                sendInputBuffer(nal, nal.presentationTime, 0);
+
+                mNalParser.recycleNal(nal);
+            } else if (mCodec == CODEC_H265 && NALType == H265_NAL_TYPE_VPS) {
+                // VPS + SPS + PPS
+                if (mWaitNextIDR) {
+                    frameLog("Feed codec config. VPS+SPS+PPS Size=" + nal.length);
+
+                    mWaitNextIDR = false;
+
+                    sendInputBuffer(nal, 0, MediaCodec.BUFFER_FLAG_CODEC_CONFIG);
+                }
+                mNalParser.recycleNal(nal);
+            } else if (mCodec == CODEC_H265 && NALType == H265_NAL_TYPE_IDR_W_RADL) {
+                // IDR-Frame
+                Utils.frameLog(nal.frameIndex, "Feed IDR-Frame. Size=" + nal.length + " PresentationTime=" + nal.presentationTime);
+
+                mLatencyCollector.DecoderInput(nal.frameIndex);
+
+                pushFramePresentationMap(nal);
+
+                sendInputBuffer(nal, nal.presentationTime, 0);
 
                 mNalParser.recycleNal(nal);
             } else {
@@ -342,16 +259,14 @@ class DecoderThread extends Thread {
 
                 if (mWaitNextIDR) {
                     // Ignore P-Frame until next I-Frame
-                    Utils.frameLog(nal.frameIndex,"Ignoring P-Frame");
+                    Utils.frameLog(nal.frameIndex, "Ignoring P-Frame");
                 } else {
                     // P-Frame
-                    Utils.frameLog(nal.frameIndex,"Feed P-Frame. Size=" + nal.length + " PresentationTime=" + nal.presentationTime);
+                    Utils.frameLog(nal.frameIndex, "Feed P-Frame. Size=" + nal.length + " PresentationTime=" + nal.presentationTime);
 
                     pushFramePresentationMap(nal);
 
-                    ByteBuffer buffer = getInputBuffer(nal);
-                    buffer.put(nal.buf, 0, nal.length);
-                    sendInputBuffer(buffer, nal.presentationTime, 0);
+                    sendInputBuffer(nal, nal.presentationTime, 0);
                 }
                 mNalParser.recycleNal(nal);
             }
@@ -361,10 +276,10 @@ class DecoderThread extends Thread {
 
     // Output IDR frame in external media dir for debugging. (/sdcard/Android/media/...)
     private void debugIDRFrame(NAL buf, NAL spsBuffer, NAL ppsBuffer) {
-        if(spsBuffer == null || ppsBuffer == null) {
+        if (spsBuffer == null || ppsBuffer == null) {
             return;
         }
-        if(mDebugIDRFrame) {
+        if (mDebugIDRFrame) {
             try {
                 String path = mMainActivity.getExternalMediaDirs()[0].getAbsolutePath() + "/" + buf.frameIndex + ".h264";
                 FileOutputStream stream = new FileOutputStream(path);
@@ -394,7 +309,9 @@ class DecoderThread extends Thread {
         return mDecoder.getInputBuffer(mBufferIndex);
     }
 
-    private void sendInputBuffer(ByteBuffer buffer, long presentationTimeUs, int flags) {
+    private void sendInputBuffer(NAL nal, long presentationTimeUs, int flags) throws InterruptedException {
+        ByteBuffer buffer = getInputBuffer(nal);
+        buffer.put(nal.buf, 0, nal.length);
         mDecoder.queueInputBuffer(mBufferIndex, 0, buffer.position(), presentationTimeUs, flags);
         mBufferIndex = -1;
     }
@@ -464,12 +381,25 @@ class DecoderThread extends Thread {
     }
 
     public void notifyCodecChange(int codec) {
-        if(codec != mCodec) {
+        if (codec != mCodec) {
             stopAndWait();
             mCodec = codec;
+            if (mCodec == CODEC_H264) {
+                mFormat = VIDEO_FORMAT_H264;
+            } else {
+                mFormat = VIDEO_FORMAT_H265;
+            }
+            mNalParser.clearStopped();
             start();
+        } else {
+            mWaitNextIDR = true;
         }
-        mWaitNextIDR = true;
     }
 
+    private class MyThread extends Thread {
+        @Override
+        public void run() {
+            DecoderThread.this.run();
+        }
+    }
 }

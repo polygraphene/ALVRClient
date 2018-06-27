@@ -101,12 +101,7 @@ class VrThread extends Thread {
             }
         }
         if (mDecoderThread != null) {
-            mDecoderThread.interrupt();
-            try {
-                mDecoderThread.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+            mDecoderThread.stopAndWait();
         }
         if (mTrackingThread != null) {
             mTrackingThread.interrupt();
@@ -166,12 +161,7 @@ class VrThread extends Thread {
         // DecoderThread must be stopped before ReceiverThread
         if (mDecoderThread != null) {
             Log.v(TAG, "VrThread.onPause: Stopping DecoderThread.");
-            mDecoderThread.interrupt();
-            try {
-                mDecoderThread.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+            mDecoderThread.stopAndWait();
         }
         if (mReceiverThread != null) {
             Log.v(TAG, "VrThread.onPause: Stopping ReceiverThread.");

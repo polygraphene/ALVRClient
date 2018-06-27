@@ -265,19 +265,16 @@ bool processPacket(JNIEnv *env, char *buf, int len) {
             // SPS + PPS has short size (8bytes + 28bytes in some environment), so we can assume SPS + PPS is contained in first fragment.
 
             int zeroes = 0;
-            bool parsingSPS = true;
-            int SPSEnd = -1;
-            int PPSEnd = -1;
-            for (int i = pos + 4; i < len; i++) {
+            int foundNals = 0;
+            int end = -1;
+            for (int i = pos; i < len; i++) {
                 if (buf[i] == 0) {
                     zeroes++;
                 } else if (buf[i] == 1) {
                     if (zeroes == 3) {
-                        if (parsingSPS) {
-                            parsingSPS = false;
-                            SPSEnd = i - 3;
-                        } else {
-                            PPSEnd = i - 3;
+                        foundNals++;
+                        if (foundNals >= 2) {
+                            end = i - 3;
                             break;
                         }
                     }
@@ -286,30 +283,23 @@ bool processPacket(JNIEnv *env, char *buf, int len) {
                     zeroes = 0;
                 }
             }
-            if (SPSEnd == -1 || PPSEnd == -1) {
+            if (end == -1) {
                 // Invalid frame.
                 LOG("Got invalid frame. Too large SPS or PPS?");
                 return false;
             }
-            allocateBuffer(SPSEnd - pos, presentationTime, frameIndex);
-            push(buf + pos, SPSEnd - pos);
+            allocateBuffer(end - pos, presentationTime, frameIndex);
+            push(buf + pos, end - pos);
             putNAL();
 
-            pos = SPSEnd;
-
-            allocateBuffer(PPSEnd - pos, presentationTime, frameIndex);
-            push(buf + pos, PPSEnd - pos);
-
-            putNAL();
-
-            pos = PPSEnd;
+            pos = end;
 
             processingIDR = true;
 
             // Allocate IDR frame buffer
-            allocateBuffer(header->frameByteSize - (PPSEnd - sizeof(VideoFrameStart)),
+            allocateBuffer(header->frameByteSize - (pos - sizeof(VideoFrameStart)),
                            presentationTime, frameIndex);
-            frameByteSize = header->frameByteSize - (PPSEnd - sizeof(VideoFrameStart));
+            frameByteSize = header->frameByteSize - (pos - sizeof(VideoFrameStart));
             // Note that if previous frame packet has lost, we dispose that incomplete buffer implicitly here.
         }else if(g_codec == ALVR_CODEC_H265 && NALType == H265_NAL_TYPE_VPS) {
             int zeroes = 0;
@@ -476,4 +466,8 @@ void notifyNALWaitingThread(JNIEnv *env) {
     stopped = true;
 
     pthread_cond_broadcast(&cond_nonzero);
+}
+
+void nalClearStopped() {
+    stopped = false;
 }

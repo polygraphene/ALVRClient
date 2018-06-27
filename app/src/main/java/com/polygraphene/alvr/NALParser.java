@@ -10,4 +10,5 @@ public interface NALParser {
     void recycleNal(NAL nal);
     void flushNALList();
     void notifyWaitingThread();
+    void clearStopped();
 }

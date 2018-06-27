@@ -744,3 +744,9 @@ Java_com_polygraphene_alvr_UdpReceiverThread_getServerPort(JNIEnv *env, jobject 
     }
     return 0;
 }
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_clearStopped(JNIEnv *env, jobject instance) {
+    nalClearStopped();
+}
