@@ -105,10 +105,10 @@ class DecoderThread {
         Log.v(TAG, s);
     }
 
-    private void pushFramePresentationMap(NAL buf) {
+    private void pushFramePresentationMap(NAL buf, long presentationTime) {
         FramePresentationTime f = new FramePresentationTime();
         f.frameIndex = buf.frameIndex;
-        f.presentationTime = buf.presentationTime;
+        f.presentationTime = presentationTime;
         f.inputTime = System.nanoTime() / 1000;
 
         synchronized (mFrameBuf) {
@@ -207,6 +207,8 @@ class DecoderThread {
             }
             Utils.frameLog(nal.frameIndex, "Got NAL Type=" + NALType + " Length=" + nal.length + " QueueSize=" + mNalParser.getNalListSize());
 
+            long presentationTime = System.nanoTime() / 1000;
+
             if (mCodec == CODEC_H264 && NALType == NAL_TYPE_SPS) {
                 // SPS + PPS
                 if (mWaitNextIDR) {
@@ -219,15 +221,13 @@ class DecoderThread {
                 mNalParser.recycleNal(nal);
             } else if (mCodec == CODEC_H264 && NALType == NAL_TYPE_IDR) {
                 // IDR-Frame
-                Utils.frameLog(nal.frameIndex, "Feed IDR-Frame. Size=" + nal.length + " PresentationTime=" + nal.presentationTime);
+                Utils.frameLog(nal.frameIndex, "Feed IDR-Frame. Size=" + nal.length + " PresentationTime=" + presentationTime);
 
                 //debugIDRFrame(nal, mSPSBuffer, mPPSBuffer);
 
                 mLatencyCollector.DecoderInput(nal.frameIndex);
 
-                pushFramePresentationMap(nal);
-
-                sendInputBuffer(nal, nal.presentationTime, 0);
+                sendInputBuffer(nal, presentationTime, 0);
 
                 mNalParser.recycleNal(nal);
             } else if (mCodec == CODEC_H265 && NALType == H265_NAL_TYPE_VPS) {
@@ -242,13 +242,11 @@ class DecoderThread {
                 mNalParser.recycleNal(nal);
             } else if (mCodec == CODEC_H265 && NALType == H265_NAL_TYPE_IDR_W_RADL) {
                 // IDR-Frame
-                Utils.frameLog(nal.frameIndex, "Feed IDR-Frame. Size=" + nal.length + " PresentationTime=" + nal.presentationTime);
+                Utils.frameLog(nal.frameIndex, "Feed IDR-Frame. Size=" + nal.length + " PresentationTime=" + presentationTime);
 
                 mLatencyCollector.DecoderInput(nal.frameIndex);
 
-                pushFramePresentationMap(nal);
-
-                sendInputBuffer(nal, nal.presentationTime, 0);
+                sendInputBuffer(nal, presentationTime, 0);
 
                 mNalParser.recycleNal(nal);
             } else {
@@ -262,11 +260,9 @@ class DecoderThread {
                     Utils.frameLog(nal.frameIndex, "Ignoring P-Frame");
                 } else {
                     // P-Frame
-                    Utils.frameLog(nal.frameIndex, "Feed P-Frame. Size=" + nal.length + " PresentationTime=" + nal.presentationTime);
+                    Utils.frameLog(nal.frameIndex, "Feed P-Frame. Size=" + nal.length + " PresentationTime=" + presentationTime);
 
-                    pushFramePresentationMap(nal);
-
-                    sendInputBuffer(nal, nal.presentationTime, 0);
+                    sendInputBuffer(nal, presentationTime, 0);
                 }
                 mNalParser.recycleNal(nal);
             }
@@ -310,6 +306,10 @@ class DecoderThread {
     }
 
     private void sendInputBuffer(NAL nal, long presentationTimeUs, int flags) throws InterruptedException {
+        if(presentationTimeUs != 0) {
+            pushFramePresentationMap(nal, presentationTimeUs);
+        }
+
         ByteBuffer buffer = getInputBuffer(nal);
         buffer.put(nal.buf, 0, nal.length);
         mDecoder.queueInputBuffer(mBufferIndex, 0, buffer.position(), presentationTimeUs, flags);

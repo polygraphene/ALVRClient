@@ -19,6 +19,7 @@
 #include "utils.h"
 #include "packet_types.h"
 #include "sound.h"
+#include "latency_collector.h"
 
 // Maximum UDP packet size
 static const int MAX_PACKET_SIZE = 2000;
@@ -44,19 +45,11 @@ static bool g_is72Hz = false;
 static uint32_t prevVideoSequence = 0;
 static uint32_t prevSoundSequence = 0;
 static std::shared_ptr<SoundPlayer> g_soundPlayer;
+static std::shared_ptr<NALParser> g_nalParser;
+static std::shared_ptr<LatencyCollector> g_latencyCollector;
 
 static JNIEnv *env_;
 static jobject instance_;
-static jobject latencyCollector_;
-static jclass latencyCollectorClass_;
-static jmethodID latencyCollectorEstimatedSent_;
-static jmethodID latencyCollectorReceivedFirst_;
-static jmethodID latencyCollectorReceivedLast_;
-static jmethodID latencyCollectorPacketLoss_;
-static jmethodID latencyCollectorGetLatency_;
-static jmethodID latencyCollectorGetPacketsLostTotal_;
-static jmethodID latencyCollectorGetPacketsLostInSecond_;
-static jmethodID latencyCollectorResetAll_;
 
 // lock for accessing sendQueue
 static pthread_mutex_t pipeMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -75,31 +68,6 @@ struct SendBuffer {
 };
 static std::list<SendBuffer> sendQueue;
 
-
-static void recordEstimatedSent(uint64_t frameIndex, uint64_t estimetedSentTime){
-    env_->CallVoidMethod(latencyCollector_, latencyCollectorEstimatedSent_, frameIndex, estimetedSentTime);
-}
-static void recordFirstPacketReceived(uint64_t frameIndex){
-    env_->CallVoidMethod(latencyCollector_, latencyCollectorReceivedFirst_, frameIndex);
-}
-static void recordLastPacketReceived(uint64_t frameIndex){
-    env_->CallVoidMethod(latencyCollector_, latencyCollectorReceivedLast_, frameIndex);
-}
-static void recordPacketLoss(int64_t lost) {
-    env_->CallVoidMethod(latencyCollector_, latencyCollectorPacketLoss_, lost);
-}
-static uint64_t getLatency(uint32_t i, uint32_t j) {
-    return env_->CallLongMethod(latencyCollector_, latencyCollectorGetLatency_, i, j);
-}
-static uint64_t getPacketsLostTotal() {
-    return env_->CallLongMethod(latencyCollector_, latencyCollectorGetPacketsLostTotal_);
-}
-static uint64_t getPacketsLostInSecond() {
-    return env_->CallLongMethod(latencyCollector_, latencyCollectorGetPacketsLostInSecond_);
-}
-static void resetAll() {
-    env_->CallVoidMethod(latencyCollector_, latencyCollectorResetAll_);
-}
 
 static void sendPacketLossReport(ALVR_LOST_FRAME_TYPE frameType, uint32_t fromPacketCounter, uint32_t toPacketCounter) {
     PacketErrorReport report;
@@ -120,9 +88,9 @@ static void processVideoSequence(uint32_t sequence) {
             // TODO: This is not accurate statistics.
             lost = -lost;
         }
-        recordPacketLoss(lost);
+        g_latencyCollector->recordPacketLoss(env_, lost);
 
-        sendPacketLossReport(processingIDRFrame() ? ALVR_LOST_FRAME_TYPE_IDR : ALVR_LOST_FRAME_TYPE_P
+        sendPacketLossReport(ALVR_LOST_FRAME_TYPE_P
                 , prevVideoSequence + 1, sequence - 1);
 
         LOGE("VideoPacket loss %d (%d -> %d)", lost, prevVideoSequence + 1,
@@ -139,7 +107,7 @@ static void processSoundSequence(uint32_t sequence) {
             // TODO: This is not accurate statistics.
             lost = -lost;
         }
-        recordPacketLoss(lost);
+        g_latencyCollector->recordPacketLoss(env_, lost);
 
         sendPacketLossReport(ALVR_LOST_FRAME_TYPE_AUDIO
                 , prevSoundSequence + 1, sequence - 1);
@@ -157,9 +125,9 @@ static int processRecv(int sock) {
 
     sockaddr_in addr;
     socklen_t socklen = sizeof(addr);
-    int ret = recvfrom(sock, (char *) buf, len, 0, (sockaddr *) &addr, &socklen);
-    if (ret <= 0) {
-        return ret;
+    int packetSize = recvfrom(sock, (char *) buf, len, 0, (sockaddr *) &addr, &socklen);
+    if (packetSize <= 0) {
+        return packetSize;
     }
 
     if (connected) {
@@ -174,39 +142,29 @@ static int processRecv(int sock) {
         lastReceived = getTimestampUs();
 
         uint32_t type = *(uint32_t *) buf;
-        if (type == ALVR_PACKET_TYPE_VIDEO_FRAME_START) {
-            // First packet of a video frame
-            VideoFrameStart *header = (VideoFrameStart *)buf;
-
-            processVideoSequence(header->packetCounter);
-
-            lastFrameIndex = header->frameIndex;
-
-            recordFirstPacketReceived(header->frameIndex);
-            if((int64_t) header->presentationTime - TimeDiff > getTimestampUs()) {
-                recordEstimatedSent(header->frameIndex, 0);
-            }else{
-                recordEstimatedSent(header->frameIndex, (int64_t) header->presentationTime - TimeDiff - getTimestampUs());
-            }
-
-            bool ret2 = processPacket(env_, (char *) buf, ret);
-            if (ret2) {
-                recordLastPacketReceived(lastFrameIndex);
-            }
-        } else if (type == ALVR_PACKET_TYPE_VIDEO_FRAME) {
+        if (type == ALVR_PACKET_TYPE_VIDEO_FRAME) {
             VideoFrame *header = (VideoFrame *)buf;
+
+            if(lastFrameIndex != header->frameIndex) {
+                g_latencyCollector->recordFirstPacketReceived(env_, header->frameIndex);
+                if((int64_t) header->sentTime - TimeDiff > getTimestampUs()) {
+                    g_latencyCollector->recordEstimatedSent(env_, header->frameIndex, 0);
+                }else{
+                    g_latencyCollector->recordEstimatedSent(env_, header->frameIndex, (int64_t) header->sentTime - TimeDiff - getTimestampUs());
+                }
+            }
 
             processVideoSequence(header->packetCounter);
 
             // Following packets of a video frame
-            bool ret2 = processPacket(env_, (char *) buf, ret);
+            bool ret2 = g_nalParser->processPacket(env_, header, packetSize);
             if (ret2) {
-                recordLastPacketReceived(lastFrameIndex);
+                g_latencyCollector->recordLastPacketReceived(env_, header->frameIndex);
             }
         } else if (type == ALVR_PACKET_TYPE_TIME_SYNC) {
             // Time sync packet
-            if (ret < sizeof(TimeSync)) {
-                return ret;
+            if (packetSize < sizeof(TimeSync)) {
+                return packetSize;
             }
             TimeSync *timeSync = (TimeSync *) buf;
             uint64_t Current = getTimestampUs();
@@ -223,8 +181,8 @@ static int processRecv(int sock) {
             }
         } else if (type == ALVR_PACKET_TYPE_CHANGE_SETTINGS) {
             // Change settings
-            if (ret < sizeof(ChangeSettings)) {
-                return ret;
+            if (packetSize < sizeof(ChangeSettings)) {
+                return packetSize;
             }
             ChangeSettings *settings = (ChangeSettings *) buf;
 
@@ -234,30 +192,30 @@ static int processRecv(int sock) {
             env_->DeleteLocalRef(clazz);
         } else if (type == ALVR_PACKET_TYPE_AUDIO_FRAME_START) {
             // Change settings
-            if (ret < sizeof(AudioFrameStart)) {
-                return ret;
+            if (packetSize < sizeof(AudioFrameStart)) {
+                return packetSize;
             }
             auto header = (AudioFrameStart *) buf;
 
             processSoundSequence(header->packetCounter);
 
             if(g_soundPlayer) {
-                g_soundPlayer->putData((uint8_t *) buf + sizeof(*header), ret - sizeof(*header));
+                g_soundPlayer->putData((uint8_t *) buf + sizeof(*header), packetSize - sizeof(*header));
             }
 
             LOG("Received audio frame start: Counter=%d Size=%d PresentationTime=%lu"
             , header->packetCounter, header->frameByteSize, header->presentationTime);
         } else if (type == ALVR_PACKET_TYPE_AUDIO_FRAME) {
             // Change settings
-            if (ret < sizeof(AudioFrame)) {
-                return ret;
+            if (packetSize < sizeof(AudioFrame)) {
+                return packetSize;
             }
             auto header = (AudioFrame *) buf;
 
             processSoundSequence(header->packetCounter);
 
             if(g_soundPlayer) {
-                g_soundPlayer->putData((uint8_t *) buf + sizeof(*header), ret - sizeof(*header));
+                g_soundPlayer->putData((uint8_t *) buf + sizeof(*header), packetSize - sizeof(*header));
             }
 
             LOG("Received audio frame: Counter=%d", header->packetCounter);
@@ -277,14 +235,14 @@ static int processRecv(int sock) {
         } else if (type == ALVR_PACKET_TYPE_CONNECTION_MESSAGE) {
             inet_ntop(addr.sin_family, &addr.sin_addr, str, sizeof(str));
             LOGI("Received connection request packet from %s:%d.", str, htons(addr.sin_port));
-            if (ret < sizeof(ConnectionMessage)) {
-                return ret;
+            if (packetSize < sizeof(ConnectionMessage)) {
+                return packetSize;
             }
             ConnectionMessage *connectionMessage = (ConnectionMessage *) buf;
 
             if(connectionMessage->version != ALVR_PROTOCOL_VERSION) {
                 LOGE("Received connection message which has unsupported version. Received Version=%d Our Version=%d", connectionMessage->version, ALVR_PROTOCOL_VERSION);
-                return ret;
+                return packetSize;
             }
             // Save video width and height
             g_connectionMessage = *connectionMessage;
@@ -296,8 +254,8 @@ static int processRecv(int sock) {
             prevVideoSequence = 0;
             prevSoundSequence = 0;
             TimeDiff = 0;
-            resetAll();
-            setNalCodec(g_connectionMessage.codec);
+            g_latencyCollector->resetAll(env_);
+            g_nalParser->setCodec(g_connectionMessage.codec);
 
             LOGI("Try setting recv buffer size = %d bytes", connectionMessage->bufferSize);
             int val = connectionMessage->bufferSize;
@@ -318,7 +276,7 @@ static int processRecv(int sock) {
             sendto(sock, &message, sizeof(message), 0, (sockaddr *) &serverAddr, sizeof(serverAddr));
         }
     }
-    return ret;
+    return packetSize;
 }
 
 static void processReadPipe(int pipefd) {
@@ -365,20 +323,20 @@ static void sendTimeSync() {
         timeSync.clientTime = getTimestampUs();
         timeSync.sequence = ++timeSyncSequence;
 
-        timeSync.packetsLostTotal = (uint32_t) getPacketsLostTotal();
-        timeSync.packetsLostInSecond = (uint32_t) getPacketsLostInSecond();
+        timeSync.packetsLostTotal = (uint32_t) g_latencyCollector->getPacketsLostTotal(env_);
+        timeSync.packetsLostInSecond = (uint32_t) g_latencyCollector->getPacketsLostInSecond(env_);
 
-        timeSync.averageTotalLatency = (uint32_t) getLatency(0, 0);
-        timeSync.maxTotalLatency = (uint32_t) getLatency(0, 1);
-        timeSync.minTotalLatency = (uint32_t) getLatency(0, 2);
+        timeSync.averageTotalLatency = (uint32_t) g_latencyCollector->getLatency(env_, 0, 0);
+        timeSync.maxTotalLatency = (uint32_t) g_latencyCollector->getLatency(env_, 0, 1);
+        timeSync.minTotalLatency = (uint32_t) g_latencyCollector->getLatency(env_, 0, 2);
 
-        timeSync.averageTransportLatency = (uint32_t) getLatency(1, 0);
-        timeSync.maxTransportLatency = (uint32_t) getLatency(1, 1);
-        timeSync.minTransportLatency = (uint32_t) getLatency(1, 2);
+        timeSync.averageTransportLatency = (uint32_t) g_latencyCollector->getLatency(env_, 1, 0);
+        timeSync.maxTransportLatency = (uint32_t) g_latencyCollector->getLatency(env_, 1, 1);
+        timeSync.minTransportLatency = (uint32_t) g_latencyCollector->getLatency(env_, 1, 2);
 
-        timeSync.averageDecodeLatency = (uint32_t) getLatency(2, 0);
-        timeSync.maxDecodeLatency = (uint32_t) getLatency(2, 1);
-        timeSync.minDecodeLatency = (uint32_t) getLatency(2, 2);
+        timeSync.averageDecodeLatency = (uint32_t) g_latencyCollector->getLatency(env_, 2, 0);
+        timeSync.maxDecodeLatency = (uint32_t) g_latencyCollector->getLatency(env_, 2, 1);
+        timeSync.minDecodeLatency = (uint32_t) g_latencyCollector->getLatency(env_, 2, 2);
 
         sendto(sock, &timeSync, sizeof(timeSync), 0, (sockaddr *) &serverAddr,
                sizeof(serverAddr));
@@ -465,7 +423,7 @@ Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobje
 
     deviceName = GetStringFromJNIString(env, deviceName_);
 
-    initNAL(env);
+    g_nalParser = std::make_shared<NALParser>(env);
 
     //
     // Sound
@@ -565,7 +523,8 @@ Java_com_polygraphene_alvr_UdpReceiverThread_closeSocket(JNIEnv *env, jobject in
     if (sock >= 0) {
         close(sock);
     }
-    destroyNAL(env);
+
+    g_nalParser.reset();
     sendQueue.clear();
 }
 
@@ -600,31 +559,31 @@ Java_com_polygraphene_alvr_UdpReceiverThread_send(JNIEnv *env, jobject instance,
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_getNalListSize(JNIEnv *env, jobject instance) {
-    return getNalListSize(env);
+    return g_nalParser->getQueueSize(env);
 }
 
 extern "C"
 JNIEXPORT jobject JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_waitNal(JNIEnv *env, jobject instance) {
-    return waitNal(env);
+    return g_nalParser->wait(env);
 }
 
 extern "C"
 JNIEXPORT jobject JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_getNal(JNIEnv *env, jobject instance) {
-    return getNal(env);
+    return g_nalParser->get(env);
 }
 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_recycleNal(JNIEnv *env, jobject instance, jobject nal) {
-    recycleNal(env, nal);
+    g_nalParser->recycle(env, nal);
 }
 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_flushNALList(JNIEnv *env, jobject instance) {
-    flushNalList(env);
+    g_nalParser->flush(env);
 }
 
 extern "C"
@@ -640,18 +599,8 @@ Java_com_polygraphene_alvr_UdpReceiverThread_runLoop(JNIEnv *env, jobject instan
 
     env_ = env;
     instance_ = instance;
-    latencyCollector_ = latencyCollector;
 
-    latencyCollectorClass_ = env_->GetObjectClass(latencyCollector_);
-
-    latencyCollectorEstimatedSent_ = env_->GetMethodID(latencyCollectorClass_, "EstimatedSent", "(JJ)V");
-    latencyCollectorReceivedFirst_ = env_->GetMethodID(latencyCollectorClass_, "ReceivedFirst", "(J)V");
-    latencyCollectorReceivedLast_ = env_->GetMethodID(latencyCollectorClass_, "ReceivedLast", "(J)V");
-    latencyCollectorPacketLoss_ = env_->GetMethodID(latencyCollectorClass_, "PacketLoss", "(J)V");
-    latencyCollectorGetLatency_ = env_->GetMethodID(latencyCollectorClass_, "GetLatency", "(II)J");
-    latencyCollectorGetPacketsLostTotal_ = env_->GetMethodID(latencyCollectorClass_, "GetPacketsLostTotal", "()J");
-    latencyCollectorGetPacketsLostInSecond_ = env_->GetMethodID(latencyCollectorClass_, "GetPacketsLostInSecond", "()J");
-    latencyCollectorResetAll_ = env_->GetMethodID(latencyCollectorClass_, "ResetAll", "()V");
+    g_latencyCollector = std::make_shared<LatencyCollector>(env_, latencyCollector);
 
     if(serverAddress != NULL) {
         recoverConnection(GetStringFromJNIString(env, serverAddress), serverPort);
@@ -718,7 +667,7 @@ extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_notifyWaitingThread(JNIEnv *env, jobject instance) {
     // Notify NAL waiting thread
-    notifyNALWaitingThread(env);
+    g_nalParser->notifyWaitingThread(env);
 }
 
 extern "C"
@@ -758,5 +707,5 @@ Java_com_polygraphene_alvr_UdpReceiverThread_getServerPort(JNIEnv *env, jobject 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_clearStopped(JNIEnv *env, jobject instance) {
-    nalClearStopped();
+    g_nalParser->clearStopped();
 }

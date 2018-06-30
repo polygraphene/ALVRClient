@@ -1,19 +1,51 @@
 #ifndef ALVRCLIENT_NAL_H
 #define ALVRCLIENT_NAL_H
+
 #include <jni.h>
+#include <list>
+#include "utils.h"
+#include "fec.h"
 
-void initNAL(JNIEnv *env);
-void destroyNAL(JNIEnv *env);
 
-void setNalCodec(int codec);
-bool processPacket(JNIEnv *env, char *buf, int len);
-bool processingIDRFrame();
-jobject waitNal(JNIEnv *env);
-jobject getNal(JNIEnv *env);
-void recycleNal(JNIEnv *env, jobject nal);
-int getNalListSize(JNIEnv *env);
-void flushNalList(JNIEnv *env);
-void notifyNALWaitingThread(JNIEnv *env);
-void nalClearStopped();
+class NALParser {
+public:
+    NALParser(JNIEnv *env);
+    ~NALParser();
 
+    void setCodec(int codec);
+
+    bool processPacket(JNIEnv *env, VideoFrame *packet, int packetSize);
+
+    jobject wait(JNIEnv *env);
+    jobject get(JNIEnv *env);
+    void recycle(JNIEnv *env, jobject nal);
+    int getQueueSize(JNIEnv *env);
+    void flush(JNIEnv *env);
+    void notifyWaitingThread(JNIEnv *env);
+    void clearStopped();
+
+private:
+    void clearNalList(JNIEnv *env);
+    void push(char *buffer, int length, uint64_t frameIndex);
+    void pushNal(jobject nal);
+
+    bool m_stopped = false;
+
+    FECQueue m_queue;
+
+    int m_codec = 1;
+
+    JNIEnv *m_env;
+
+// Parsed NAL queue
+    std::list<jobject> m_nalList;
+    std::list<jobject> m_nalRecycleList;
+    Mutex m_nalMutex;
+
+    pthread_cond_t m_cond_nonzero = PTHREAD_COND_INITIALIZER;
+
+    jfieldID NAL_length;
+    jfieldID NAL_frameIndex;
+    jfieldID NAL_buf;
+};
 #endif //ALVRCLIENT_NAL_H
