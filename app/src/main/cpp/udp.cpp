@@ -46,7 +46,6 @@ static uint32_t prevVideoSequence = 0;
 static uint32_t prevSoundSequence = 0;
 static std::shared_ptr<SoundPlayer> g_soundPlayer;
 static std::shared_ptr<NALParser> g_nalParser;
-static std::shared_ptr<LatencyCollector> g_latencyCollector;
 
 static JNIEnv *env_;
 static jobject instance_;
@@ -77,7 +76,7 @@ static void sendPacketLossReport(ALVR_LOST_FRAME_TYPE frameType, uint32_t fromPa
     report.toPacketCounter = toPacketCounter;
     int ret = sendto(sock, &report, sizeof(report), 0, (sockaddr *) &serverAddr,
            sizeof(serverAddr));
-    LOGI("Sent packet loss report. ret=%d errno=%d", ret, errno);
+    LOGI("Sent packet loss report. ret=%d", ret);
 }
 
 static void processVideoSequence(uint32_t sequence) {
@@ -89,9 +88,6 @@ static void processVideoSequence(uint32_t sequence) {
             lost = -lost;
         }
         g_latencyCollector->recordPacketLoss(env_, lost);
-
-        sendPacketLossReport(ALVR_LOST_FRAME_TYPE_P
-                , prevVideoSequence + 1, sequence - 1);
 
         LOGE("VideoPacket loss %d (%d -> %d)", lost, prevVideoSequence + 1,
             sequence - 1);
@@ -157,9 +153,14 @@ static int processRecv(int sock) {
             processVideoSequence(header->packetCounter);
 
             // Following packets of a video frame
-            bool ret2 = g_nalParser->processPacket(env_, header, packetSize);
+            bool fecFailure = false;
+            bool ret2 = g_nalParser->processPacket(env_, header, packetSize, fecFailure);
             if (ret2) {
                 g_latencyCollector->recordLastPacketReceived(env_, header->frameIndex);
+            }
+            if(fecFailure) {
+                g_latencyCollector->recordFecFailure(env_);
+                sendPacketLossReport(ALVR_LOST_FRAME_TYPE_VIDEO, 0, 0);
             }
         } else if (type == ALVR_PACKET_TYPE_TIME_SYNC) {
             // Time sync packet
@@ -323,8 +324,8 @@ static void sendTimeSync() {
         timeSync.clientTime = getTimestampUs();
         timeSync.sequence = ++timeSyncSequence;
 
-        timeSync.packetsLostTotal = (uint32_t) g_latencyCollector->getPacketsLostTotal(env_);
-        timeSync.packetsLostInSecond = (uint32_t) g_latencyCollector->getPacketsLostInSecond(env_);
+        timeSync.packetsLostTotal = g_latencyCollector->getPacketsLostTotal(env_);
+        timeSync.packetsLostInSecond = g_latencyCollector->getPacketsLostInSecond(env_);
 
         timeSync.averageTotalLatency = (uint32_t) g_latencyCollector->getLatency(env_, 0, 0);
         timeSync.maxTotalLatency = (uint32_t) g_latencyCollector->getLatency(env_, 0, 1);
@@ -337,6 +338,10 @@ static void sendTimeSync() {
         timeSync.averageDecodeLatency = (uint32_t) g_latencyCollector->getLatency(env_, 2, 0);
         timeSync.maxDecodeLatency = (uint32_t) g_latencyCollector->getLatency(env_, 2, 1);
         timeSync.minDecodeLatency = (uint32_t) g_latencyCollector->getLatency(env_, 2, 2);
+
+        timeSync.fecFailure = g_nalParser->fecFailure() ? 1 : 0;
+        timeSync.fecFailureTotal = g_latencyCollector->getFecFailureTotal(env_);
+        timeSync.fecFailureInSecond = g_latencyCollector->getFecFailureInSecond(env_);
 
         sendto(sock, &timeSync, sizeof(timeSync), 0, (sockaddr *) &serverAddr,
                sizeof(serverAddr));
@@ -667,7 +672,9 @@ extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_notifyWaitingThread(JNIEnv *env, jobject instance) {
     // Notify NAL waiting thread
-    g_nalParser->notifyWaitingThread(env);
+    if(g_nalParser) {
+        g_nalParser->notifyWaitingThread(env);
+    }
 }
 
 extern "C"

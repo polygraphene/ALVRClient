@@ -26,6 +26,10 @@ public class LatencyCollector {
     private long mStatisticsTime;
     private long mPacketsLostTotal = 0;
     private long mPacketsLostInSecond = 0;
+    private long mPacketsLostPrevious = 0;
+    private long mFecFailureTotal = 0;
+    private long mFecFailureInSecond = 0;
+    private long mFecFailurePrevious = 0;
 
     // Total/Transport/Decode latency
     // Total/Max/Min/Count
@@ -106,6 +110,10 @@ public class LatencyCollector {
     synchronized public void ResetAll() {
         mPacketsLostTotal = 0;
         mPacketsLostInSecond = 0;
+        mPacketsLostPrevious = 0;
+        mFecFailureTotal = 0;
+        mFecFailureInSecond = 0;
+        mFecFailurePrevious = 0;
         mStatisticsTime = currentSec();
 
         for(int i = 0; i < 3; i++) {
@@ -127,7 +135,10 @@ public class LatencyCollector {
             }
         }
 
+        mPacketsLostPrevious = mPacketsLostInSecond;
         mPacketsLostInSecond = 0;
+        mFecFailurePrevious = mFecFailureInSecond;
+        mFecFailureInSecond = 0;
     }
 
     synchronized public void PacketLoss(long count) {
@@ -138,6 +149,16 @@ public class LatencyCollector {
         }
         mPacketsLostTotal += count;
         mPacketsLostInSecond += count;
+    }
+
+    synchronized public void FecFailure() {
+        long current = currentSec();
+        if(mStatisticsTime != current){
+            mStatisticsTime = current;
+            ResetSecond();
+        }
+        mFecFailureTotal++;
+        mFecFailureInSecond++;
     }
 
     synchronized public void Latency(long[] latency) {
@@ -159,8 +180,17 @@ public class LatencyCollector {
     }
 
     synchronized public long GetPacketsLostInSecond(){
-        return mPacketsLostInSecond;
+        return mPacketsLostPrevious;
     }
+
+    synchronized public long GetFecFailureTotal(){
+        return mFecFailureTotal;
+    }
+
+    synchronized public long GetFecFailureInSecond(){
+        return mFecFailurePrevious;
+    }
+
 
     synchronized public long GetLatency(int i, int j){
         if(j == 1 || j == 2) {

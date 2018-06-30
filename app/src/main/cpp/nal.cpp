@@ -56,8 +56,8 @@ void NALParser::setCodec(int codec) {
     m_codec = codec;
 }
 
-bool NALParser::processPacket(JNIEnv *env, VideoFrame *packet, int packetSize) {
-    m_queue.addVideoPacket(packet, packetSize);
+bool NALParser::processPacket(JNIEnv *env, VideoFrame *packet, int packetSize, bool &fecFailure) {
+    m_queue.addVideoPacket(packet, packetSize, fecFailure);
 
     std::vector<char> frameBuffer;
     bool result = m_queue.reconstruct(frameBuffer);
@@ -108,6 +108,8 @@ bool NALParser::processPacket(JNIEnv *env, VideoFrame *packet, int packetSize) {
             LOGI("Got frame=%d %d, Codec=%d", NALType, end, m_codec);
             push(&frameBuffer[0], end, packet->frameIndex);
             push(&frameBuffer[end], frameBuffer.size() - end, packet->frameIndex);
+
+            m_queue.clearFecFailure();
         } else {
             push(&frameBuffer[0], frameBuffer.size(), packet->frameIndex);
         }
@@ -246,4 +248,8 @@ void NALParser::pushNal(jobject nal) {
             MAXIMUM_NAL_BUFFER);
         m_nalRecycleList.push_front(nal);
     }
+}
+
+bool NALParser::fecFailure() {
+    return m_queue.fecFailure();
 }

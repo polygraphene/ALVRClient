@@ -32,9 +32,8 @@ enum ALVR_CODEC {
 };
 
 enum ALVR_LOST_FRAME_TYPE {
-	ALVR_LOST_FRAME_TYPE_P = 0,
-	ALVR_LOST_FRAME_TYPE_IDR = 1,
-	ALVR_LOST_FRAME_TYPE_AUDIO = 2,
+	ALVR_LOST_FRAME_TYPE_VIDEO = 0,
+	ALVR_LOST_FRAME_TYPE_AUDIO = 1,
 };
 
 #pragma pack(push, 1)
@@ -142,6 +141,10 @@ struct TimeSync {
 	uint32_t averageDecodeLatency;
 	uint32_t maxDecodeLatency;
 	uint32_t minDecodeLatency;
+
+	uint32_t fecFailure;
+	uint64_t fecFailureInSecond;
+	uint64_t fecFailureTotal;
 };
 struct ChangeSettings {
 	uint32_t type; // 8
@@ -188,14 +191,15 @@ inline int CalculateParityShards(int dataShards, int fecPercentage) {
 
 // Calculate how many packet is needed for make signal shard.
 inline int CalculateFECShardPackets(int len, int fecPercentage) {
+    int shards_max = 20;
 	// This reed solomon implementation accept only 255 shards.
 	// Normally, we use ALVR_MAX_VIDEO_BUFFER_SIZE as block_size and single packet becomes single shard.
 	// If we need more than maxDataShards packets, we need to combine multiple packet to make single shrad.
 	// NOTE: Moonlight seems to use only 255 shards for video frame.
-	int maxDataShards = ((DATA_SHARDS_MAX - 2) * 100 + 99 + fecPercentage) / (100 + fecPercentage);
+	int maxDataShards = ((shards_max - 2) * 100 + 99 + fecPercentage) / (100 + fecPercentage);
 	int minBlockSize = (len + maxDataShards - 1) / maxDataShards;
 	int shardPackets = (minBlockSize + ALVR_MAX_VIDEO_BUFFER_SIZE - 1) / ALVR_MAX_VIDEO_BUFFER_SIZE;
-	assert(maxDataShards + CalculateParityShards(maxDataShards, fecPercentage) <= DATA_SHARDS_MAX);
+	assert(maxDataShards + CalculateParityShards(maxDataShards, fecPercentage) <= shards_max);
 	return shardPackets;
 }
 

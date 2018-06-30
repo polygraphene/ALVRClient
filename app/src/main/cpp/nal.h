@@ -14,7 +14,7 @@ public:
 
     void setCodec(int codec);
 
-    bool processPacket(JNIEnv *env, VideoFrame *packet, int packetSize);
+    bool processPacket(JNIEnv *env, VideoFrame *packet, int packetSize, bool &fecFailure);
 
     jobject wait(JNIEnv *env);
     jobject get(JNIEnv *env);
@@ -24,6 +24,7 @@ public:
     void notifyWaitingThread(JNIEnv *env);
     void clearStopped();
 
+    bool fecFailure();
 private:
     void clearNalList(JNIEnv *env);
     void push(char *buffer, int length, uint64_t frameIndex);
