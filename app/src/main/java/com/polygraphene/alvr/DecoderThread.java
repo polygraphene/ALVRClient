@@ -211,13 +211,12 @@ class DecoderThread {
 
             if (mCodec == CODEC_H264 && NALType == NAL_TYPE_SPS) {
                 // SPS + PPS
-                if (mWaitNextIDR) {
-                    Utils.frameLog(nal.frameIndex, "Feed codec config. SPS+PPS Size=" + nal.length);
+                Utils.frameLog(nal.frameIndex, "Feed codec config. SPS+PPS Size=" + nal.length);
 
-                    mWaitNextIDR = false;
+                mWaitNextIDR = false;
 
-                    sendInputBuffer(nal, 0, MediaCodec.BUFFER_FLAG_CODEC_CONFIG);
-                }
+                sendInputBuffer(nal, 0, MediaCodec.BUFFER_FLAG_CODEC_CONFIG);
+
                 mNalParser.recycleNal(nal);
             } else if (mCodec == CODEC_H264 && NALType == NAL_TYPE_IDR) {
                 // IDR-Frame
@@ -232,13 +231,12 @@ class DecoderThread {
                 mNalParser.recycleNal(nal);
             } else if (mCodec == CODEC_H265 && NALType == H265_NAL_TYPE_VPS) {
                 // VPS + SPS + PPS
-                if (mWaitNextIDR) {
-                    frameLog("Feed codec config. VPS+SPS+PPS Size=" + nal.length);
+                frameLog("Feed codec config. VPS+SPS+PPS Size=" + nal.length);
 
-                    mWaitNextIDR = false;
+                mWaitNextIDR = false;
 
-                    sendInputBuffer(nal, 0, MediaCodec.BUFFER_FLAG_CODEC_CONFIG);
-                }
+                sendInputBuffer(nal, 0, MediaCodec.BUFFER_FLAG_CODEC_CONFIG);
+                
                 mNalParser.recycleNal(nal);
             } else if (mCodec == CODEC_H265 && NALType == H265_NAL_TYPE_IDR_W_RADL) {
                 // IDR-Frame
@@ -306,7 +304,7 @@ class DecoderThread {
     }
 
     private void sendInputBuffer(NAL nal, long presentationTimeUs, int flags) throws InterruptedException {
-        if(presentationTimeUs != 0) {
+        if (presentationTimeUs != 0) {
             pushFramePresentationMap(nal, presentationTimeUs);
         }
 

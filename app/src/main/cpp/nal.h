@@ -27,8 +27,9 @@ public:
     bool fecFailure();
 private:
     void clearNalList(JNIEnv *env);
-    void push(char *buffer, int length, uint64_t frameIndex);
+    void push(const char *buffer, int length, uint64_t frameIndex);
     void pushNal(jobject nal);
+    int findVPSSPS(const char *frameBuffer, int frameByteSize);
 
     bool m_stopped = false;
 

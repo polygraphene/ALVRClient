@@ -12,26 +12,29 @@ public:
     ~FECQueue();
 
     void addVideoPacket(const VideoFrame *packet, int packetSize, bool &fecFailure);
-    bool reconstruct(std::vector<char> &frameBuffer);
+    bool reconstruct();
+    const char *getFrameBuffer();
+    int getFrameByteSize();
 
     bool fecFailure();
     void clearFecFailure();
 private:
-    void clear();
 
-    std::list<const VideoFrame *> m_queue;
     VideoFrame m_currentFrame;
     size_t m_shardPackets;
     size_t m_blockSize;
     size_t m_totalDataShards;
     size_t m_totalParityShards;
     size_t m_totalShards;
-    std::vector<bool> m_packetBitmap;
-    std::vector<unsigned char> m_marks;
-    uint32_t m_receivedDataShards;
-    uint32_t m_receivedParityShards;
+    std::vector<std::vector<unsigned char>> m_marks;
+    std::vector<char> m_frameBuffer;
+    std::vector<uint32_t> m_receivedDataShards;
+    std::vector<uint32_t> m_receivedParityShards;
+    std::vector<bool> m_recoveredPacket;
+    std::vector<char *> m_shards;
     bool m_recovered;
     bool m_fecFailure;
+    reed_solomon *m_rs = NULL;
 
     static bool reed_solomon_initialized;
 };

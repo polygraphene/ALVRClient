@@ -59,10 +59,11 @@ void NALParser::setCodec(int codec) {
 bool NALParser::processPacket(JNIEnv *env, VideoFrame *packet, int packetSize, bool &fecFailure) {
     m_queue.addVideoPacket(packet, packetSize, fecFailure);
 
-    std::vector<char> frameBuffer;
-    bool result = m_queue.reconstruct(frameBuffer);
+    bool result = m_queue.reconstruct();
     if (result) {
         // Reconstructed
+        const char *frameBuffer = m_queue.getFrameBuffer();
+        int frameByteSize = m_queue.getFrameByteSize();
 
         int NALType;
         if (m_codec == ALVR_CODEC_H264) {
@@ -76,30 +77,7 @@ bool NALParser::processPacket(JNIEnv *env, VideoFrame *packet, int packetSize, b
             // This frame contains (VPS + )SPS + PPS + IDR on NVENC H.264 (H.265) stream.
             // (VPS + )SPS + PPS has short size (8bytes + 28bytes in some environment), so we can assume SPS + PPS is contained in first fragment.
 
-            int zeroes = 0;
-            int foundNals = 0;
-            int end = -1;
-            for (int i = 0; i < ALVR_MAX_PACKET_SIZE; i++) {
-                if (frameBuffer[i] == 0) {
-                    zeroes++;
-                } else if (frameBuffer[i] == 1) {
-                    if (zeroes == 3) {
-                        foundNals++;
-                        if (m_codec == ALVR_CODEC_H264 && foundNals >= 3) {
-                            // Find end of SPS+PPS on H.264.
-                            end = i - 3;
-                            break;
-                        } else if (m_codec == ALVR_CODEC_H265 && foundNals >= 4) {
-                            // Find end of VPS+SPS+PPS on H.264.
-                            end = i - 3;
-                            break;
-                        }
-                    }
-                    zeroes = 0;
-                } else {
-                    zeroes = 0;
-                }
-            }
+            int end = findVPSSPS(frameBuffer, frameByteSize);
             if (end == -1) {
                 // Invalid frame.
                 LOG("Got invalid frame. Too large SPS or PPS?");
@@ -107,11 +85,11 @@ bool NALParser::processPacket(JNIEnv *env, VideoFrame *packet, int packetSize, b
             }
             LOGI("Got frame=%d %d, Codec=%d", NALType, end, m_codec);
             push(&frameBuffer[0], end, packet->frameIndex);
-            push(&frameBuffer[end], frameBuffer.size() - end, packet->frameIndex);
+            push(&frameBuffer[end], frameByteSize - end, packet->frameIndex);
 
             m_queue.clearFecFailure();
         } else {
-            push(&frameBuffer[0], frameBuffer.size(), packet->frameIndex);
+            push(&frameBuffer[0], frameByteSize, packet->frameIndex);
         }
         return true;
     }
@@ -196,7 +174,7 @@ void NALParser::clearNalList(JNIEnv *env) {
     m_nalList.clear();
 }
 
-void NALParser::push(char *buffer, int length, uint64_t frameIndex) {
+void NALParser::push(const char *buffer, int length, uint64_t frameIndex) {
     jobject nal;
     jbyteArray buf;
     {
@@ -252,4 +230,29 @@ void NALParser::pushNal(jobject nal) {
 
 bool NALParser::fecFailure() {
     return m_queue.fecFailure();
+}
+
+int NALParser::findVPSSPS(const char *frameBuffer, int frameByteSize) {
+    int zeroes = 0;
+    int foundNals = 0;
+    for (int i = 0; i < frameByteSize; i++) {
+        if (frameBuffer[i] == 0) {
+            zeroes++;
+        } else if (frameBuffer[i] == 1) {
+            if (zeroes == 3) {
+                foundNals++;
+                if (m_codec == ALVR_CODEC_H264 && foundNals >= 3) {
+                    // Find end of SPS+PPS on H.264.
+                    return i - 3;
+                } else if (m_codec == ALVR_CODEC_H265 && foundNals >= 4) {
+                    // Find end of VPS+SPS+PPS on H.264.
+                    return i - 3;
+                }
+            }
+            zeroes = 0;
+        } else {
+            zeroes = 0;
+        }
+    }
+    return -1;
 }
