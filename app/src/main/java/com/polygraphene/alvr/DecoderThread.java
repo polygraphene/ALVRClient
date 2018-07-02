@@ -299,8 +299,10 @@ class DecoderThread {
                 mAvailableInputs.wait();
             }
         }
-        Utils.frameLog(nal.frameIndex, "Uses input index=" + mBufferIndex + " NAL QueueSize=" + mNalParser.getNalListSize());
-        return mDecoder.getInputBuffer(mBufferIndex);
+        ByteBuffer buffer = mDecoder.getInputBuffer(mBufferIndex);
+        Utils.frameLog(nal.frameIndex, "Uses input index=" + mBufferIndex + " NAL QueueSize=" + mNalParser.getNalListSize()
+                + " Buffer capacity=" + buffer.remaining());
+        return buffer;
     }
 
     private void sendInputBuffer(NAL nal, long presentationTimeUs, int flags) throws InterruptedException {
@@ -308,9 +310,22 @@ class DecoderThread {
             pushFramePresentationMap(nal, presentationTimeUs);
         }
 
-        ByteBuffer buffer = getInputBuffer(nal);
-        buffer.put(nal.buf, 0, nal.length);
-        mDecoder.queueInputBuffer(mBufferIndex, 0, buffer.position(), presentationTimeUs, flags);
+        int remain = nal.length;
+        while(remain > 0) {
+            ByteBuffer buffer = getInputBuffer(nal);
+
+            int copyLength = Math.min(nal.length, buffer.remaining());
+            buffer.put(nal.buf, 0, copyLength);
+
+            mDecoder.queueInputBuffer(mBufferIndex, 0, buffer.position(), presentationTimeUs, flags);
+            remain -= copyLength;
+
+            if(remain > 0) {
+                String name = mDecoder.getCodecInfo().getName();
+                Utils.frameLog(nal.frameIndex, "Splitting input buffer for codec. NAL Size="
+                        + nal.length + " copyLength=" + copyLength + " codec=" + name);
+            }
+        }
         mBufferIndex = -1;
     }
 
