@@ -83,8 +83,10 @@ void FECQueue::addVideoPacket(const VideoFrame *packet, int packetSize, bool &fe
             memset(&m_marks[i][0], 1, m_totalShards);
         }
 
-        m_frameBuffer.clear();
-        m_frameBuffer.resize(m_totalShards * m_blockSize);
+        if (m_frameBuffer.size() < m_totalShards * m_blockSize) {
+            // Only expand buffer for performance reason.
+            m_frameBuffer.resize(m_totalShards * m_blockSize);
+        }
         memset(&m_frameBuffer[0], 0, m_totalShards * m_blockSize);
 
         // Padding packets are not sent, so we can fill bitmap by default.
@@ -93,7 +95,6 @@ void FECQueue::addVideoPacket(const VideoFrame *packet, int packetSize, bool &fe
             m_marks[m_shardPackets - i - 1][m_totalDataShards - 1] = 0;
             m_receivedDataShards[m_shardPackets - i - 1]++;
         }
-
 
         FrameLog(m_currentFrame.frameIndex,
                  "Start new frame. frameByteSize=%d fecPercentage=%d m_totalDataShards=%u m_totalParityShards=%u m_totalShards=%u m_shardPackets=%u m_blockSize=%u",
@@ -139,7 +140,7 @@ bool FECQueue::reconstruct() {
         }
         if (m_receivedDataShards[packet] == m_totalDataShards) {
             // We've received a full packet with no need for FEC.
-            FrameLog(m_currentFrame.frameIndex, "No need for FEC. packetIndex=%d", packet);
+            //FrameLog(m_currentFrame.frameIndex, "No need for FEC. packetIndex=%d", packet);
             m_recoveredPacket[packet] = true;
             continue;
         }
@@ -181,7 +182,6 @@ bool FECQueue::reconstruct() {
     if (ret) {
         m_recovered = true;
         FrameLog(m_currentFrame.frameIndex, "Frame was successfully recovered by FEC.");
-        m_frameBuffer.resize(m_currentFrame.frameByteSize);
     }
     return ret;
 }
