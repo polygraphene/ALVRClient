@@ -309,6 +309,7 @@ class VrThread extends Thread {
                         }
                         mRenderRequested = true;
                         mRendered = false;
+                        mWaiter.notifyAll();
                     }
                     while (true) {
                         synchronized (mWaiter) {
@@ -324,6 +325,7 @@ class VrThread extends Thread {
                             }
                             if(System.nanoTime() - startTime > 1000 * 1000 * 1000L) {
                                 // Idle for 1-sec.
+                                Log.v(TAG, "Wait failed.");
                                 return -1;
                             }
                             try {
@@ -387,6 +389,15 @@ class VrThread extends Thread {
         public int renderIf(MediaCodec codec, int queuedOutputBuffer, long frameIndex) {
             //Log.v(TAG, "renderIf " + queuedOutputBuffer);
             synchronized (mWaiter) {
+                long startTime = System.nanoTime();
+                while(!mRenderRequested && System.nanoTime() - startTime < 50 * 1000 * 1000) {
+                    try {
+                        Log.v(TAG, "Waiting mRenderRequested=" + mRenderRequested);
+                        mWaiter.wait(10);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
                 if (!mRenderRequested) {
                     return queuedOutputBuffer;
                 }
