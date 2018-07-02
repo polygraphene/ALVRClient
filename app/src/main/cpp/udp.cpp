@@ -87,7 +87,7 @@ static void processVideoSequence(uint32_t sequence) {
             // TODO: This is not accurate statistics.
             lost = -lost;
         }
-        g_latencyCollector->recordPacketLoss(env_, lost);
+        LatencyCollector::Instance().packetLoss(lost);
 
         LOGE("VideoPacket loss %d (%d -> %d)", lost, prevVideoSequence + 1,
             sequence - 1);
@@ -103,7 +103,7 @@ static void processSoundSequence(uint32_t sequence) {
             // TODO: This is not accurate statistics.
             lost = -lost;
         }
-        g_latencyCollector->recordPacketLoss(env_, lost);
+        LatencyCollector::Instance().packetLoss(lost);
 
         sendPacketLossReport(ALVR_LOST_FRAME_TYPE_AUDIO
                 , prevSoundSequence + 1, sequence - 1);
@@ -142,12 +142,13 @@ static int processRecv(int sock) {
             VideoFrame *header = (VideoFrame *)buf;
 
             if(lastFrameIndex != header->frameIndex) {
-                g_latencyCollector->recordFirstPacketReceived(env_, header->frameIndex);
+                LatencyCollector::Instance().receivedFirst(header->frameIndex);
                 if((int64_t) header->sentTime - TimeDiff > getTimestampUs()) {
-                    g_latencyCollector->recordEstimatedSent(env_, header->frameIndex, 0);
+                    LatencyCollector::Instance().estimatedSent(header->frameIndex, 0);
                 }else{
-                    g_latencyCollector->recordEstimatedSent(env_, header->frameIndex, (int64_t) header->sentTime - TimeDiff - getTimestampUs());
+                    LatencyCollector::Instance().estimatedSent(header->frameIndex, (int64_t) header->sentTime - TimeDiff - getTimestampUs());
                 }
+                lastFrameIndex = header->frameIndex;
             }
 
             processVideoSequence(header->packetCounter);
@@ -156,10 +157,10 @@ static int processRecv(int sock) {
             bool fecFailure = false;
             bool ret2 = g_nalParser->processPacket(env_, header, packetSize, fecFailure);
             if (ret2) {
-                g_latencyCollector->recordLastPacketReceived(env_, header->frameIndex);
+                LatencyCollector::Instance().receivedLast(header->frameIndex);
             }
             if(fecFailure) {
-                g_latencyCollector->recordFecFailure(env_);
+                LatencyCollector::Instance().fecFailure();
                 sendPacketLossReport(ALVR_LOST_FRAME_TYPE_VIDEO, 0, 0);
             }
         } else if (type == ALVR_PACKET_TYPE_TIME_SYNC) {
@@ -255,7 +256,7 @@ static int processRecv(int sock) {
             prevVideoSequence = 0;
             prevSoundSequence = 0;
             TimeDiff = 0;
-            g_latencyCollector->resetAll(env_);
+            LatencyCollector::Instance().resetAll();
             g_nalParser->setCodec(g_connectionMessage.codec);
 
             LOGI("Try setting recv buffer size = %d bytes", connectionMessage->bufferSize);
@@ -324,24 +325,24 @@ static void sendTimeSync() {
         timeSync.clientTime = getTimestampUs();
         timeSync.sequence = ++timeSyncSequence;
 
-        timeSync.packetsLostTotal = g_latencyCollector->getPacketsLostTotal(env_);
-        timeSync.packetsLostInSecond = g_latencyCollector->getPacketsLostInSecond(env_);
+        timeSync.packetsLostTotal = LatencyCollector::Instance().getPacketsLostTotal();
+        timeSync.packetsLostInSecond = LatencyCollector::Instance().getPacketsLostInSecond();
 
-        timeSync.averageTotalLatency = (uint32_t) g_latencyCollector->getLatency(env_, 0, 0);
-        timeSync.maxTotalLatency = (uint32_t) g_latencyCollector->getLatency(env_, 0, 1);
-        timeSync.minTotalLatency = (uint32_t) g_latencyCollector->getLatency(env_, 0, 2);
+        timeSync.averageTotalLatency = (uint32_t) LatencyCollector::Instance().getLatency(0, 0);
+        timeSync.maxTotalLatency = (uint32_t) LatencyCollector::Instance().getLatency(0, 1);
+        timeSync.minTotalLatency = (uint32_t) LatencyCollector::Instance().getLatency(0, 2);
 
-        timeSync.averageTransportLatency = (uint32_t) g_latencyCollector->getLatency(env_, 1, 0);
-        timeSync.maxTransportLatency = (uint32_t) g_latencyCollector->getLatency(env_, 1, 1);
-        timeSync.minTransportLatency = (uint32_t) g_latencyCollector->getLatency(env_, 1, 2);
+        timeSync.averageTransportLatency = (uint32_t) LatencyCollector::Instance().getLatency(1, 0);
+        timeSync.maxTransportLatency = (uint32_t) LatencyCollector::Instance().getLatency(1, 1);
+        timeSync.minTransportLatency = (uint32_t) LatencyCollector::Instance().getLatency(1, 2);
 
-        timeSync.averageDecodeLatency = (uint32_t) g_latencyCollector->getLatency(env_, 2, 0);
-        timeSync.maxDecodeLatency = (uint32_t) g_latencyCollector->getLatency(env_, 2, 1);
-        timeSync.minDecodeLatency = (uint32_t) g_latencyCollector->getLatency(env_, 2, 2);
+        timeSync.averageDecodeLatency = (uint32_t) LatencyCollector::Instance().getLatency(2, 0);
+        timeSync.maxDecodeLatency = (uint32_t) LatencyCollector::Instance().getLatency(2, 1);
+        timeSync.minDecodeLatency = (uint32_t) LatencyCollector::Instance().getLatency(2, 2);
 
         timeSync.fecFailure = g_nalParser->fecFailure() ? 1 : 0;
-        timeSync.fecFailureTotal = g_latencyCollector->getFecFailureTotal(env_);
-        timeSync.fecFailureInSecond = g_latencyCollector->getFecFailureInSecond(env_);
+        timeSync.fecFailureTotal = LatencyCollector::Instance().getFecFailureTotal();
+        timeSync.fecFailureInSecond = LatencyCollector::Instance().getFecFailureInSecond();
 
         sendto(sock, &timeSync, sizeof(timeSync), 0, (sockaddr *) &serverAddr,
                sizeof(serverAddr));
@@ -593,8 +594,8 @@ Java_com_polygraphene_alvr_UdpReceiverThread_flushNALList(JNIEnv *env, jobject i
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_runLoop(JNIEnv *env, jobject instance, jobject latencyCollector
-, jstring serverAddress, int serverPort) {
+Java_com_polygraphene_alvr_UdpReceiverThread_runLoop(JNIEnv *env, jobject instance
+        , jstring serverAddress, int serverPort) {
     fd_set fds, fds_org;
 
     FD_ZERO(&fds_org);
@@ -604,8 +605,6 @@ Java_com_polygraphene_alvr_UdpReceiverThread_runLoop(JNIEnv *env, jobject instan
 
     env_ = env;
     instance_ = instance;
-
-    g_latencyCollector = std::make_shared<LatencyCollector>(env_, latencyCollector);
 
     if(serverAddress != NULL) {
         recoverConnection(GetStringFromJNIString(env, serverAddress), serverPort);

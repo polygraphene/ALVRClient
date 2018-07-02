@@ -17,6 +17,8 @@
 #define LOGSOUNDI(...) __android_log_print(ANDROID_LOG_INFO, "ALVR Sound", __VA_ARGS__)
 #define LOGSOUNDE(...) __android_log_print(ANDROID_LOG_ERROR, "ALVR Sound", __VA_ARGS__)
 
+static const int64_t USECS_IN_SEC = 1000 * 1000;
+
 inline void FrameLog(uint64_t frameIndex, const char *format, ...)
 {
     char buf[10000];

@@ -14,10 +14,10 @@
 #include <map>
 #include <vector>
 #include "utils.h"
-#include "packet_types.h"
 #include "render.h"
 #include "vr_context.h"
-
+#include "latency_collector.h"
+#include "packet_types.h"
 
 void VrContext::onVrModeChange() {
     if (Resumed && window != NULL) {
@@ -403,6 +403,7 @@ int64_t VrContext::fetchTrackingInfo(JNIEnv *env_, jobject callback, jfloatArray
         // Non AR
         sendTrackingInfo(env_, callback, frame->displayTime, &frame->tracking, NULL, NULL);
     }
+    LatencyCollector::Instance().tracking(frame->frameIndex);
 
     return FrameIndex;
 }
@@ -493,8 +494,7 @@ bool VrContext::onKeyEvent(int keyCode, int action){
     return false;
 }
 
-
-void VrContext::render(jobject callback, jobject latencyCollector){
+void VrContext::render(jobject callback) {
     double currentTime = GetTimeInSeconds();
 
     unsigned long long completionFence = 0;
@@ -508,6 +508,7 @@ void VrContext::render(jobject callback, jobject latencyCollector){
             // Activity has Paused or connection becomes idle
             return;
         }
+        LatencyCollector::Instance().rendered1(renderedFrameIndex);
         FrameLog(renderedFrameIndex, "Got frame for render. wanted FrameIndex=%lu waiting=%.3f ms delay=%lu",
                  WantedFrameIndex,
                  (GetTimeInSeconds() - currentTime) * 1000,
@@ -556,9 +557,7 @@ void VrContext::render(jobject callback, jobject latencyCollector){
                                                                    Ovr, &completionFence, false,
                                                                    enableTestMode, g_AROverlayMode);
 
-    clazz = env->GetObjectClass(latencyCollector);
-    jmethodID SubmitMethodID = env->GetMethodID(clazz, "Rendered2", "(J)V");
-    env->CallVoidMethod(latencyCollector, SubmitMethodID, renderedFrameIndex);
+    LatencyCollector::Instance().rendered2(renderedFrameIndex);
 
     const ovrLayerHeader2 *layers2[] =
             {
@@ -582,6 +581,8 @@ void VrContext::render(jobject callback, jobject latencyCollector){
     WantedFrameIndex = renderedFrameIndex + 1;
 
     ovrResult res = vrapi_SubmitFrame2(Ovr, &frameDesc);
+
+    LatencyCollector::Instance().submit(renderedFrameIndex);
 
     FrameLog(renderedFrameIndex, "vrapi_SubmitFrame2 Orientation=(%f, %f, %f, %f)"
             , frame->tracking.HeadPose.Pose.Orientation.x
@@ -680,8 +681,8 @@ Java_com_polygraphene_alvr_VrContext_getCameraTextureNative(JNIEnv *env, jobject
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_VrContext_renderNative(JNIEnv *env, jobject instance, jlong handle, jobject callback, jobject latencyCollector) {
-    return ((VrContext *)handle)->render(callback, latencyCollector);
+Java_com_polygraphene_alvr_VrContext_renderNative(JNIEnv *env, jobject instance, jlong handle, jobject callback) {
+    return ((VrContext *) handle)->render(callback);
 }
 
 extern "C"

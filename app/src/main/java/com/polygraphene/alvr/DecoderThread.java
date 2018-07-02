@@ -30,7 +30,6 @@ class DecoderThread {
     private MediaCodec mDecoder = null;
     private int mQueuedOutputBuffer = -1;
     private StatisticsCounter mCounter;
-    private LatencyCollector mLatencyCollector;
 
     private boolean mWaitNextIDR = false;
     private boolean mStopped = false;
@@ -92,13 +91,12 @@ class DecoderThread {
     private RenderCallback mRenderCallback;
 
     DecoderThread(NALParser nalParser, MediaCodecInfo codecInfo, StatisticsCounter counter
-            , RenderCallback renderCallback, MainActivity mainActivity, LatencyCollector latencyCollector) {
+            , RenderCallback renderCallback, MainActivity mainActivity) {
         mNalParser = nalParser;
         mCodecInfo = codecInfo;
         mCounter = counter;
         mRenderCallback = renderCallback;
         mMainActivity = mainActivity;
-        mLatencyCollector = latencyCollector;
     }
 
     private void frameLog(String s) {
@@ -224,7 +222,7 @@ class DecoderThread {
 
                 //debugIDRFrame(nal, mSPSBuffer, mPPSBuffer);
 
-                mLatencyCollector.DecoderInput(nal.frameIndex);
+                LatencyCollector.DecoderInput(nal.frameIndex);
 
                 sendInputBuffer(nal, presentationTime, 0);
 
@@ -242,7 +240,7 @@ class DecoderThread {
                 // IDR-Frame
                 Utils.frameLog(nal.frameIndex, "Feed IDR-Frame. Size=" + nal.length + " PresentationTime=" + presentationTime);
 
-                mLatencyCollector.DecoderInput(nal.frameIndex);
+                LatencyCollector.DecoderInput(nal.frameIndex);
 
                 sendInputBuffer(nal, presentationTime, 0);
 
@@ -251,7 +249,7 @@ class DecoderThread {
                 // PFrame
                 mCounter.countPFrame();
 
-                mLatencyCollector.DecoderInput(nal.frameIndex);
+                LatencyCollector.DecoderInput(nal.frameIndex);
 
                 if (mWaitNextIDR) {
                     // Ignore P-Frame until next I-Frame
@@ -363,7 +361,7 @@ class DecoderThread {
                     }
                 }
             }
-            mLatencyCollector.DecoderOutput(foundFrameIndex);
+            LatencyCollector.DecoderOutput(foundFrameIndex);
 
             long decodeLatency = System.nanoTime() / 1000 - inputTime;
             Utils.frameLog(foundFrameIndex, "Render frame " + " presentationTimeUs:" + info.presentationTimeUs + " decodeLatency=" + decodeLatency + " us");

@@ -21,7 +21,6 @@ class UdpReceiverThread implements NALParser {
 
     private Thread mThread;
     private StatisticsCounter mCounter;
-    private LatencyCollector mLatencyCollector;
     private int mPort;
     private boolean mInitialized = false;
     private boolean mInitializeFailed = false;
@@ -37,10 +36,9 @@ class UdpReceiverThread implements NALParser {
     }
     private Callback mCallback;
 
-    UdpReceiverThread(StatisticsCounter counter, Callback callback, LatencyCollector latencyCollector) {
+    UdpReceiverThread(StatisticsCounter counter, Callback callback) {
         mCounter = counter;
         mCallback = callback;
-        mLatencyCollector = latencyCollector;
     }
 
     public void setPort(int port) {
@@ -104,7 +102,7 @@ class UdpReceiverThread implements NALParser {
             }
             Log.v(TAG, "UdpReceiverThread initialized.");
 
-            runLoop(mLatencyCollector, mPreviousServerAddress, mPreviousServerPort);
+            runLoop(mPreviousServerAddress, mPreviousServerPort);
         } finally {
             closeSocket();
         }
@@ -169,7 +167,7 @@ class UdpReceiverThread implements NALParser {
 
     native void closeSocket();
 
-    native void runLoop(LatencyCollector latencyCollector, String serverAddress, int serverPort);
+    native void runLoop(String serverAddress, int serverPort);
 
     native void interrupt();
 

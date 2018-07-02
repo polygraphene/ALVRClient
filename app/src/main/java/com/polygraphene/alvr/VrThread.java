@@ -42,7 +42,6 @@ class VrThread extends Thread {
     private UdpReceiverThread mReceiverThread;
 
     private StatisticsCounter mCounter = new StatisticsCounter();
-    private LatencyCollector mLatencyCollector = new LatencyCollector();
 
     private int m_RefreshRate = 60;
     private EGLContext mEGLContext;
@@ -121,12 +120,12 @@ class VrThread extends Thread {
             public void run() {
                 Log.v(TAG, "VrThread.onResume: Starting worker threads.");
 
-                mReceiverThread = new UdpReceiverThread(mCounter, mOnChangeSettingsCallback, mLatencyCollector);
+                mReceiverThread = new UdpReceiverThread(mCounter, mOnChangeSettingsCallback);
                 mReceiverThread.setPort(PORT);
                 mReceiverThread.set72Hz(mVrContext.is72Hz());
                 loadConnectionState();
                 mDecoderThread = new DecoderThread(mReceiverThread
-                        , mMainActivity.getAvcDecoder(), mCounter, mRenderCallback, mMainActivity, mLatencyCollector);
+                        , mMainActivity.getAvcDecoder(), mCounter, mRenderCallback, mMainActivity);
                 mTrackingThread = new TrackingThread();
                 mArThread = new ArThread(VrThread.this, mEGLContext);
                 mArThread.initialize(mMainActivity);
@@ -320,7 +319,6 @@ class VrThread extends Thread {
                                 mRendered = false;
                                 mRenderRequested = false;
                                 mSurfaceTexture.updateTexImage();
-                                mLatencyCollector.Rendered1(mFrameIndex);
                                 break;
                             }
                             if(System.nanoTime() - startTime > 1000 * 1000 * 1000L) {
@@ -338,8 +336,7 @@ class VrThread extends Thread {
 
                     return mFrameIndex;
                 }
-            }, mLatencyCollector);
-            mLatencyCollector.Submit(mFrameIndex);
+            });
         } else {
             if (mArThread.getErrorMessage() != null) {
                 mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \n!!! Error on ARCore initialization !!!\n" + mArThread.getErrorMessage());
@@ -437,8 +434,7 @@ class VrThread extends Thread {
             long previousFetchTime = System.nanoTime();
             while (!mStopped) {
                 if (isTracking()) {
-                    long frameIndex = mVrContext.fetchTrackingInfo(mOnSendTrackingCallback, mArThread.getPosition(), mArThread.getOrientation());
-                    mLatencyCollector.Tracking(frameIndex);
+                    mVrContext.fetchTrackingInfo(mOnSendTrackingCallback, mArThread.getPosition(), mArThread.getOrientation());
                 }
                 try {
                     previousFetchTime += 1000 * 1000 * 1000 / m_RefreshRate;
