@@ -138,7 +138,10 @@ class DecoderThread {
     }
 
     public void interrupt() {
-        mStopped = true;
+        synchronized (mAvailableInputs) {
+            mStopped = true;
+            mAvailableInputs.notifyAll();
+        }
         mNalParser.notifyWaitingThread();
     }
 
@@ -289,6 +292,9 @@ class DecoderThread {
         Utils.frameLog(nal.frameIndex, "Wait next input buffer.");
         while (true) {
             synchronized (mAvailableInputs) {
+                if (mStopped) {
+                    throw new InterruptedException();
+                }
                 if (mAvailableInputs.size() > 0) {
                     mBufferIndex = mAvailableInputs.get(0);
                     mAvailableInputs.remove(0);

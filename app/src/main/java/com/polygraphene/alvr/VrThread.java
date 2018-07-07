@@ -46,12 +46,6 @@ class VrThread extends Thread {
     private int m_RefreshRate = 60;
     private EGLContext mEGLContext;
 
-    // Called from native
-    public interface VrFrameCallback {
-        @SuppressWarnings("unused")
-        long waitFrame();
-    }
-
     public VrThread(MainActivity mainActivity) {
         this.mMainActivity = mainActivity;
     }
@@ -297,46 +291,10 @@ class VrThread extends Thread {
 
     private void render(){
         if (mReceiverThread.isConnected() && mDecoderThread.isFrameAvailable() && mArThread.getErrorMessage() == null) {
-            mVrContext.render(new VrFrameCallback() {
-                @Override
-                public long waitFrame() {
-                    long startTime = System.nanoTime();
-                    synchronized (mWaiter) {
-                        if (mRendered) {
-                            Log.v(TAG, "updateTexImage(discard)");
-                            mSurfaceTexture.updateTexImage();
-                        }
-                        mRenderRequested = true;
-                        mRendered = false;
-                        mWaiter.notifyAll();
-                    }
-                    while (true) {
-                        synchronized (mWaiter) {
-                            if (!mResumed) {
-                                return -1;
-                            }
-                            if (mRendered) {
-                                mRendered = false;
-                                mRenderRequested = false;
-                                mSurfaceTexture.updateTexImage();
-                                break;
-                            }
-                            if(System.nanoTime() - startTime > 1000 * 1000 * 1000L) {
-                                // Idle for 1-sec.
-                                Log.v(TAG, "Wait failed.");
-                                return -1;
-                            }
-                            try {
-                                mWaiter.wait(100);
-                            } catch (InterruptedException e) {
-                                e.printStackTrace();
-                            }
-                        }
-                    }
-
-                    return mFrameIndex;
-                }
-            });
+            long renderedFrameIndex = waitFrame();
+            if(renderedFrameIndex != -1) {
+                mVrContext.render(renderedFrameIndex);
+            }
         } else {
             if (mArThread.getErrorMessage() != null) {
                 mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \n!!! Error on ARCore initialization !!!\n" + mArThread.getErrorMessage());
@@ -354,6 +312,44 @@ class VrThread extends Thread {
                 e.printStackTrace();
             }
         }
+    }
+
+    private long waitFrame() {
+        long startTime = System.nanoTime();
+        synchronized (mWaiter) {
+            if (mRendered) {
+                Log.v(TAG, "updateTexImage(discard)");
+                mSurfaceTexture.updateTexImage();
+            }
+            mRenderRequested = true;
+            mRendered = false;
+            mWaiter.notifyAll();
+        }
+        while (true) {
+            synchronized (mWaiter) {
+                if (!mResumed) {
+                    return -1;
+                }
+                if (mRendered) {
+                    mRendered = false;
+                    mRenderRequested = false;
+                    mSurfaceTexture.updateTexImage();
+                    break;
+                }
+                if(System.nanoTime() - startTime > 1000 * 1000 * 1000L) {
+                    // Idle for 1-sec.
+                    Log.v(TAG, "Wait failed.");
+                    return -1;
+                }
+                try {
+                    mWaiter.wait(100);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        return mFrameIndex;
     }
 
     private UdpReceiverThread.Callback mOnChangeSettingsCallback = new UdpReceiverThread.Callback() {

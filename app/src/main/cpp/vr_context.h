@@ -29,7 +29,7 @@ public:
 
     void chooseRefreshRate();
 
-    void render(jobject callback);
+    void render(uint64_t renderedFrameIndex);
     void renderLoading();
 
     void setControllerInfo(TrackingInfo *packet, double displayTime);

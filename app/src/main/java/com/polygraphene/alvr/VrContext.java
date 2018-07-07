@@ -39,8 +39,8 @@ public class VrContext {
         onSurfaceDestroyedNative(handle);
     }
 
-    public void render(VrThread.VrFrameCallback callback) {
-        renderNative(handle, callback);
+    public void render(long renderedFrameIndex) {
+        renderNative(handle, renderedFrameIndex);
     }
 
     public void renderLoading() {
@@ -92,7 +92,7 @@ public class VrContext {
     private native void onSurfaceCreatedNative(long handle, Surface surface);
     private native void onSurfaceChangedNative(long handle, Surface surface);
     private native void onSurfaceDestroyedNative(long handle);
-    private native void renderNative(long handle, VrThread.VrFrameCallback callback);
+    private native void renderNative(long handle, long renderedFrameIndex);
     private native void renderLoadingNative(long handle);
     private native long fetchTrackingInfoNative(long handle, VrThread.OnSendTrackingCallback callback, float[] position, float[] orientation);
 
