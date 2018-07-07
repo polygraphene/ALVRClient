@@ -114,12 +114,10 @@ class VrThread extends Thread {
             public void run() {
                 Log.v(TAG, "VrThread.onResume: Starting worker threads.");
 
-                mReceiverThread = new UdpReceiverThread(mCounter, mOnChangeSettingsCallback);
+                mReceiverThread = new UdpReceiverThread(mCounter, mUdpReceiverCallback);
                 mReceiverThread.setPort(PORT);
-                mReceiverThread.set72Hz(mVrContext.is72Hz());
                 loadConnectionState();
-                mDecoderThread = new DecoderThread(mReceiverThread
-                        , mMainActivity.getAvcDecoder(), mCounter, mRenderCallback, mMainActivity);
+                mDecoderThread = new DecoderThread(mReceiverThread, mCounter, mRenderCallback, mMainActivity);
                 mTrackingThread = new TrackingThread();
                 mArThread = new ArThread(VrThread.this, mEGLContext);
                 mArThread.initialize(mMainActivity);
@@ -127,7 +125,7 @@ class VrThread extends Thread {
 
                 try {
                     mDecoderThread.start();
-                    if (!mReceiverThread.start()) {
+                    if (!mReceiverThread.start(mVrContext.is72Hz())) {
                         Log.e(TAG, "FATAL: Initialization of ReceiverThread failed.");
                         return;
                     }
@@ -178,11 +176,6 @@ class VrThread extends Thread {
             Log.v(TAG, "VrThread.onPause: Stopping ArThread.");
             mArThread.interrupt();
             mArThread.join();
-        }
-
-        if(mReceiverThread != null){
-            saveConnectionState(mReceiverThread.getServerAddress()
-                    , mReceiverThread.getServerPort());
         }
 
         Log.v(TAG, "VrThread.onPause: mVrContext.onPause().");
@@ -352,7 +345,7 @@ class VrThread extends Thread {
         return mFrameIndex;
     }
 
-    private UdpReceiverThread.Callback mOnChangeSettingsCallback = new UdpReceiverThread.Callback() {
+    private UdpReceiverThread.Callback mUdpReceiverCallback = new UdpReceiverThread.Callback() {
         @Override
         public void onConnected(final int width, final int height, final int codec) {
             // We must wait completion of notifyGeometryChange
@@ -369,6 +362,11 @@ class VrThread extends Thread {
         @Override
         public void onChangeSettings(int enableTestMode, int suspend) {
             mVrContext.onChangeSettings(enableTestMode, suspend);
+        }
+
+        @Override
+        public void onShutdown(String serverAddr, int serverPort) {
+            saveConnectionState(serverAddr, serverPort);
         }
     };
 

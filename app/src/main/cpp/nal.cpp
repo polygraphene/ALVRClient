@@ -42,6 +42,7 @@ NALParser::NALParser(JNIEnv *env) {
 }
 
 NALParser::~NALParser() {
+    notifyWaitingThread(m_env);
     clearNalList(m_env);
 
     for (auto nal : m_nalRecycleList) {
@@ -56,7 +57,7 @@ void NALParser::setCodec(int codec) {
     m_codec = codec;
 }
 
-bool NALParser::processPacket(JNIEnv *env, VideoFrame *packet, int packetSize, bool &fecFailure) {
+bool NALParser::processPacket(VideoFrame *packet, int packetSize, bool &fecFailure) {
     m_queue.addVideoPacket(packet, packetSize, fecFailure);
 
     bool result = m_queue.reconstruct();

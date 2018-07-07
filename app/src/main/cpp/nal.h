@@ -14,7 +14,7 @@ public:
 
     void setCodec(int codec);
 
-    bool processPacket(JNIEnv *env, VideoFrame *packet, int packetSize, bool &fecFailure);
+    bool processPacket(VideoFrame *packet, int packetSize, bool &fecFailure);
 
     jobject wait(JNIEnv *env);
     jobject get(JNIEnv *env);

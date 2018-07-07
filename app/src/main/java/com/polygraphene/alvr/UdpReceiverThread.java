@@ -33,6 +33,7 @@ class UdpReceiverThread implements NALParser {
     interface Callback {
         void onConnected(int width, int height, int codec);
         void onChangeSettings(int enableTestMode, int suspend);
+        void onShutdown(String serverAddr, int serverPort);
     }
     private Callback mCallback;
 
@@ -60,11 +61,11 @@ class UdpReceiverThread implements NALParser {
         mPreviousServerPort = serverPort;
     }
 
-    public boolean start() {
+    public boolean start(final boolean is72Hz) {
         mThread = new Thread() {
             @Override
             public void run() {
-                runThread();
+                runThread(is72Hz);
             }
         };
         mThread.start();
@@ -82,12 +83,12 @@ class UdpReceiverThread implements NALParser {
         return !mInitializeFailed;
     }
 
-    private void runThread() {
+    private void runThread(boolean is72Hz) {
         mThread.setName(UdpReceiverThread.class.getName());
 
         try {
             String[] broadcastList = getBroadcastAddressList();
-            int ret = initializeSocket(mPort, getDeviceName(), broadcastList);
+            int ret = initializeSocket(mPort, getDeviceName(), broadcastList, is72Hz);
             if (ret != 0) {
                 Log.e(TAG, "Error on initializing socket. Code=" + ret + ".");
                 synchronized (this) {
@@ -104,6 +105,7 @@ class UdpReceiverThread implements NALParser {
 
             runLoop(mPreviousServerAddress, mPreviousServerPort);
         } finally {
+            mCallback.onShutdown(getServerAddress(), getServerPort());
             closeSocket();
         }
 
@@ -163,7 +165,7 @@ class UdpReceiverThread implements NALParser {
         mCallback.onChangeSettings(EnableTestMode, suspend);
     }
 
-    native int initializeSocket(int port, String deviceName, String[] broadcastAddrList);
+    native int initializeSocket(int port, String deviceName, String[] broadcastAddrList, boolean is72Hz);
 
     native void closeSocket();
 
@@ -173,10 +175,8 @@ class UdpReceiverThread implements NALParser {
 
     native int send(byte[] buf, int length);
 
-    native void set72Hz(boolean is72Hz);
-
-    native String getServerAddress();
-    native int getServerPort();
+    private native String getServerAddress();
+    private native int getServerPort();
 
     //
     // NALParser interface

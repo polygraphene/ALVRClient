@@ -25,7 +25,6 @@ class DecoderThread {
     private String mFormat = VIDEO_FORMAT_H265;
 
     private Thread mThread;
-    private final MediaCodecInfo mCodecInfo;
     private NALParser mNalParser;
     private MediaCodec mDecoder = null;
     private int mQueuedOutputBuffer = -1;
@@ -90,10 +89,9 @@ class DecoderThread {
 
     private RenderCallback mRenderCallback;
 
-    DecoderThread(NALParser nalParser, MediaCodecInfo codecInfo, StatisticsCounter counter
+    DecoderThread(NALParser nalParser, StatisticsCounter counter
             , RenderCallback renderCallback, MainActivity mainActivity) {
         mNalParser = nalParser;
-        mCodecInfo = codecInfo;
         mCounter = counter;
         mRenderCallback = renderCallback;
         mMainActivity = mainActivity;

@@ -27,13 +27,7 @@ public class MainActivity extends Activity {
         System.loadLibrary("native-lib");
     }
 
-    private List<MediaCodecInfo> mAvcDecoderList;
-
     private VrThread mVrThread = null;
-
-    public MediaCodecInfo getAvcDecoder() {
-        return mAvcDecoderList.get(0);
-    }
 
     private final SurfaceHolder.Callback mCallback = new SurfaceHolder.Callback() {
         @Override
@@ -65,14 +59,6 @@ public class MainActivity extends Activity {
 
         SurfaceHolder holder = surfaceView.getHolder();
         holder.addCallback(mCallback);
-
-        mAvcDecoderList = findAvcDecoder();
-        if(mAvcDecoderList.size() == 0) {
-            // TODO: Show error message for a user. How to?
-            Log.e(TAG, "Suitable codec is not found.");
-            finish();
-            return;
-        }
 
         Log.v(TAG, "onCreate: Starting VrThread");
         mVrThread = new VrThread(this);
@@ -114,6 +100,7 @@ public class MainActivity extends Activity {
         }
         Log.v(TAG, "onDestroy: VrThread has stopped.");
     }
+
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         //Log.v(TAG, "dispatchKeyEvent: " + event.getKeyCode());
@@ -140,34 +127,6 @@ public class MainActivity extends Activity {
     {
         AudioManager audio = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, 0);
-    }
-
-    private List<MediaCodecInfo> findAvcDecoder(){
-        List<MediaCodecInfo> codecList = new ArrayList<>();
-
-        MediaCodecList mcl = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
-
-        for (MediaCodecInfo info : mcl.getCodecInfos()) {
-            boolean isAvc = false;
-
-            for (String type : info.getSupportedTypes()) {
-                if (type.equals("video/avc")) {
-                    isAvc = true;
-                    break;
-                }
-            }
-            if (isAvc && !info.isEncoder()) {
-                //MediaCodecInfo.CodecCapabilities capabilitiesForType = info.getCapabilitiesForType("video/avc");
-
-                //Log.v(TAG, info.getName());
-                //for (MediaCodecInfo.CodecProfileLevel profile : capabilitiesForType.profileLevels) {
-                //    Log.v(TAG, "profile:" + profile.profile + " level:" + profile.level);
-                //}
-
-                codecList.add(info);
-            }
-        }
-        return codecList;
     }
 
     public String getVersionName(){
