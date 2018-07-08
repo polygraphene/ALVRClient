@@ -43,7 +43,7 @@ class VrThread extends Thread {
 
     private StatisticsCounter mCounter = new StatisticsCounter();
 
-    private int m_RefreshRate = 60;
+    private int mRefreshRate = 60;
     private EGLContext mEGLContext;
 
     public VrThread(MainActivity mainActivity) {
@@ -84,29 +84,6 @@ class VrThread extends Thread {
         synchronized (mWaiter) {
             mResumed = true;
             mWaiter.notifyAll();
-        }
-        if (mReceiverThread != null) {
-            mReceiverThread.interrupt();
-            try {
-                mReceiverThread.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-        if (mDecoderThread != null) {
-            mDecoderThread.stopAndWait();
-        }
-        if (mTrackingThread != null) {
-            mTrackingThread.interrupt();
-            try {
-                mTrackingThread.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-        if (mArThread != null) {
-            mArThread.interrupt();
-            mArThread.join();
         }
 
         send(new Runnable() {
@@ -244,9 +221,9 @@ class VrThread extends Thread {
         mVrContext.initialize(mMainActivity, Constants.IS_ARCORE_BUILD);
 
         if(mVrContext.is72Hz()) {
-            m_RefreshRate = 72;
+            mRefreshRate = 72;
         }else{
-            m_RefreshRate = 60;
+            mRefreshRate = 60;
         }
 
         mSurfaceTexture = new SurfaceTexture(mVrContext.getSurfaceTextureID());
@@ -431,7 +408,7 @@ class VrThread extends Thread {
                     mVrContext.fetchTrackingInfo(mOnSendTrackingCallback, mArThread.getPosition(), mArThread.getOrientation());
                 }
                 try {
-                    previousFetchTime += 1000 * 1000 * 1000 / m_RefreshRate;
+                    previousFetchTime += 1000 * 1000 * 1000 / mRefreshRate;
                     long next = previousFetchTime - System.nanoTime();
                     if(next < 0) {
                         // Exceed time!

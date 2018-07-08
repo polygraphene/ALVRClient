@@ -13,7 +13,7 @@ import java.nio.ByteBuffer;
 import java.util.LinkedList;
 import java.util.List;
 
-class DecoderThread {
+class DecoderThread extends ThreadBase {
     private static final String TAG = "DecoderThread";
 
     private static final int CODEC_H264 = 0;
@@ -24,14 +24,12 @@ class DecoderThread {
     private static final String VIDEO_FORMAT_H265 = "video/hevc";
     private String mFormat = VIDEO_FORMAT_H265;
 
-    private Thread mThread;
     private NALParser mNalParser;
     private MediaCodec mDecoder = null;
     private int mQueuedOutputBuffer = -1;
     private StatisticsCounter mCounter;
 
     private boolean mWaitNextIDR = false;
-    private boolean mStopped = false;
     private boolean mIsFrameAvailable = false;
 
     @SuppressWarnings("unused")
@@ -41,13 +39,7 @@ class DecoderThread {
 
     private int mBufferIndex = -1;
 
-    private class FramePresentationTime {
-        public long frameIndex;
-        public long presentationTime;
-        public long inputTime;
-    }
-
-    private final List<FramePresentationTime> mFrameBuf = new LinkedList<>();
+    private FrameMap mFrameMap = new FrameMap();
 
     private static final int NAL_TYPE_SPS = 7;
     private static final int NAL_TYPE_PPS = 8;
@@ -101,51 +93,22 @@ class DecoderThread {
         Log.v(TAG, s);
     }
 
-    private void pushFramePresentationMap(NAL buf, long presentationTime) {
-        FramePresentationTime f = new FramePresentationTime();
-        f.frameIndex = buf.frameIndex;
-        f.presentationTime = presentationTime;
-        f.inputTime = System.nanoTime() / 1000;
-
-        synchronized (mFrameBuf) {
-            mFrameBuf.add(f);
-            if (mFrameBuf.size() > 100) {
-                mFrameBuf.remove(0);
-            }
-        }
-    }
-
-    public void stopAndWait() {
-        interrupt();
-        while (mThread.isAlive()) {
-            try {
-                mThread.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
     public void start() {
-        mThread = new MyThread();
-        mStopped = false;
         synchronized (mAvailableInputs) {
             mAvailableInputs.clear();
         }
-        mThread.start();
+        super.start();
     }
 
     public void interrupt() {
+        super.interrupt();
         synchronized (mAvailableInputs) {
-            mStopped = true;
             mAvailableInputs.notifyAll();
         }
         mNalParser.notifyWaitingThread();
     }
 
     public void run() {
-        mThread.setName(DecoderThread.class.getName());
-
         try {
             decodeLoop();
         } catch (IOException | InterruptedException | IllegalStateException e) {
@@ -167,6 +130,7 @@ class DecoderThread {
     private void decodeLoop() throws InterruptedException, IOException {
         MediaFormat format = MediaFormat.createVideoFormat(mFormat, DummyWidth, DummyHeight);
         format.setString("KEY_MIME", mFormat);
+
         if (mCodec == CODEC_H264) {
             format.setByteBuffer("csd-0", ByteBuffer.wrap(DummySPS, 0, DummySPS.length));
             format.setByteBuffer("csd-1", ByteBuffer.wrap(DummyPPS, 0, DummyPPS.length));
@@ -185,13 +149,13 @@ class DecoderThread {
 
         mWaitNextIDR = true;
 
-        while (!mStopped) {
+        while (!isStopped()) {
             NAL nal = mNalParser.waitNal();
             if (nal == null) {
                 Log.v(TAG, "decodeLoop Stopped. nal==null.");
                 break;
             }
-            if (mStopped) {
+            if (isStopped()) {
                 Log.v(TAG, "decodeLoop Stopped. mStopped==true.");
                 mNalParser.recycleNal(nal);
                 break;
@@ -290,7 +254,7 @@ class DecoderThread {
         Utils.frameLog(nal.frameIndex, "Wait next input buffer.");
         while (true) {
             synchronized (mAvailableInputs) {
-                if (mStopped) {
+                if (isStopped()) {
                     throw new InterruptedException();
                 }
                 if (mAvailableInputs.size() > 0) {
@@ -309,7 +273,7 @@ class DecoderThread {
 
     private void sendInputBuffer(NAL nal, long presentationTimeUs, int flags) throws InterruptedException {
         if (presentationTimeUs != 0) {
-            pushFramePresentationMap(nal, presentationTimeUs);
+            mFrameMap.put(presentationTimeUs, nal.frameIndex);
         }
 
         int remain = nal.length;
@@ -350,25 +314,12 @@ class DecoderThread {
 
             if (mQueuedOutputBuffer != -1) {
                 mDecoder.releaseOutputBuffer(mQueuedOutputBuffer, false);
-                mQueuedOutputBuffer = -1;
             }
             mQueuedOutputBuffer = index;
-            long foundFrameIndex = 0;
-            long inputTime = 0;
 
-            synchronized (mFrameBuf) {
-                for (FramePresentationTime f : mFrameBuf) {
-                    if (f.presentationTime == info.presentationTimeUs) {
-                        foundFrameIndex = f.frameIndex;
-                        inputTime = f.inputTime;
-                        break;
-                    }
-                }
-            }
+            long foundFrameIndex = mFrameMap.find(info.presentationTimeUs);
+
             LatencyCollector.DecoderOutput(foundFrameIndex);
-
-            long decodeLatency = System.nanoTime() / 1000 - inputTime;
-            Utils.frameLog(foundFrameIndex, "Render frame " + " presentationTimeUs:" + info.presentationTimeUs + " decodeLatency=" + decodeLatency + " us");
 
             mQueuedOutputBuffer = mRenderCallback.renderIf(mDecoder, mQueuedOutputBuffer, foundFrameIndex);
             if (mQueuedOutputBuffer == -1) {
