@@ -1,8 +1,8 @@
 package com.polygraphene.alvr;
 
+import android.opengl.EGLContext;
 import android.util.Log;
 
-import java.net.InetAddress;
 import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 
-class UdpReceiverThread implements NALParser {
+class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.TrackingCallback {
     private static final String TAG = "UdpReceiverThread";
 
     static {
@@ -19,27 +19,29 @@ class UdpReceiverThread implements NALParser {
 
     private static final String BROADCAST_ADDRESS = "255.255.255.255";
 
-    private Thread mThread;
-    private StatisticsCounter mCounter;
+    private TrackingThread mTrackingThread;
+    private VrContext mVrContext;
     private int mPort;
+    private boolean mIs72Hz = false;
     private boolean mInitialized = false;
     private boolean mInitializeFailed = false;
 
     private String mPreviousServerAddress;
     private int mPreviousServerPort;
 
-    public native boolean isConnected();
-
     interface Callback {
         void onConnected(int width, int height, int codec);
+
         void onChangeSettings(int enableTestMode, int suspend);
+
         void onShutdown(String serverAddr, int serverPort);
     }
+
     private Callback mCallback;
 
-    UdpReceiverThread(StatisticsCounter counter, Callback callback) {
-        mCounter = counter;
+    UdpReceiverThread(Callback callback, VrContext vrContext) {
         mCallback = callback;
+        mVrContext = vrContext;
     }
 
     public void setPort(int port) {
@@ -56,19 +58,17 @@ class UdpReceiverThread implements NALParser {
         }
     }
 
-    public void recoverConnectionState(String serverAddress, int serverPort){
+    public void recoverConnectionState(String serverAddress, int serverPort) {
         mPreviousServerAddress = serverAddress;
         mPreviousServerPort = serverPort;
     }
 
-    public boolean start(final boolean is72Hz) {
-        mThread = new Thread() {
-            @Override
-            public void run() {
-                runThread(is72Hz);
-            }
-        };
-        mThread.start();
+    public boolean start(final boolean is72Hz, EGLContext mEGLContext, MainActivity mainActivity) {
+        mTrackingThread = new TrackingThread(is72Hz ? 72 : 60);
+        mTrackingThread.setCallback(this);
+        mIs72Hz = is72Hz;
+
+        super.startBase();
 
         synchronized (this) {
             while (!mInitialized && !mInitializeFailed) {
@@ -80,15 +80,25 @@ class UdpReceiverThread implements NALParser {
             }
         }
 
+        if(!mInitializeFailed) {
+            mTrackingThread.start(mEGLContext, mainActivity, mVrContext.getCameraTexture());
+        }
         return !mInitializeFailed;
     }
 
-    private void runThread(boolean is72Hz) {
-        mThread.setName(UdpReceiverThread.class.getName());
+    @Override
+    public void stopAndWait() {
+        mTrackingThread.stopAndWait();
+        interruptNative();
+        super.stopAndWait();
+    }
 
+    @Override
+    public void run() {
         try {
             String[] broadcastList = getBroadcastAddressList();
-            int ret = initializeSocket(mPort, getDeviceName(), broadcastList, is72Hz);
+
+            int ret = initializeSocket(mPort, getDeviceName(), broadcastList, mIs72Hz);
             if (ret != 0) {
                 Log.e(TAG, "Error on initializing socket. Code=" + ret + ".");
                 synchronized (this) {
@@ -118,63 +128,81 @@ class UdpReceiverThread implements NALParser {
         List<String> ret = new ArrayList<>();
         try {
             Enumeration<NetworkInterface> networkInterfaces = NetworkInterface.getNetworkInterfaces();
-            while(networkInterfaces.hasMoreElements()){
+
+            while (networkInterfaces.hasMoreElements()) {
                 NetworkInterface networkInterface = networkInterfaces.nextElement();
 
-                if(networkInterface.getName().startsWith("rmnet")) {
+                if (networkInterface.getName().startsWith("rmnet")) {
                     // Ignore mobile network interfaces.
                     Log.v(TAG, "Ignore interface. Name=" + networkInterface.getName());
                     continue;
                 }
 
                 List<InterfaceAddress> interfaceAddresses = networkInterface.getInterfaceAddresses();
+
                 String address = "";
-                for(InterfaceAddress interfaceAddress : interfaceAddresses) {
+                for (InterfaceAddress interfaceAddress : interfaceAddresses) {
                     address += interfaceAddress.toString() + ", ";
                     // getBroadcast() return non-null only when ipv4.
-                    if(interfaceAddress.getBroadcast() != null) {
+                    if (interfaceAddress.getBroadcast() != null) {
                         ret.add(interfaceAddress.getBroadcast().getHostAddress());
                     }
                 }
                 Log.v(TAG, "Interface: Name=" + networkInterface.getName() + " Address=" + address + " 2=" + address);
             }
             Log.v(TAG, ret.size() + " broadcast addresses were found.");
-            for(String address : ret) {
+            for (String address : ret) {
                 Log.v(TAG, address);
             }
         } catch (SocketException e) {
             e.printStackTrace();
         }
-        if(ret.size() == 0) {
+        if (ret.size() == 0) {
             ret.add(BROADCAST_ADDRESS);
         }
         return ret.toArray(new String[]{});
     }
 
-    public void join() throws InterruptedException {
-        mThread.join();
+    @Override
+    public void onTracking(float[] position, float[] orientation) {
+        if (isTracking()) {
+            mVrContext.fetchTrackingInfo(getPointer(), position, orientation);
+        }
+    }
+
+    public boolean isTracking() {
+        return mVrContext.isVrMode() && isConnected();
+    }
+
+    public String getErrorMessage() {
+        return mTrackingThread.getErrorMessage();
     }
 
     // called from native
     @SuppressWarnings("unused")
     public void onConnected(int width, int height, int codec) {
         mCallback.onConnected(width, height, codec);
+        mTrackingThread.onConnect();
     }
+
+    @SuppressWarnings("unused")
+    public void onDisconnected() {
+        mTrackingThread.onDisconnect();
+    }
+
     @SuppressWarnings("unused")
     public void onChangeSettings(int EnableTestMode, int suspend) {
         mCallback.onChangeSettings(EnableTestMode, suspend);
     }
 
-    native int initializeSocket(int port, String deviceName, String[] broadcastAddrList, boolean is72Hz);
+    private native int initializeSocket(int port, String deviceName, String[] broadcastAddrList, boolean is72Hz);
+    private native void closeSocket();
+    private native void runLoop(String serverAddress, int serverPort);
+    private native void interruptNative();
 
-    native void closeSocket();
+    public native boolean isConnected();
 
-    native void runLoop(String serverAddress, int serverPort);
-
-    native void interrupt();
-
-    native int send(byte[] buf, int length);
-
+    private native long getPointer();
     private native String getServerAddress();
     private native int getServerPort();
 
@@ -184,16 +212,22 @@ class UdpReceiverThread implements NALParser {
 
     @Override
     public native int getNalListSize();
+
     @Override
     public native NAL waitNal();
+
     @Override
     public native NAL getNal();
+
     @Override
     public native void recycleNal(NAL nal);
+
     @Override
     public native void flushNALList();
+
     @Override
     public native void notifyWaitingThread();
+
     @Override
     public native void clearStopped();
 }

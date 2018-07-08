@@ -27,7 +27,6 @@ class DecoderThread extends ThreadBase {
     private NALParser mNalParser;
     private MediaCodec mDecoder = null;
     private int mQueuedOutputBuffer = -1;
-    private StatisticsCounter mCounter;
 
     private boolean mWaitNextIDR = false;
     private boolean mIsFrameAvailable = false;
@@ -81,10 +80,9 @@ class DecoderThread extends ThreadBase {
 
     private RenderCallback mRenderCallback;
 
-    DecoderThread(NALParser nalParser, StatisticsCounter counter
-            , RenderCallback renderCallback, MainActivity mainActivity) {
+    DecoderThread(NALParser nalParser,
+                  RenderCallback renderCallback, MainActivity mainActivity) {
         mNalParser = nalParser;
-        mCounter = counter;
         mRenderCallback = renderCallback;
         mMainActivity = mainActivity;
     }
@@ -94,10 +92,7 @@ class DecoderThread extends ThreadBase {
     }
 
     public void start() {
-        synchronized (mAvailableInputs) {
-            mAvailableInputs.clear();
-        }
-        super.start();
+        super.startBase();
     }
 
     public void interrupt() {
@@ -108,7 +103,7 @@ class DecoderThread extends ThreadBase {
         mNalParser.notifyWaitingThread();
     }
 
-    public void run() {
+    protected void run() {
         try {
             decodeLoop();
         } catch (IOException | InterruptedException | IllegalStateException e) {
@@ -121,6 +116,7 @@ class DecoderThread extends ThreadBase {
                     mDecoder.stop();
                     mDecoder.release();
                 } catch (IllegalStateException e) {
+                    e.printStackTrace();
                 }
             }
         }
@@ -128,6 +124,10 @@ class DecoderThread extends ThreadBase {
     }
 
     private void decodeLoop() throws InterruptedException, IOException {
+        synchronized (mAvailableInputs) {
+            mAvailableInputs.clear();
+        }
+
         MediaFormat format = MediaFormat.createVideoFormat(mFormat, DummyWidth, DummyHeight);
         format.setString("KEY_MIME", mFormat);
 
@@ -172,36 +172,18 @@ class DecoderThread extends ThreadBase {
 
             long presentationTime = System.nanoTime() / 1000;
 
-            if (mCodec == CODEC_H264 && NALType == NAL_TYPE_SPS) {
-                // SPS + PPS
-                Utils.frameLog(nal.frameIndex, "Feed codec config. SPS+PPS Size=" + nal.length);
+            if ((mCodec == CODEC_H264 && NALType == NAL_TYPE_SPS) ||
+                    (mCodec == CODEC_H265 && NALType == H265_NAL_TYPE_VPS)) {
+                // (VPS + )SPS + PPS
+                Utils.frameLog(nal.frameIndex, "Feed codec config. Size=" + nal.length + " Codec=" + mCodec + " NALType=" + NALType);
 
                 mWaitNextIDR = false;
 
                 sendInputBuffer(nal, 0, MediaCodec.BUFFER_FLAG_CODEC_CONFIG);
 
                 mNalParser.recycleNal(nal);
-            } else if (mCodec == CODEC_H264 && NALType == NAL_TYPE_IDR) {
-                // IDR-Frame
-                Utils.frameLog(nal.frameIndex, "Feed IDR-Frame. Size=" + nal.length + " PresentationTime=" + presentationTime);
-
-                //debugIDRFrame(nal, mSPSBuffer, mPPSBuffer);
-
-                LatencyCollector.DecoderInput(nal.frameIndex);
-
-                sendInputBuffer(nal, presentationTime, 0);
-
-                mNalParser.recycleNal(nal);
-            } else if (mCodec == CODEC_H265 && NALType == H265_NAL_TYPE_VPS) {
-                // VPS + SPS + PPS
-                frameLog("Feed codec config. VPS+SPS+PPS Size=" + nal.length);
-
-                mWaitNextIDR = false;
-
-                sendInputBuffer(nal, 0, MediaCodec.BUFFER_FLAG_CODEC_CONFIG);
-                
-                mNalParser.recycleNal(nal);
-            } else if (mCodec == CODEC_H265 && NALType == H265_NAL_TYPE_IDR_W_RADL) {
+            } else if ((mCodec == CODEC_H264 && NALType == NAL_TYPE_IDR) ||
+                    (mCodec == CODEC_H265 && NALType == H265_NAL_TYPE_IDR_W_RADL)) {
                 // IDR-Frame
                 Utils.frameLog(nal.frameIndex, "Feed IDR-Frame. Size=" + nal.length + " PresentationTime=" + presentationTime);
 
@@ -212,8 +194,6 @@ class DecoderThread extends ThreadBase {
                 mNalParser.recycleNal(nal);
             } else {
                 // PFrame
-                mCounter.countPFrame();
-
                 LatencyCollector.DecoderInput(nal.frameIndex);
 
                 if (mWaitNextIDR) {
@@ -308,8 +288,6 @@ class DecoderThread extends ThreadBase {
 
         @Override
         public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index, @NonNull MediaCodec.BufferInfo info) {
-            mCounter.countOutputFrame(1);
-
             mIsFrameAvailable = true;
 
             if (mQueuedOutputBuffer != -1) {

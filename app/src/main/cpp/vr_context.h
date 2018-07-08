@@ -9,7 +9,7 @@
 #include "packet_types.h"
 #include "render.h"
 #include "utils.h"
-
+#include "udp.h"
 
 
 class VrContext {
@@ -34,9 +34,11 @@ public:
 
     void setControllerInfo(TrackingInfo *packet, double displayTime);
 
-    void sendTrackingInfo(JNIEnv *env_, jobject callback, double displayTime, ovrTracking2 *tracking
-            , const ovrVector3f *other_tracking_position, const ovrQuatf *other_tracking_orientation);
-    int64_t fetchTrackingInfo(JNIEnv *env_, jobject callback, jfloatArray position_, jfloatArray orientation_);
+    void sendTrackingInfo(TrackingInfo *packet, double displayTime, ovrTracking2 *tracking,
+                              const ovrVector3f *other_tracking_position,
+                              const ovrQuatf *other_tracking_orientation);
+    void fetchTrackingInfo(JNIEnv *env_, UdpManager *udpManager,
+                           ovrVector3f *position, ovrQuatf *orientation);
 
     void setFrameGeometry(int width, int height);
 

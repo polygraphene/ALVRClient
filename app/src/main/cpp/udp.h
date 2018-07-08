@@ -7,9 +7,12 @@
 #include <memory>
 #include <jni.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
 #include <unistd.h>
 
 #include "packet_types.h"
+#include "nal.h"
+#include "sound.h"
 
 // Maximum UDP packet size
 static const int MAX_PACKET_SIZE = 2000;
@@ -83,7 +86,7 @@ public:
         return *m_nalParser;
     }
 
-    void send(JNIEnv *env, jbyteArray buf_, jint length);
+    void send(const void *packet, int length);
 
     void runLoop(JNIEnv *env, jobject instance, jstring serverAddress, int serverPort);
     void interrupt();

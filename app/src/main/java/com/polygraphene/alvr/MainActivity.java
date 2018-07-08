@@ -142,7 +142,7 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        if (!mVrThread.onRequestPermissionsResult(this)) {
+        if (!ArThread.onRequestPermissionsResult(this)) {
             finish();
         }
     }

@@ -1,10 +1,12 @@
 package com.polygraphene.alvr;
 
+import android.util.Log;
+
 public class ThreadBase {
     private Thread mThread;
     private boolean mStopped = false;
 
-    public void start() {
+    protected final void startBase() {
         mThread = new MyThread();
         mStopped = false;
         mThread.start();
@@ -23,10 +25,10 @@ public class ThreadBase {
 
     public void interrupt() {
         mStopped = true;
+        mThread.interrupt();
     }
 
-    public void run() {
-
+    protected void run() {
     }
 
     public boolean isStopped() {
@@ -36,7 +38,11 @@ public class ThreadBase {
     private class MyThread extends Thread {
         @Override
         public void run() {
-            setName(ThreadBase.this.getClass().getName());
+            String name = ThreadBase.this.getClass().getName();
+            String[] split = name.split("\\.");
+            setName(split[split.length - 1]);
+
+            Log.v("ThreadBase", name +" has started.");
 
             ThreadBase.this.run();
         }

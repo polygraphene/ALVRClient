@@ -47,8 +47,8 @@ public class VrContext {
         renderLoadingNative(handle);
     }
 
-    public long fetchTrackingInfo(VrThread.OnSendTrackingCallback callback, float[] position, float[] orientation) {
-        return fetchTrackingInfoNative(handle, callback, position, orientation);
+    public void fetchTrackingInfo(long udpManager, float[] position, float[] orientation) {
+        fetchTrackingInfoNative(handle, udpManager, position, orientation);
     }
 
     public void onChangeSettings(int EnableTestMode, int suspend) {
@@ -94,7 +94,7 @@ public class VrContext {
     private native void onSurfaceDestroyedNative(long handle);
     private native void renderNative(long handle, long renderedFrameIndex);
     private native void renderLoadingNative(long handle);
-    private native long fetchTrackingInfoNative(long handle, VrThread.OnSendTrackingCallback callback, float[] position, float[] orientation);
+    private native void fetchTrackingInfoNative(long handle, long udpManager, float[] position, float[] orientation);
 
     private native void onChangeSettingsNative(long handle, int EnableTestMode, int suspend);
     private native boolean onKeyEventNative(long handle, int keyCode, int action);

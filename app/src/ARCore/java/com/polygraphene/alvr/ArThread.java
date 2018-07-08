@@ -34,17 +34,15 @@ import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.util.concurrent.TimeUnit;
 
-public class ArThread {
+public class ArThread extends ThreadBase {
     private static final String TAG = "ArThread";
 
     private static final int EGL_OPENGL_ES3_BIT = 64;
     private static final int RC_PERMISSIONS = 1;
 
-    private VrThread mVrThread;
+    private boolean mConnected = false;
     private boolean mInstallRequested;
     private Session mSession = null;
-
-    private Thread mThread;
 
     private int mArRefreshRate = 60;
 
@@ -52,44 +50,20 @@ public class ArThread {
     private float[] mPosition = new float[3];
     private float[] mOrientation = new float[4];
 
-    boolean mStopped = false;
-
     private String mErrorMessage = null;
 
     private int mCameraTexture = -1;
     EGLContext mEGLContext;
 
-    ArThread(VrThread vrThread, EGLContext EGLContext) {
-        mVrThread = vrThread;
+    ArThread(EGLContext EGLContext) {
         mEGLContext = EGLContext;
-        mThread = new Thread() {
-            @Override
-            public void run() {
-                ArThread.this.run();
-            }
-        };
     }
 
-    public void start(MainActivity activity) {
+    public void start() {
         if (mSession == null) {
             return;
         }
-        mThread.start();
-    }
-
-    public void interrupt() {
-        Log.v(TAG, "Stopping ArThread.");
-        mStopped = true;
-    }
-
-    public void join() {
-        while(mThread.isAlive()) {
-            try {
-                mThread.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
+        super.startBase();
     }
 
     public static void requestPermissions(MainActivity activity) {
@@ -127,7 +101,15 @@ public class ArThread {
         }
     }
 
-    private void run() {
+    public void onConnect() {
+        mConnected = true;
+    }
+
+    public void onDisconnect() {
+        mConnected = false;
+    }
+
+    public void run() {
         Log.v(TAG, "ArThread started.");
         if (mSession != null) {
             Log.v(TAG, "setCameraTextureName texture=" + mCameraTexture);
@@ -143,8 +125,8 @@ public class ArThread {
         Log.v(TAG, "ArThread initialized.");
 
         long previousFetchTime = System.nanoTime();
-        while (!mStopped) {
-            if (mVrThread.isTracking()) {
+        while (!isStopped()) {
+            if (mConnected) {
                 if (mSession != null) {
                     try {
                         Log.v(TAG, "Update ArSession.");
@@ -203,7 +185,7 @@ public class ArThread {
     /**
      * Check to see we have the necessary permissions for this app.
      */
-    private boolean hasCameraPermission(MainActivity activity) {
+    private static boolean hasCameraPermission(MainActivity activity) {
         return ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED;
     }
@@ -211,7 +193,7 @@ public class ArThread {
     /**
      * Check to see if we need to show the rationale for this permission.
      */
-    private boolean shouldShowRequestPermissionRationale(MainActivity activity) {
+    private static boolean shouldShowRequestPermissionRationale(MainActivity activity) {
         return ActivityCompat.shouldShowRequestPermissionRationale(
                 activity, Manifest.permission.CAMERA);
     }
@@ -241,7 +223,7 @@ public class ArThread {
         }
     }
 
-    public boolean onRequestPermissionsResult(MainActivity activity) {
+    public static boolean onRequestPermissionsResult(MainActivity activity) {
         if (!hasCameraPermission(activity)) {
             Toast.makeText(
                     activity, "Camera permission is needed to run this application", Toast.LENGTH_LONG)
@@ -278,7 +260,7 @@ public class ArThread {
         }
     }
 
-    public void debugReadPixel(MainActivity activity){
+    public void debugReadPixel(MainActivity activity) {
         //Generate a new FBO. It will contain your texture.
         int fb[] = new int[1];
         GLES11Ext.glGenFramebuffersOES(1, IntBuffer.wrap(fb));

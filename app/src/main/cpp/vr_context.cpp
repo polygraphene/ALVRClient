@@ -18,6 +18,7 @@
 #include "vr_context.h"
 #include "latency_collector.h"
 #include "packet_types.h"
+#include "udp.h"
 
 void VrContext::onVrModeChange() {
     if (Resumed && window != NULL) {
@@ -331,11 +332,9 @@ void VrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
 }
 
 // Called TrackingThread. So, we can't use this->env.
-void VrContext::sendTrackingInfo(JNIEnv *env_, jobject callback, double displayTime,
-                                 ovrTracking2 *tracking, const ovrVector3f *other_tracking_position,
+void VrContext::sendTrackingInfo(TrackingInfo *packet, double displayTime, ovrTracking2 *tracking,
+                                 const ovrVector3f *other_tracking_position,
                                  const ovrQuatf *other_tracking_orientation) {
-    jbyteArray array = env_->NewByteArray(sizeof(TrackingInfo));
-    TrackingInfo *packet = (TrackingInfo *) env_->GetByteArrayElements(array, 0);
     memset(packet, 0, sizeof(TrackingInfo));
 
     uint64_t clientTime = getTimestampUs();
@@ -360,19 +359,12 @@ void VrContext::sendTrackingInfo(JNIEnv *env_, jobject callback, double displayT
 
     setControllerInfo(packet, displayTime);
 
-    env_->ReleaseByteArrayElements(array, (jbyte *) packet, 0);
-
     FrameLog(FrameIndex, "Sending tracking info.");
-
-    jclass clazz = env_->GetObjectClass(callback);
-    jmethodID sendTracking = env_->GetMethodID(clazz, "onSendTracking", "([BIJ)V");
-
-    env_->CallVoidMethod(callback, sendTracking, array, sizeof(TrackingInfo), FrameIndex);
 }
 
 // Called TrackingThread. So, we can't use this->env.
-int64_t VrContext::fetchTrackingInfo(JNIEnv *env_, jobject callback, jfloatArray position_,
-                                     jfloatArray orientation_) {
+void VrContext::fetchTrackingInfo(JNIEnv *env_, UdpManager *udpManager, ovrVector3f *position,
+                                     ovrQuatf *orientation) {
     std::shared_ptr<TrackingFrame> frame(new TrackingFrame());
 
     FrameIndex++;
@@ -392,18 +384,9 @@ int64_t VrContext::fetchTrackingInfo(JNIEnv *env_, jobject callback, jfloatArray
         }
     }
 
-    if (position_ != NULL) {
+    TrackingInfo info;
+    if (position != NULL) {
         // AR mode
-        ovrVector3f position;
-        ovrQuatf orientation;
-
-        jfloat *position_c = env_->GetFloatArrayElements(position_, NULL);
-        memcpy(&position, position_c, sizeof(float) * 3);
-        env_->ReleaseFloatArrayElements(position_, position_c, 0);
-
-        jfloat *orientation_c = env_->GetFloatArrayElements(orientation_, NULL);
-        memcpy(&orientation, orientation_c, sizeof(float) * 4);
-        env_->ReleaseFloatArrayElements(orientation_, orientation_c, 0);
 
         // Rotate PI/2 around (0, 0, -1)
         // Orientation provided by ARCore is portrait mode orientation.
@@ -412,19 +395,19 @@ int64_t VrContext::fetchTrackingInfo(JNIEnv *env_, jobject callback, jfloatArray
         quat.y = 0;
         quat.z = -sqrtf(0.5);
         quat.w = sqrtf(0.5);
-        ovrQuatf orientation_rotated = quatMultipy(&orientation, &quat);
+        ovrQuatf orientation_rotated = quatMultipy(orientation, &quat);
 
-        position.y += position_offset_y;
+        position->y += position_offset_y;
 
-        sendTrackingInfo(env_, callback, frame->displayTime, &frame->tracking, &position,
+        sendTrackingInfo(&info, frame->displayTime, &frame->tracking, position,
                          &orientation_rotated);
     } else {
         // Non AR
-        sendTrackingInfo(env_, callback, frame->displayTime, &frame->tracking, NULL, NULL);
+        sendTrackingInfo(&info, frame->displayTime, &frame->tracking, NULL, NULL);
     }
     LatencyCollector::Instance().tracking(frame->frameIndex);
 
-    return FrameIndex;
+    udpManager->send(&info, sizeof(info));
 }
 
 
@@ -703,13 +686,28 @@ Java_com_polygraphene_alvr_VrContext_renderLoadingNative(JNIEnv *env, jobject in
 
 // Called from TrackingThread
 extern "C"
-JNIEXPORT jlong JNICALL
+JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_VrContext_fetchTrackingInfoNative(JNIEnv *env, jobject instance,
                                                              jlong handle,
-                                                             jobject callback,
+                                                             jlong udpManager,
                                                              jfloatArray position_,
                                                              jfloatArray orientation_) {
-    return ((VrContext *) handle)->fetchTrackingInfo(env, callback, position_, orientation_);
+    if(position_ != NULL && orientation_ != NULL) {
+        ovrVector3f position;
+        ovrQuatf orientation;
+
+        jfloat *position_c = env->GetFloatArrayElements(position_, NULL);
+        memcpy(&position, position_c, sizeof(float) * 3);
+        env->ReleaseFloatArrayElements(position_, position_c, 0);
+
+        jfloat *orientation_c = env->GetFloatArrayElements(orientation_, NULL);
+        memcpy(&orientation, orientation_c, sizeof(float) * 4);
+        env->ReleaseFloatArrayElements(orientation_, orientation_c, 0);
+
+        ((VrContext *) handle)->fetchTrackingInfo(env, (UdpManager *)udpManager, &position, &orientation);
+    }else {
+        ((VrContext *) handle)->fetchTrackingInfo(env, (UdpManager *) udpManager, NULL, NULL);
+    }
 }
 
 extern "C"

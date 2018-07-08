@@ -6,13 +6,10 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <endian.h>
-#include <arpa/inet.h>
 #include <algorithm>
 #include <errno.h>
 #include <sys/ioctl.h>
-#include "nal.h"
 #include "utils.h"
-#include "sound.h"
 #include "latency_collector.h"
 #include "udp.h"
 #include "exception.h"
@@ -408,15 +405,13 @@ void UdpManager::recoverConnection(std::string serverAddress, int serverPort) {
     m_socket.recoverConnection(serverAddress, serverPort);
 }
 
-void UdpManager::send(JNIEnv *env, jbyteArray buf_, jint length) {
+void UdpManager::send(const void *packet, int length) {
     if (m_stopped) {
         return;
     }
-    jbyte *buf = env->GetByteArrayElements(buf_, NULL);
-
     SendBuffer sendBuffer;
 
-    memcpy(sendBuffer.buf, buf, length);
+    memcpy(sendBuffer.buf, packet, length);
     sendBuffer.len = length;
 
     {
@@ -425,8 +420,6 @@ void UdpManager::send(JNIEnv *env, jbyteArray buf_, jint length) {
     }
     // Notify enqueue to loop thread
     write(m_notifyPipe[1], "", 1);
-
-    env->ReleaseByteArrayElements(buf_, buf, 0);
 }
 
 void UdpManager::runLoop(JNIEnv *env, jobject instance, jstring serverAddress, int serverPort) {
@@ -644,6 +637,12 @@ void UdpManager::checkConnection() {
             // Timeout
             LOGE("Connection timeout.");
             m_socket.disconnect();
+
+            jclass clazz = env_->GetObjectClass(instance_);
+            jmethodID method = env_->GetMethodID(clazz, "onDisconnected", "()V");
+            env_->CallVoidMethod(instance_, method);
+            env_->DeleteLocalRef(clazz);
+
             if (m_soundPlayer) {
                 m_soundPlayer->Stop();
             }
@@ -677,16 +676,6 @@ JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_closeSocket(JNIEnv *env, jobject instance) {
     g_udpManager.reset();
 }
-
-
-extern "C"
-JNIEXPORT jint JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_send(JNIEnv *env, jobject instance,
-                                                  jbyteArray buf_, jint length) {
-    g_udpManager->send(env, buf_, length);
-    return 0;
-}
-
 
 extern "C"
 JNIEXPORT jint JNICALL
@@ -728,7 +717,7 @@ Java_com_polygraphene_alvr_UdpReceiverThread_runLoop(JNIEnv *env, jobject instan
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_interrupt(JNIEnv *env, jobject instance) {
+Java_com_polygraphene_alvr_UdpReceiverThread_interruptNative(JNIEnv *env, jobject instance) {
     if (g_udpManager) {
         g_udpManager->interrupt();
     }
@@ -764,4 +753,10 @@ extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_clearStopped(JNIEnv *env, jobject instance) {
     g_udpManager->getNalParser().clearStopped();
+}
+
+extern "C"
+JNIEXPORT jlong JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_getPointer(JNIEnv *env, jobject instance) {
+    return (jlong) g_udpManager.get();
 }
