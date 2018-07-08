@@ -181,12 +181,14 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
     // called from native
     @SuppressWarnings("unused")
     public void onConnected(int width, int height, int codec) {
+        Log.v(TAG, "onConnected is called.");
         mCallback.onConnected(width, height, codec);
         mTrackingThread.onConnect();
     }
 
     @SuppressWarnings("unused")
     public void onDisconnected() {
+        Log.v(TAG, "onDisconnected is called.");
         mTrackingThread.onDisconnect();
     }
 

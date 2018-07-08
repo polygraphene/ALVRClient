@@ -110,7 +110,7 @@ private:
     uint64_t m_lastReceived = 0;
     uint64_t m_lastFrameIndex = 0;
     std::string m_deviceName;
-    ConnectionMessage g_connectionMessage = {};
+    ConnectionMessage m_connectionMessage = {};
 
     uint32_t m_prevVideoSequence = 0;
     uint32_t m_prevSoundSequence = 0;
@@ -119,8 +119,8 @@ private:
 
     bool m_is72Hz = false;
 
-    JNIEnv *env_;
-    jobject instance_;
+    JNIEnv *m_env;
+    jobject m_instance;
 
     //
     // Send buffer

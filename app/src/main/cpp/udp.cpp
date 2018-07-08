@@ -430,8 +430,8 @@ void UdpManager::runLoop(JNIEnv *env, jobject instance, jstring serverAddress, i
     FD_SET(m_notifyPipe[0], &fds_org);
     int nfds = std::max(m_socket.getSocket(), m_notifyPipe[0]) + 1;
 
-    env_ = env;
-    instance_ = instance;
+    m_env = env;
+    m_instance = instance;
 
     if (serverAddress != NULL) {
         recoverConnection(GetStringFromJNIString(env, serverAddress), serverPort);
@@ -507,20 +507,20 @@ int UdpManager::getServerPort() {
 
 void UdpManager::onConnect(const ConnectionMessage &connectionMessage) {
     // Save video width and height
-    g_connectionMessage = connectionMessage;
+    m_connectionMessage = connectionMessage;
 
     updateTimeout();
     m_prevVideoSequence = 0;
     m_prevSoundSequence = 0;
     m_timeDiff = 0;
     LatencyCollector::Instance().resetAll();
-    m_nalParser->setCodec(g_connectionMessage.codec);
+    m_nalParser->setCodec(m_connectionMessage.codec);
 
-    jclass clazz = env_->GetObjectClass(instance_);
-    jmethodID method = env_->GetMethodID(clazz, "onConnected", "(III)V");
-    env_->CallVoidMethod(instance_, method, g_connectionMessage.videoWidth,
-                         g_connectionMessage.videoHeight, g_connectionMessage.codec);
-    env_->DeleteLocalRef(clazz);
+    jclass clazz = m_env->GetObjectClass(m_instance);
+    jmethodID method = m_env->GetMethodID(clazz, "onConnected", "(III)V");
+    m_env->CallVoidMethod(m_instance, method, m_connectionMessage.videoWidth,
+                         m_connectionMessage.videoHeight, m_connectionMessage.codec);
+    m_env->DeleteLocalRef(clazz);
 
     // Start stream.
     StreamControlMessage message = {};
@@ -593,10 +593,10 @@ void UdpManager::onPacketRecv(const char *packet, size_t packetSize) {
         }
         ChangeSettings *settings = (ChangeSettings *) packet;
 
-        jclass clazz = env_->GetObjectClass(instance_);
-        jmethodID method = env_->GetMethodID(clazz, "onChangeSettings", "(II)V");
-        env_->CallVoidMethod(instance_, method, settings->enableTestMode, settings->suspend);
-        env_->DeleteLocalRef(clazz);
+        jclass clazz = m_env->GetObjectClass(m_instance);
+        jmethodID method = m_env->GetMethodID(clazz, "onChangeSettings", "(II)V");
+        m_env->CallVoidMethod(m_instance, method, settings->enableTestMode, settings->suspend);
+        m_env->DeleteLocalRef(clazz);
     } else if (type == ALVR_PACKET_TYPE_AUDIO_FRAME_START) {
         // Change settings
         if (packetSize < sizeof(AudioFrameStart)) {
@@ -638,10 +638,10 @@ void UdpManager::checkConnection() {
             LOGE("Connection timeout.");
             m_socket.disconnect();
 
-            jclass clazz = env_->GetObjectClass(instance_);
-            jmethodID method = env_->GetMethodID(clazz, "onDisconnected", "()V");
-            env_->CallVoidMethod(instance_, method);
-            env_->DeleteLocalRef(clazz);
+            jclass clazz = m_env->GetObjectClass(m_instance);
+            jmethodID method = m_env->GetMethodID(clazz, "onDisconnected", "()V");
+            m_env->CallVoidMethod(m_instance, method);
+            m_env->DeleteLocalRef(clazz);
 
             if (m_soundPlayer) {
                 m_soundPlayer->Stop();
