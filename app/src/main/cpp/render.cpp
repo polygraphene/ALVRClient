@@ -790,6 +790,9 @@ void ovrGeometry_CreatePanel(ovrGeometry *geometry) {
     geometry->VertexAttribs[1].Stride = 8;
     geometry->VertexAttribs[1].Pointer = (const GLvoid *) offsetof(ovrCubeVertices, uv);
 
+    geometry->VertexAttribs[2].Index = -1;
+    geometry->VertexAttribs[3].Index = -1;
+
     GL(glGenBuffers(1, &geometry->VertexBuffer));
     GL(glBindBuffer(GL_ARRAY_BUFFER, geometry->VertexBuffer));
     GL(glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), &cubeVertices, GL_STATIC_DRAW));
@@ -860,6 +863,8 @@ void ovrGeometry_CreateTestMode(ovrGeometry *geometry) {
     geometry->VertexAttribs[2].Normalized = true;
     geometry->VertexAttribs[2].Stride = 8;
     geometry->VertexAttribs[2].Pointer = (const GLvoid *) offsetof(ovrCubeVertices, uv);
+
+    geometry->VertexAttribs[3].Index = -1;
 
     GL(glGenBuffers(1, &geometry->VertexBuffer));
     GL(glBindBuffer(GL_ARRAY_BUFFER, geometry->VertexBuffer));
