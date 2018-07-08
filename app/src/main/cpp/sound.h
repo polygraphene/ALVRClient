@@ -245,8 +245,8 @@ private:
     void callback_() {
         SLAndroidSimpleBufferQueueState s;
         (*bqPlayerBufferQueue)->GetState(bqPlayerBufferQueue, &s);
-        LOGSOUND("Sound buffer callback is called. count=%d index=%d buf:%d,%d start:%d", s.count, s.index, dst_head, dst_tail,
-                 start_threshold);
+        //LOGSOUND("Sound buffer callback is called. count=%d index=%d buf:%d,%d start:%d", s.count, s.index, dst_head, dst_tail,
+        //         start_threshold);
 
         if (dst_head == dst_tail) {
             fillSilent();
