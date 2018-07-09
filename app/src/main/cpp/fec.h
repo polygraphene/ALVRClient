@@ -26,6 +26,7 @@ private:
     size_t m_totalDataShards;
     size_t m_totalParityShards;
     size_t m_totalShards;
+    uint32_t m_firstPacketOfNextFrame = 0;
     std::vector<std::vector<unsigned char>> m_marks;
     std::vector<char> m_frameBuffer;
     std::vector<uint32_t> m_receivedDataShards;

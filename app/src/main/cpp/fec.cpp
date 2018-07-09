@@ -96,6 +96,36 @@ void FECQueue::addVideoPacket(const VideoFrame *packet, int packetSize, bool &fe
             m_receivedDataShards[m_shardPackets - i - 1]++;
         }
 
+        // Calculate last packet counter of current frame to detect whole frame packet loss.
+        uint32_t startPacket;
+        uint32_t nextStartPacket;
+        if(m_currentFrame.fecIndex / m_shardPackets < m_totalDataShards) {
+            // First seen packet was data packet
+            startPacket = m_currentFrame.packetCounter - m_currentFrame.fecIndex;
+            nextStartPacket = m_currentFrame.packetCounter - m_currentFrame.fecIndex + m_totalShards * m_shardPackets - padding;
+        }else{
+            // was parity packet
+            startPacket = m_currentFrame.packetCounter - (m_currentFrame.fecIndex - padding);
+            uint64_t m_startOfParityPacket = m_currentFrame.packetCounter - (m_currentFrame.fecIndex - m_totalDataShards * m_shardPackets);
+            nextStartPacket = m_startOfParityPacket + m_totalParityShards * m_shardPackets;
+        }
+        if(m_firstPacketOfNextFrame != 0 && m_firstPacketOfNextFrame != startPacket) {
+            // Whole frame packet loss
+            FrameLog(m_currentFrame.frameIndex,
+                     "Previous frame was completely lost. shards=%u:%u frameByteSize=%d fecPercentage=%d m_totalShards=%u m_shardPackets=%u m_blockSize=%u",
+                     m_totalDataShards,
+                     m_totalParityShards,
+                     m_currentFrame.frameByteSize, m_currentFrame.fecPercentage, m_totalShards,
+                     m_shardPackets, m_blockSize);
+            for (int packet = 0; packet < m_shardPackets; packet++) {
+                FrameLog(m_currentFrame.frameIndex,
+                         "packetIndex=%d, shards=%u:%u",
+                         packet, m_receivedDataShards[packet], m_receivedParityShards[packet]);
+            }
+            fecFailure = m_fecFailure = true;
+        }
+        m_firstPacketOfNextFrame = nextStartPacket;
+
         FrameLog(m_currentFrame.frameIndex,
                  "Start new frame. frameByteSize=%d fecPercentage=%d m_totalDataShards=%u m_totalParityShards=%u m_totalShards=%u m_shardPackets=%u m_blockSize=%u",
                  m_currentFrame.frameByteSize, m_currentFrame.fecPercentage, m_totalDataShards,
