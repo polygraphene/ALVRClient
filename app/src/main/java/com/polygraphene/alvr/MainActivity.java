@@ -17,9 +17,6 @@ import android.view.SurfaceView;
 import android.view.Window;
 import android.view.WindowManager;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public class MainActivity extends Activity {
     private final static String TAG = "MainActivity";
 

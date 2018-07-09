@@ -1,7 +1,6 @@
 package com.polygraphene.alvr;
 
 import android.media.MediaCodec;
-import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
 import android.support.annotation.NonNull;
 import android.util.Log;
@@ -26,10 +25,9 @@ class DecoderThread extends ThreadBase {
 
     private NALParser mNalParser;
     private MediaCodec mDecoder = null;
-    private int mQueuedOutputBuffer = -1;
+    private Surface mSurface;
 
     private boolean mWaitNextIDR = false;
-    private boolean mIsFrameAvailable = false;
 
     @SuppressWarnings("unused")
     private MainActivity mMainActivity = null;
@@ -38,7 +36,7 @@ class DecoderThread extends ThreadBase {
 
     private int mBufferIndex = -1;
 
-    private FrameMap mFrameMap = new FrameMap();
+    private OutputFrameQueue mQueue;
 
     private static final int NAL_TYPE_SPS = 7;
     private static final int NAL_TYPE_PPS = 8;
@@ -72,18 +70,10 @@ class DecoderThread extends ThreadBase {
 
     private final List<Integer> mAvailableInputs = new LinkedList<>();
 
-    public interface RenderCallback {
-        Surface getSurface();
-
-        int renderIf(MediaCodec codec, int queuedOutputBuffer, long frameIndex);
-    }
-
-    private RenderCallback mRenderCallback;
-
     DecoderThread(NALParser nalParser,
-                  RenderCallback renderCallback, MainActivity mainActivity) {
+                  Surface surface, MainActivity mainActivity) {
         mNalParser = nalParser;
-        mRenderCallback = renderCallback;
+        mSurface = surface;
         mMainActivity = mainActivity;
     }
 
@@ -137,12 +127,13 @@ class DecoderThread extends ThreadBase {
         } else {
             format.setByteBuffer("csd-0", ByteBuffer.wrap(DummyCSD_H265, 0, DummyCSD_H265.length));
         }
-
         mDecoder = MediaCodec.createDecoderByType(mFormat);
+
+        mQueue = new OutputFrameQueue(mDecoder);
 
         mDecoder.setVideoScalingMode(MediaCodec.VIDEO_SCALING_MODE_SCALE_TO_FIT);
         mDecoder.setCallback(new Callback());
-        mDecoder.configure(format, mRenderCallback.getSurface(), null, 0);
+        mDecoder.configure(format, mSurface, null, 0);
         mDecoder.start();
 
         Log.v(TAG, "Codec created. Type=" + mFormat + " Name=" + mDecoder.getCodecInfo().getName());
@@ -253,11 +244,11 @@ class DecoderThread extends ThreadBase {
 
     private void sendInputBuffer(NAL nal, long presentationTimeUs, int flags) throws InterruptedException {
         if (presentationTimeUs != 0) {
-            mFrameMap.put(presentationTimeUs, nal.frameIndex);
+            mQueue.pushInputBuffer(presentationTimeUs, nal.frameIndex);
         }
 
         int remain = nal.length;
-        while(remain > 0) {
+        while (remain > 0) {
             ByteBuffer buffer = getInputBuffer(nal);
 
             int copyLength = Math.min(nal.length, buffer.remaining());
@@ -266,7 +257,7 @@ class DecoderThread extends ThreadBase {
             mDecoder.queueInputBuffer(mBufferIndex, 0, buffer.position(), presentationTimeUs, flags);
             remain -= copyLength;
 
-            if(remain > 0) {
+            if (remain > 0) {
                 String name = mDecoder.getCodecInfo().getName();
                 Utils.frameLog(nal.frameIndex, "Splitting input buffer for codec. NAL Size="
                         + nal.length + " copyLength=" + copyLength + " codec=" + name);
@@ -288,25 +279,7 @@ class DecoderThread extends ThreadBase {
 
         @Override
         public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index, @NonNull MediaCodec.BufferInfo info) {
-            mIsFrameAvailable = true;
-
-            if (mQueuedOutputBuffer != -1) {
-                mDecoder.releaseOutputBuffer(mQueuedOutputBuffer, false);
-            }
-            mQueuedOutputBuffer = index;
-
-            long foundFrameIndex = mFrameMap.find(info.presentationTimeUs);
-
-            LatencyCollector.DecoderOutput(foundFrameIndex);
-
-            mQueuedOutputBuffer = mRenderCallback.renderIf(mDecoder, mQueuedOutputBuffer, foundFrameIndex);
-            if (mQueuedOutputBuffer == -1) {
-                //frameLog("consumed");
-            } else {
-                frameLog("not ready. discard.");
-                mDecoder.releaseOutputBuffer(mQueuedOutputBuffer, false);
-                mQueuedOutputBuffer = -1;
-            }
+            mQueue.pushOutputBuffer(index, info);
         }
 
         @Override
@@ -321,10 +294,29 @@ class DecoderThread extends ThreadBase {
     }
 
     public boolean isFrameAvailable() {
-        return mIsFrameAvailable;
+        return mQueue != null && mQueue.isFrameAvailable();
     }
 
-    public void notifyCodecChange(int codec) {
+    public long render() {
+        if (mQueue == null) {
+            return -1;
+        }
+        return mQueue.render();
+    }
+
+    public void onConnect(int codec, int frameQueueSize) {
+        if (mQueue != null) {
+            mQueue.reset();
+            setFrameQueueSize(frameQueueSize);
+        }
+        notifyCodecChange(codec);
+    }
+
+    public void onDisconnect() {
+        mQueue.stop();
+    }
+
+    private void notifyCodecChange(int codec) {
         if (codec != mCodec) {
             stopAndWait();
             mCodec = codec;
@@ -340,10 +332,9 @@ class DecoderThread extends ThreadBase {
         }
     }
 
-    private class MyThread extends Thread {
-        @Override
-        public void run() {
-            DecoderThread.this.run();
+    public void setFrameQueueSize(int frameQueueSize) {
+        if (mQueue != null) {
+            mQueue.setQueueSize(frameQueueSize);
         }
     }
 }

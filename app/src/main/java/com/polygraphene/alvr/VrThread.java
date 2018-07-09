@@ -26,9 +26,6 @@ class VrThread extends Thread {
     private SurfaceTexture mSurfaceTexture;
     private Surface mSurface;
 
-    private boolean mRendered = false;
-    private boolean mRenderRequested = false;
-    private long mFrameIndex = 0;
     private final Object mWaiter = new Object();
 
     private LoadingTexture mLoadingTexture = new LoadingTexture();
@@ -87,7 +84,7 @@ class VrThread extends Thread {
                 mReceiverThread = new UdpReceiverThread(mUdpReceiverCallback, mVrContext);
                 mReceiverThread.setPort(PORT);
                 loadConnectionState();
-                mDecoderThread = new DecoderThread(mReceiverThread, mRenderCallback, mMainActivity);
+                mDecoderThread = new DecoderThread(mReceiverThread, mSurface, mMainActivity);
 
                 try {
                     mDecoderThread.start();
@@ -191,13 +188,6 @@ class VrThread extends Thread {
         mSurfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
             @Override
             public void onFrameAvailable(SurfaceTexture surfaceTexture) {
-                Utils.frameLog(mFrameIndex, "onFrameAvailable");
-
-                synchronized (mWaiter) {
-                    mRenderRequested = false;
-                    mRendered = true;
-                    mWaiter.notifyAll();
-                }
             }
         });
         mSurface = new Surface(mSurfaceTexture);
@@ -246,103 +236,41 @@ class VrThread extends Thread {
     }
 
     private long waitFrame() {
-        long startTime = System.nanoTime();
-        synchronized (mWaiter) {
-            if (mRendered) {
-                Log.v(TAG, "updateTexImage(discard)");
-                mSurfaceTexture.updateTexImage();
-            }
-            mRenderRequested = true;
-            mRendered = false;
-            mWaiter.notifyAll();
+        long frameIndex = mDecoderThread.render();
+        if(frameIndex != -1) {
+            mSurfaceTexture.updateTexImage();
         }
-        while (true) {
-            synchronized (mWaiter) {
-                if (!mResumed) {
-                    return -1;
-                }
-                if (mRendered) {
-                    mRendered = false;
-                    mRenderRequested = false;
-                    mSurfaceTexture.updateTexImage();
-                    break;
-                }
-                if(System.nanoTime() - startTime > 1000 * 1000 * 1000L) {
-                    // Idle for 1-sec.
-                    Log.v(TAG, "Wait failed.");
-                    return -1;
-                }
-                try {
-                    mWaiter.wait(100);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-
-        return mFrameIndex;
+        return frameIndex;
     }
 
     private UdpReceiverThread.Callback mUdpReceiverCallback = new UdpReceiverThread.Callback() {
         @Override
-        public void onConnected(final int width, final int height, final int codec) {
+        public void onConnected(final int width, final int height, final int codec, final int frameQueueSize) {
             // We must wait completion of notifyGeometryChange
             // to ensure the first video frame arrives after notifyGeometryChange.
             send(new Runnable() {
                 @Override
                 public void run() {
                     mVrContext.setFrameGeometry(width, height);
-                    mDecoderThread.notifyCodecChange(codec);
+                    mDecoderThread.onConnect(codec, frameQueueSize);
                 }
             });
         }
 
         @Override
-        public void onChangeSettings(int enableTestMode, int suspend) {
+        public void onChangeSettings(int enableTestMode, int suspend, int frameQueueSize) {
             mVrContext.onChangeSettings(enableTestMode, suspend);
+            mDecoderThread.setFrameQueueSize(frameQueueSize);
         }
 
         @Override
         public void onShutdown(String serverAddr, int serverPort) {
             saveConnectionState(serverAddr, serverPort);
         }
-    };
-
-    private DecoderThread.RenderCallback mRenderCallback = new DecoderThread.RenderCallback() {
-        @Override
-        public Surface getSurface() {
-            return mSurface;
-        }
 
         @Override
-        public int renderIf(MediaCodec codec, int queuedOutputBuffer, long frameIndex) {
-            //Log.v(TAG, "renderIf " + queuedOutputBuffer);
-            synchronized (mWaiter) {
-                long startTime = System.nanoTime();
-                while(!mRenderRequested && System.nanoTime() - startTime < 50 * 1000 * 1000) {
-                    try {
-                        Log.v(TAG, "Waiting mRenderRequested=" + mRenderRequested);
-                        mWaiter.wait(10);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                }
-                if (!mRenderRequested) {
-                    return queuedOutputBuffer;
-                }
-            }
-
-            if (queuedOutputBuffer == -1) {
-                return queuedOutputBuffer;
-            }
-
-            codec.releaseOutputBuffer(queuedOutputBuffer, true);
-            synchronized (mWaiter) {
-                //mRendered = true;
-                mFrameIndex = frameIndex;
-                //waiter.notifyAll();
-            }
-            return -1;
+        public void onDisconnect() {
+            mDecoderThread.onDisconnect();
         }
     };
 

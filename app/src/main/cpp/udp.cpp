@@ -517,9 +517,9 @@ void UdpManager::onConnect(const ConnectionMessage &connectionMessage) {
     m_nalParser->setCodec(m_connectionMessage.codec);
 
     jclass clazz = m_env->GetObjectClass(m_instance);
-    jmethodID method = m_env->GetMethodID(clazz, "onConnected", "(III)V");
+    jmethodID method = m_env->GetMethodID(clazz, "onConnected", "(IIII)V");
     m_env->CallVoidMethod(m_instance, method, m_connectionMessage.videoWidth,
-                         m_connectionMessage.videoHeight, m_connectionMessage.codec);
+                         m_connectionMessage.videoHeight, m_connectionMessage.codec, m_connectionMessage.frameQueueSize);
     m_env->DeleteLocalRef(clazz);
 
     // Start stream.
@@ -594,8 +594,8 @@ void UdpManager::onPacketRecv(const char *packet, size_t packetSize) {
         ChangeSettings *settings = (ChangeSettings *) packet;
 
         jclass clazz = m_env->GetObjectClass(m_instance);
-        jmethodID method = m_env->GetMethodID(clazz, "onChangeSettings", "(II)V");
-        m_env->CallVoidMethod(m_instance, method, settings->enableTestMode, settings->suspend);
+        jmethodID method = m_env->GetMethodID(clazz, "onChangeSettings", "(III)V");
+        m_env->CallVoidMethod(m_instance, method, settings->enableTestMode, settings->suspend, settings->frameQueueSize);
         m_env->DeleteLocalRef(clazz);
     } else if (type == ALVR_PACKET_TYPE_AUDIO_FRAME_START) {
         // Change settings

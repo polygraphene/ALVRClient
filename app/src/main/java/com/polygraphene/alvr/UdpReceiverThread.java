@@ -30,11 +30,13 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
     private int mPreviousServerPort;
 
     interface Callback {
-        void onConnected(int width, int height, int codec);
+        void onConnected(int width, int height, int codec, int frameQueueSize);
 
-        void onChangeSettings(int enableTestMode, int suspend);
+        void onChangeSettings(int enableTestMode, int suspend, int frameQueueSize);
 
         void onShutdown(String serverAddr, int serverPort);
+
+        void onDisconnect();
     }
 
     private Callback mCallback;
@@ -180,21 +182,22 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
 
     // called from native
     @SuppressWarnings("unused")
-    public void onConnected(int width, int height, int codec) {
+    public void onConnected(int width, int height, int codec, int frameQueueSize) {
         Log.v(TAG, "onConnected is called.");
-        mCallback.onConnected(width, height, codec);
+        mCallback.onConnected(width, height, codec, frameQueueSize);
         mTrackingThread.onConnect();
     }
 
     @SuppressWarnings("unused")
     public void onDisconnected() {
         Log.v(TAG, "onDisconnected is called.");
+        mCallback.onDisconnect();
         mTrackingThread.onDisconnect();
     }
 
     @SuppressWarnings("unused")
-    public void onChangeSettings(int EnableTestMode, int suspend) {
-        mCallback.onChangeSettings(EnableTestMode, suspend);
+    public void onChangeSettings(int EnableTestMode, int suspend, int frameQueueSize) {
+        mCallback.onChangeSettings(EnableTestMode, suspend, frameQueueSize);
     }
 
     private native int initializeSocket(int port, String deviceName, String[] broadcastAddrList, boolean is72Hz);
