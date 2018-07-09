@@ -27,6 +27,7 @@ class VrThread extends Thread {
     private Surface mSurface;
 
     private final Object mWaiter = new Object();
+    private boolean mFrameAvailable = false;
 
     private LoadingTexture mLoadingTexture = new LoadingTexture();
 
@@ -188,6 +189,10 @@ class VrThread extends Thread {
         mSurfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
             @Override
             public void onFrameAvailable(SurfaceTexture surfaceTexture) {
+                synchronized (mWaiter) {
+                    mFrameAvailable = true;
+                    mWaiter.notifyAll();
+                }
             }
         });
         mSurface = new Surface(mSurfaceTexture);
@@ -198,8 +203,8 @@ class VrThread extends Thread {
         mEGLContext = EGL14.eglGetCurrentContext();
 
         Log.v(TAG, "Start loop of VrThread.");
-        while(mQueue.waitIdle()) {
-            if(!mVrContext.isVrMode() || !mResumed) {
+        while (mQueue.waitIdle()) {
+            if (!mVrContext.isVrMode() || !mResumed) {
                 mQueue.waitNext();
                 continue;
             }
@@ -210,10 +215,10 @@ class VrThread extends Thread {
         mVrContext.destroy();
     }
 
-    private void render(){
+    private void render() {
         if (mReceiverThread.isConnected() && mDecoderThread.isFrameAvailable() && mReceiverThread.getErrorMessage() == null) {
             long renderedFrameIndex = waitFrame();
-            if(renderedFrameIndex != -1) {
+            if (renderedFrameIndex != -1) {
                 mVrContext.render(renderedFrameIndex);
             }
         } else {
@@ -236,11 +241,22 @@ class VrThread extends Thread {
     }
 
     private long waitFrame() {
-        long frameIndex = mDecoderThread.render();
-        if(frameIndex != -1) {
+        synchronized (mWaiter) {
+            mFrameAvailable = false;
+            long frameIndex = mDecoderThread.render();
+            if (frameIndex == -1) {
+                return -1;
+            }
+            while (!mFrameAvailable) {
+                try {
+                    mWaiter.wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
             mSurfaceTexture.updateTexImage();
+            return frameIndex;
         }
-        return frameIndex;
     }
 
     private UdpReceiverThread.Callback mUdpReceiverCallback = new UdpReceiverThread.Callback() {
