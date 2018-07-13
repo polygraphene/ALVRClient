@@ -9,6 +9,7 @@
 #include <GLES3/gl3.h>
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
+#include "gltf_model.h"
 
 // Must use EGLSyncKHR because the VrApi still supports OpenGL ES 2.0
 #define EGL_SYNC
@@ -82,7 +83,7 @@ typedef struct {
     const GLvoid *Pointer;
 } ovrVertexAttribPointer;
 
-static const int MAX_VERTEX_ATTRIB_POINTERS = 4;
+static const int MAX_VERTEX_ATTRIB_POINTERS = 5;
 
 typedef struct {
     GLuint VertexBuffer;
@@ -98,7 +99,8 @@ enum VertexAttributeLocation {
     VERTEX_ATTRIBUTE_LOCATION_POSITION,
     VERTEX_ATTRIBUTE_LOCATION_COLOR,
     VERTEX_ATTRIBUTE_LOCATION_UV,
-    VERTEX_ATTRIBUTE_LOCATION_TRANSFORM
+    VERTEX_ATTRIBUTE_LOCATION_TRANSFORM,
+    VERTEX_ATTRIBUTE_LOCATION_NORMAL
 };
 
 void ovrGeometry_Clear(ovrGeometry *geometry);
@@ -107,6 +109,7 @@ void ovrGeometry_CreateTestMode(ovrGeometry *geometry);
 void ovrGeometry_Destroy(ovrGeometry *geometry);
 void ovrGeometry_CreateVAO(ovrGeometry *geometry);
 void ovrGeometry_DestroyVAO(ovrGeometry *geometry);
+
 //
 // ovrProgram
 //
@@ -150,6 +153,7 @@ typedef struct {
     int CameraTexture;
     int LoadingTexture;
     bool ARMode;
+    GltfModel *loadingScene;
 } ovrRenderer;
 
 void ovrRenderer_Clear(ovrRenderer *renderer);

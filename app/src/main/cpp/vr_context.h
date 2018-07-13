@@ -14,7 +14,7 @@
 
 class VrContext {
 public:
-    void initialize(JNIEnv *env, jobject activity, bool ARMode);
+    void initialize(JNIEnv *env, jobject activity, jobject assetManager, bool ARMode);
     void destroy();
 
     void onChangeSettings(int EnableTestMode, int Suspend);

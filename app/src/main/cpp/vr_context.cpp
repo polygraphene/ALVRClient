@@ -19,6 +19,7 @@
 #include "latency_collector.h"
 #include "packet_types.h"
 #include "udp.h"
+#include "asset.h"
 
 void VrContext::onVrModeChange() {
     if (Resumed && window != NULL) {
@@ -86,8 +87,11 @@ void VrContext::chooseRefreshRate() {
     }
 }
 
-void VrContext::initialize(JNIEnv *env, jobject activity, bool ARMode) {
+void VrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager, bool ARMode) {
     LOG("Initializing EGL.");
+
+    setAssetManager(env, assetManager);
+
     this->env = env;
     java.Env = env;
     env->GetJavaVM(&java.Vm);
@@ -636,9 +640,9 @@ void VrContext::setFrameGeometry(int width, int height) {
 extern "C"
 JNIEXPORT jlong JNICALL
 Java_com_polygraphene_alvr_VrContext_initializeNative(JNIEnv *env, jobject instance,
-                                                      jobject activity, bool ARMode) {
+                                                      jobject activity, jobject assetManager, bool ARMode) {
     VrContext *context = new VrContext();
-    context->initialize(env, activity, ARMode);
+    context->initialize(env, activity, assetManager, ARMode);
     return (jlong) context;
 }
 

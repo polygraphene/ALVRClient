@@ -27,10 +27,10 @@ add_library( # Sets the name of the library.
              src/main/cpp/render.cpp
              src/main/cpp/latency_collector.cpp
              src/main/cpp/fec.cpp
+             src/main/cpp/asset.cpp
+             src/main/cpp/gltf_model.cpp
              ../ALVR-common/reedsolomon/rs.c
              )
-
-link_directories(src/main/jniLibs/${ANDROID_ABI})
 
 # Searches for a specified prebuilt library and stores the path as a
 # variable. Because CMake includes system libraries in the search path by

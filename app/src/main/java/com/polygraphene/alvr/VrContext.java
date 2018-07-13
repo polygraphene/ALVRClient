@@ -1,6 +1,7 @@
 package com.polygraphene.alvr;
 
 import android.app.Activity;
+import android.content.res.AssetManager;
 import android.view.Surface;
 
 public class VrContext {
@@ -11,8 +12,8 @@ public class VrContext {
 
     private long handle;
 
-    public void initialize(Activity activity, boolean ARMode) {
-        handle = initializeNative(activity, ARMode);
+    public void initialize(Activity activity, AssetManager assetManager, boolean ARMode) {
+        handle = initializeNative(activity, assetManager, ARMode);
     }
 
     public void destroy() {
@@ -83,7 +84,7 @@ public class VrContext {
         setFrameGeometryNative(handle, width, height);
     }
     
-    private native long initializeNative(Activity activity, boolean ARMode);
+    private native long initializeNative(Activity activity, AssetManager assetManager, boolean ARMode);
     private native void destroyNative(long handle);
 
     private native void onResumeNative(long handle);

@@ -25,7 +25,7 @@ public class LoadingTexture {
         mPaint = new Paint();
         mPaint.setTextSize(80);
         mPaint.setAntiAlias(true);
-        mPaint.setARGB(0xff, 0xe0, 0xe0, 0xe0);
+        mPaint.setARGB(0xff, 0x10, 0x10, 0x10);
 
         // Create texture for draw error/information messages.
         mTexture = texture;
@@ -35,7 +35,7 @@ public class LoadingTexture {
         // Draw text on center.
         Rect r = new Rect();
 
-        mBitmap.eraseColor(Color.BLACK);
+        mBitmap.eraseColor(Color.TRANSPARENT);
 
         mCanvas.getClipBounds(r);
         int cHeight = r.height();

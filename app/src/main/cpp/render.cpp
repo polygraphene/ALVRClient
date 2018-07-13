@@ -3,11 +3,11 @@
 
 #include "render.h"
 #include "utils.h"
+#include "gltf_model.h"
 
 static const int NUM_MULTI_SAMPLES = 1;
 Render_EGL egl;
 
-#define CHECK_GL_ERRORS 1
 #if !defined( EGL_OPENGL_ES3_BIT_KHR )
 #define EGL_OPENGL_ES3_BIT_KHR		0x0040
 #endif
@@ -163,45 +163,6 @@ static const char *GlFrameBufferStatusString(GLenum status) {
     }
 }
 
-#ifdef CHECK_GL_ERRORS
-
-static const char *GlErrorString(GLenum error) {
-    switch (error) {
-        case GL_NO_ERROR:
-            return "GL_NO_ERROR";
-        case GL_INVALID_ENUM:
-            return "GL_INVALID_ENUM";
-        case GL_INVALID_VALUE:
-            return "GL_INVALID_VALUE";
-        case GL_INVALID_OPERATION:
-            return "GL_INVALID_OPERATION";
-        case GL_INVALID_FRAMEBUFFER_OPERATION:
-            return "GL_INVALID_FRAMEBUFFER_OPERATION";
-        case GL_OUT_OF_MEMORY:
-            return "GL_OUT_OF_MEMORY";
-        default:
-            return "unknown";
-    }
-}
-
-static void GLCheckErrors(int line) {
-    for (int i = 0; i < 10; i++) {
-        const GLenum error = glGetError();
-        if (error == GL_NO_ERROR) {
-            break;
-        }
-        LOGE("GL error on line %d: %s", line, GlErrorString(error));
-    }
-}
-
-#define GL(func)        func; GLCheckErrors( __LINE__ );
-
-#else // CHECK_GL_ERRORS
-
-#define GL(func)        func;
-
-#endif // CHECK_GL_ERRORS
-
 static const char VERTEX_SHADER[] =
         "#ifndef DISABLE_MULTIVIEW\n"
                 "	#define DISABLE_MULTIVIEW 0\n"
@@ -304,29 +265,47 @@ static const char VERTEX_SHADER_LOADING[] =
                 "in vec4 vertexColor;\n"
                 "in mat4 vertexTransform;\n"
                 "in vec2 vertexUv;\n"
+                "in vec3 vertexNormal;\n"
                 "uniform mat4 mvpMatrix[NUM_VIEWS];\n"
-                "uniform lowp int EnableTestMode;\n"
+                "uniform lowp vec4 Color;\n"
+                "uniform mat4 mMatrix;\n"
                 "out vec4 fragmentColor;\n"
                 "out vec2 uv;\n"
+                "out lowp float fragmentLight;\n"
+                "out lowp vec3 lightPoint;\n"
+                "out lowp vec3 normal;\n"
+                "out lowp vec3 position;\n"
                 "void main()\n"
                 "{\n"
-                "	gl_Position = mvpMatrix[VIEW_ID] * vec4( vertexPosition, 1.0 );\n"
-                "   uv = vec2(vertexUv.x * 2.0, vertexUv.y);\n"
-                "   fragmentColor = vertexColor;\n"
+                "   lowp vec4 position4 = mMatrix * vec4( vertexPosition, 1.0 );\n"
+                "	gl_Position = mvpMatrix[VIEW_ID] * position4;\n"
+                "   uv = vertexUv;\n"
+                "   position = position4.xyz / position4.w;\n"
+                "   lowp vec4 lightPoint4 = mvpMatrix[VIEW_ID] * vec4(100.0, 10000.0, 100.0, 1.0);\n"
+                "   lightPoint = lightPoint4.xyz / lightPoint4.w;\n"
+                "   normal = normalize((mvpMatrix[VIEW_ID] * mMatrix * vec4(vertexNormal, 1.0)).xyz);\n"
+                "   lowp float light = clamp(dot(normal, normalize(vec3(0.3, 1.0, 0.3))), 0.3, 1.0);\n"
+                "   fragmentLight = light;\n"
+                "   fragmentColor = Color;\n"
                 "}\n";
 
 static const char FRAGMENT_SHADER_LOADING[] =
         "in lowp vec2 uv;\n"
                 "in lowp vec4 fragmentColor;\n"
+                "in lowp float fragmentLight;\n"
+                "in lowp vec3 lightPoint;\n"
+                "in lowp vec3 normal;\n"
+                "in lowp vec3 position;\n"
                 "out lowp vec4 outColor;\n"
                 "uniform sampler2D sTexture;\n"
-                "uniform lowp int EnableTestMode;\n"
+                "uniform lowp int Mode;\n"
                 "void main()\n"
                 "{\n"
-                "   if(EnableTestMode % 2 == 0){\n"
-                "	    outColor = texture(sTexture, uv);\n"
+                "   if(Mode == 0){\n"
+                "       outColor = vec4(0.2 * smoothstep(2.0, 10.0, length(position.xz)) + 0.7);\n"
+                "       outColor.a = 1.0;\n"
                 "   } else {\n"
-                "       outColor = fragmentColor;\n"
+                "	    outColor = texture(sTexture, uv);\n"
                 "   }\n"
                 "}\n";
 
@@ -736,7 +715,8 @@ ovrVertexAttribute ProgramVertexAttributes[] =
                 {VERTEX_ATTRIBUTE_LOCATION_POSITION,  "vertexPosition"},
                 {VERTEX_ATTRIBUTE_LOCATION_COLOR,     "vertexColor"},
                 {VERTEX_ATTRIBUTE_LOCATION_UV,        "vertexUv"},
-                {VERTEX_ATTRIBUTE_LOCATION_TRANSFORM, "vertexTransform"}
+                {VERTEX_ATTRIBUTE_LOCATION_TRANSFORM, "vertexTransform"},
+                {VERTEX_ATTRIBUTE_LOCATION_NORMAL,    "vertexNormal"}
         };
 
 void ovrGeometry_Clear(ovrGeometry *geometry) {
@@ -920,6 +900,9 @@ enum E1test {
     UNIFORM_MVP_MATRIX,
     UNIFORM_ENABLE_TEST_MODE,
     UNIFORM_ALPHA,
+    UNIFORM_COLOR,
+    UNIFORM_M_MATRIX,
+    UNIFORM_MODE
 };
 enum E2test {
     UNIFORM_TYPE_VECTOR4,
@@ -940,6 +923,9 @@ static ovrUniform ProgramUniforms[] =
                 {UNIFORM_MVP_MATRIX,       UNIFORM_TYPE_MATRIX4X4, "mvpMatrix"},
                 {UNIFORM_ENABLE_TEST_MODE, UNIFORM_TYPE_INT,       "EnableTestMode"},
                 {UNIFORM_ALPHA, UNIFORM_TYPE_FLOAT,       "alpha"},
+                {UNIFORM_COLOR, UNIFORM_TYPE_VECTOR4,       "Color"},
+                {UNIFORM_M_MATRIX, UNIFORM_TYPE_MATRIX4X4,       "mMatrix"},
+                {UNIFORM_MODE, UNIFORM_TYPE_INT,       "Mode"},
         };
 
 static const char *programVersion = "#version 300 es\n";
@@ -1095,6 +1081,8 @@ ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMul
     renderer->CameraTexture = CameraTexture;
     renderer->SceneCreated = false;
     renderer->ARMode = ARMode;
+    renderer->loadingScene = new GltfModel();
+    renderer->loadingScene->load();
 }
 
 
@@ -1183,8 +1171,6 @@ ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava
         GL(glCullFace(GL_BACK));
         GL(glViewport(0, 0, frameBuffer->Width, frameBuffer->Height));
         GL(glScissor(0, 0, frameBuffer->Width, frameBuffer->Height));
-        GL(glClearColor(0.0f, 0.0f, 0.0f, 1.0f));
-        GL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 
         //enableTestMode = 0;
         GL(glUniform1i(renderer->Program.UniformLocation[UNIFORM_ENABLE_TEST_MODE], enableTestMode));
@@ -1240,44 +1226,37 @@ ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava
                 GL(glDrawElements(GL_TRIANGLES, renderer->TestMode.IndexCount, GL_UNSIGNED_SHORT, NULL));
             }
         } else if (loading) {
-            GL(glBindVertexArray(renderer->Panel.VertexArrayObject));
+            GL(glClearColor(0.88f, 0.95f, 0.95f, 1.0f));
+            GL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
+
+            GL(glEnable(GL_BLEND));
+            GL(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
+
+            ovrMatrix4f mvpMatrix[2];
+            mvpMatrix[1] = mvpMatrix[0] = ovrMatrix4f_CreateTranslation(0, -1.5f, 0);
+
+            mvpMatrix[0] = ovrMatrix4f_Multiply(&tracking->Eye[0].ViewMatrix,
+                                                &mvpMatrix[0]);
+            mvpMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ViewMatrix,
+                                                &mvpMatrix[1]);
+            mvpMatrix[0] = ovrMatrix4f_Multiply(&tracking->Eye[0].ProjectionMatrix,
+                                                &mvpMatrix[0]);
+            mvpMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ProjectionMatrix,
+                                                &mvpMatrix[1]);
+
+            GL(glUniformMatrix4fv(renderer->ProgramLoading.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
+                                  (float *) mvpMatrix));
             GL(glActiveTexture(GL_TEXTURE0));
             GL(glBindTexture(GL_TEXTURE_2D, renderer->LoadingTexture));
-
-            // Display information message on front and back of user.
-            for (int i = 0; i < 2; i++) {
-                ovrMatrix4f mvpMatrix[2];
-                mvpMatrix[0] = ovrMatrix4f_CreateIdentity();
-                mvpMatrix[1] = ovrMatrix4f_CreateIdentity();
-
-                if (i == 0) {
-                    ovrMatrix4f translation = ovrMatrix4f_CreateTranslation(0, 0, -3);
-                    mvpMatrix[0] = ovrMatrix4f_Multiply(&translation, &mvpMatrix[0]);
-                } else {
-                    ovrMatrix4f rotation = ovrMatrix4f_CreateRotation(0, (float)M_PI, 0);
-                    mvpMatrix[0] = ovrMatrix4f_Multiply(&rotation, &mvpMatrix[0]);
-
-                    ovrMatrix4f translation = ovrMatrix4f_CreateTranslation(0, 0, 3);
-                    mvpMatrix[0] = ovrMatrix4f_Multiply(&translation, &mvpMatrix[0]);
-                }
-
-                mvpMatrix[1] = mvpMatrix[0];
-
-                mvpMatrix[0] = ovrMatrix4f_Multiply(&tracking->Eye[0].ViewMatrix,
-                                                    &mvpMatrix[0]);
-                mvpMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ViewMatrix,
-                                                    &mvpMatrix[1]);
-                mvpMatrix[0] = ovrMatrix4f_Multiply(&tracking->Eye[0].ProjectionMatrix,
-                                                    &mvpMatrix[0]);
-                mvpMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ProjectionMatrix,
-                                                    &mvpMatrix[1]);
-
-                GL(glUniformMatrix4fv(renderer->Program.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
-                                      (float *) mvpMatrix));
-
-                GL(glDrawElements(GL_TRIANGLES, renderer->Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
-            }
+            renderer->loadingScene->drawScene(VERTEX_ATTRIBUTE_LOCATION_POSITION,
+                                              VERTEX_ATTRIBUTE_LOCATION_UV,
+                                              VERTEX_ATTRIBUTE_LOCATION_NORMAL,
+                                              renderer->ProgramLoading.UniformLocation[UNIFORM_COLOR],
+                                              renderer->ProgramLoading.UniformLocation[UNIFORM_M_MATRIX],
+                                              renderer->ProgramLoading.UniformLocation[UNIFORM_MODE]);
         } else {
+            GL(glClear(GL_DEPTH_BUFFER_BIT));
+
             ovrMatrix4f mvpMatrix[2];
             mvpMatrix[0] = ovrMatrix4f_CreateIdentity();
             mvpMatrix[1] = ovrMatrix4f_CreateIdentity();
