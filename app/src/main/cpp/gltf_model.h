@@ -19,14 +19,14 @@ class GltfModel {
     int m_normal;
     GLint m_color;
     GLint m_mMatrix;
-    GLint m_isMessage;
+    GLint m_mode;
 
     void drawNodeTree(int node_i, const ovrMatrix4f &transform);
     void drawNode(int node_i, const ovrMatrix4f &transform);
     ovrMatrix4f createNodeTrasform(const ovrMatrix4f &baseTransform, const tinygltf::Node &node);
 public:
     void load();
-    void drawScene(int position, int uv, int normal, GLint color, GLint mMatrix, GLint isMessage);
+    void drawScene(int position, int uv, int normal, GLint color, GLint mMatrix, GLint mode);
 };
 
 

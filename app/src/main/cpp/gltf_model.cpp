@@ -43,7 +43,7 @@ void GltfModel::load() {
 }
 
 void GltfModel::drawScene(int position, int uv,
-                          int normal, GLint color, GLint mMatrix, GLint isMessage) {
+                          int normal, GLint color, GLint mMatrix, GLint mode) {
     auto &scene = m_model.scenes[m_model.defaultScene];
 
     m_position = position;
@@ -51,7 +51,7 @@ void GltfModel::drawScene(int position, int uv,
     m_normal = normal;
     m_color = color;
     m_mMatrix = mMatrix;
-    m_isMessage = isMessage;
+    m_mode = mode;
 
     GL(glBindVertexArray(m_vao));
 
@@ -108,7 +108,6 @@ void GltfModel::drawNode(int node_i, const ovrMatrix4f &transform) {
                 LOGE("accessor.type is invalid. type=%d", accessor.type);
             }
 
-            LOGE("accessor:%s %d", name.c_str(), att_i);
             int index = -1;
             if (name == "POSITION") {
                 index = m_position;
@@ -142,7 +141,13 @@ void GltfModel::drawNode(int node_i, const ovrMatrix4f &transform) {
 
         GL(glUniformMatrix4fv(m_mMatrix, 1, true, (float *) &transform));
 
-        GL(glUniform1i(m_isMessage, material.name == "Message"));
+        if(material.name == "Plane") {
+            GL(glUniform1i(m_mode, 0));
+        }else if(material.name == "Message") {
+            GL(glUniform1i(m_mode, 1));
+        }else{
+            GL(glUniform1i(m_mode, 2));
+        }
 
         auto &indexAccessor = m_model.accessors[prim.indices];
         auto &bufferView = m_model.bufferViews[indexAccessor.bufferView];

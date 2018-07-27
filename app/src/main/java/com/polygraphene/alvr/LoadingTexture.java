@@ -16,6 +16,7 @@ public class LoadingTexture {
     private Canvas mCanvas = null;
     private Bitmap mBitmap = null;
     private Paint mPaint = null;
+    private String mCurrentText = "";
 
     void initializeMessageCanvas(int texture){
         mBitmap = Bitmap.createBitmap(1024, 1024, Bitmap.Config.ARGB_4444);
@@ -32,10 +33,15 @@ public class LoadingTexture {
     }
 
     void drawMessage(String text) {
+        if (text.equals(mCurrentText)) {
+            return;
+        }
+        mCurrentText = text;
+
         // Draw text on center.
         Rect r = new Rect();
 
-        mBitmap.eraseColor(Color.TRANSPARENT);
+        mBitmap.eraseColor(0x00e0f0f0);
 
         mCanvas.getClipBounds(r);
         int cHeight = r.height();

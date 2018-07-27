@@ -302,10 +302,30 @@ static const char FRAGMENT_SHADER_LOADING[] =
                 "void main()\n"
                 "{\n"
                 "   if(Mode == 0){\n"
-                "       outColor = vec4(0.2 * smoothstep(2.0, 10.0, length(position.xz)) + 0.7);\n"
+                "       lowp float distance = length(position.xz);\n"
+                "       // Pick a coordinate to visualize in a grid\n"
+                "       lowp vec2 coord = position.xz / 2.0;\n"
+                "       // Compute anti-aliased world-space grid lines\n"
+                "       lowp vec2 grid = abs(fract(coord - 0.5) - 0.5) / fwidth(coord);\n"
+                "       lowp float line = min(grid.x, grid.y);\n"
+                "       outColor.rgb = vec3(min(line, 1.0) * (1.0 - exp(-distance / 5.0 - 0.01) / 4.0));\n"
+                "       if(distance > 3.0){\n"
+                "           lowp float coef = 1.0 - 3.0 / distance;\n"
+                "           outColor.rgb = (1.0 - coef) * outColor.rgb + coef * vec3(1.0, 1.0, 1.0);\n"
+                "       }\n"
                 "       outColor.a = 1.0;\n"
-                "   } else {\n"
+                "   } else if(Mode == 1) {\n"
                 "	    outColor = texture(sTexture, uv);\n"
+                "   } else {\n"
+                "       lowp float coef = 1.0;\n"
+                "       if(position.y < 50.0){\n"
+                "           coef = position.y / 100.0;\n"
+                "       }else if(position.y < 100.0){\n"
+                "           coef = (position.y - 50.0) / 50.0 * 0.3 + 0.5;\n"
+                "       }else{\n"
+                "           coef = (position.y - 100.0) / 150.0 * 0.2 + 0.8;\n"
+                "       }\n"
+                "       outColor = vec4(0.8, 0.8, 1.0, 1.0) * coef + vec4(1.0, 1.0, 1.0, 1.0) * (1.0 - coef);\n"
                 "   }\n"
                 "}\n";
 
@@ -1155,13 +1175,19 @@ ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava
 
         if (loading) {
             GL(glUseProgram(renderer->ProgramLoading.Program));
+            if (renderer->ProgramLoading.UniformLocation[UNIFORM_VIEW_ID] >=
+                0)  // NOTE: will not be present when multiview path is enabled.
+            {
+                GL(glUniform1i(renderer->ProgramLoading.UniformLocation[UNIFORM_VIEW_ID], eye));
+            }
         } else {
             GL(glUseProgram(renderer->Program.Program));
-        }
-        if (renderer->Program.UniformLocation[UNIFORM_VIEW_ID] >=
-            0)  // NOTE: will not be present when multiview path is enabled.
-        {
-            GL(glUniform1i(renderer->Program.UniformLocation[UNIFORM_VIEW_ID], eye));
+            GL(glUniform1i(renderer->Program.UniformLocation[UNIFORM_ENABLE_TEST_MODE], enableTestMode));
+            if (renderer->Program.UniformLocation[UNIFORM_VIEW_ID] >=
+                0)  // NOTE: will not be present when multiview path is enabled.
+            {
+                GL(glUniform1i(renderer->Program.UniformLocation[UNIFORM_VIEW_ID], eye));
+            }
         }
         GL(glEnable(GL_SCISSOR_TEST));
         GL(glDepthMask(GL_TRUE));
@@ -1173,7 +1199,6 @@ ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava
         GL(glScissor(0, 0, frameBuffer->Width, frameBuffer->Height));
 
         //enableTestMode = 0;
-        GL(glUniform1i(renderer->Program.UniformLocation[UNIFORM_ENABLE_TEST_MODE], enableTestMode));
         if ((enableTestMode & 1) != 0) {
             int N = 10;
             for (int i = 0; i < N; i++) {
@@ -1226,6 +1251,8 @@ ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava
                 GL(glDrawElements(GL_TRIANGLES, renderer->TestMode.IndexCount, GL_UNSIGNED_SHORT, NULL));
             }
         } else if (loading) {
+            // For drawing back frace of the sphere in gltf
+            GL(glDisable(GL_CULL_FACE));
             GL(glClearColor(0.88f, 0.95f, 0.95f, 1.0f));
             GL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 
