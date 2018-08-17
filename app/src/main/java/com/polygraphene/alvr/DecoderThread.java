@@ -91,6 +91,7 @@ class DecoderThread extends ThreadBase {
             mAvailableInputs.notifyAll();
         }
         mNalParser.notifyWaitingThread();
+        mQueue.stop();
     }
 
     protected void run() {
@@ -269,7 +270,7 @@ class DecoderThread extends ThreadBase {
     class Callback extends MediaCodec.Callback {
         @Override
         public void onInputBufferAvailable(@NonNull MediaCodec codec, int index) {
-            //frameLog("onInputBufferAvailable " + index + " " + mBuf);
+            frameLog("onInputBufferAvailable " + index);
 
             synchronized (mAvailableInputs) {
                 mAvailableInputs.add(index);

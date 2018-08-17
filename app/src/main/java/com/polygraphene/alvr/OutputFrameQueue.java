@@ -38,6 +38,7 @@ public class OutputFrameQueue {
             mCodec.releaseOutputBuffer(index, false);
             return;
         }
+
         Element elem = new Element();
         elem.index = index;
         elem.frameIndex = foundFrameIndex;
@@ -57,7 +58,7 @@ public class OutputFrameQueue {
                 mCodec.releaseOutputBuffer(removeElement.index, false);
             }
         }
-        Log.e(TAG, "Current queue state=" + mQueue.size() + " / " + mQueueSize);
+        Utils.frameLog(foundFrameIndex, "Current queue state=" + mQueue.size() + "/" + mQueueSize + " pushed index=" + index);
         notifyAll();
     }
 

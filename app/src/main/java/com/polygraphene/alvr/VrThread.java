@@ -106,11 +106,7 @@ class VrThread extends Thread {
 
     public void onPause() {
         Log.v(TAG, "VrThread.onPause: Stopping worker threads.");
-        synchronized (mWaiter) {
-            mResumed = false;
-            mWaiter.notifyAll();
-        }
-        // DecoderThread must be stopped before ReceiverThread
+        // DecoderThread must be stopped before ReceiverThread and setting mResumed=false.
         if (mDecoderThread != null) {
             Log.v(TAG, "VrThread.onPause: Stopping DecoderThread.");
             mDecoderThread.stopAndWait();
@@ -118,6 +114,12 @@ class VrThread extends Thread {
         if (mReceiverThread != null) {
             Log.v(TAG, "VrThread.onPause: Stopping ReceiverThread.");
             mReceiverThread.stopAndWait();
+        }
+        // VrThread rendering loop calls mDecoderThread.render and which captures mWaiter lock.
+        // So we need to stop DecoderThread before gain the lock.
+        synchronized (mWaiter) {
+            mResumed = false;
+            mWaiter.notifyAll();
         }
 
         Log.v(TAG, "VrThread.onPause: mVrContext.onPause().");
@@ -247,12 +249,15 @@ class VrThread extends Thread {
             if (frameIndex == -1) {
                 return -1;
             }
-            while (!mFrameAvailable) {
+            while (!mFrameAvailable && mResumed) {
                 try {
                     mWaiter.wait();
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
+            }
+            if(!mResumed) {
+                return -1;
             }
             mSurfaceTexture.updateTexImage();
             return frameIndex;
