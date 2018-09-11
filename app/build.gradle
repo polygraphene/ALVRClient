@@ -33,7 +33,6 @@ android {
         cmake {
             path "CMakeLists.txt"
         }
-
     }
     sourceSets {
         main {
@@ -48,7 +47,7 @@ android {
             }
         }
     }
-    flavorDimensions "distribute", "ar"
+    flavorDimensions "distribute", "ar", "sdk"
     productFlavors {
         Github {
             applicationId 'com.polygraphene.alvr'
@@ -68,6 +67,25 @@ android {
             applicationIdSuffix '.ar'
             minSdkVersion 24
         }
+        Ovr {
+            // Oculus Mobile SDK
+            dimension "sdk"
+            externalNativeBuild {
+                cmake {
+                    arguments "-DVRSDK=ovr"
+                }
+            }
+        }
+        Daydream {
+            // Google VR SDK
+            dimension "sdk"
+            applicationIdSuffix ".daydream"
+            externalNativeBuild {
+                cmake {
+                    arguments "-DVRSDK=daydream"
+                }
+            }
+        }
     }
 }
 
@@ -79,4 +97,6 @@ dependencies {
     androidTestImplementation 'com.android.support.test:runner:1.0.1'
     androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.1'
     ARCoreImplementation('com.google.ar:core:1.2.1')
+    DaydreamImplementation('com.google.vr:sdk-base:1.160.0')
+    DaydreamImplementation('com.google.vr:sdk-controller:1.160.0')
 }

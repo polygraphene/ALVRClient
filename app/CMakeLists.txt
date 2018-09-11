@@ -14,6 +14,11 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
 
 link_directories(src/main/jniLibs/${ANDROID_ABI})
 
+if (VRSDK STREQUAL 'ovr')
+    set(VRSOURCE "src/main/cpp/vr_context.cpp")
+elseif (VRSDK STREQUAL 'gvr')
+endif()
+
 add_library( # Sets the name of the library.
              native-lib
 
@@ -23,13 +28,13 @@ add_library( # Sets the name of the library.
              # Provides a relative path to your source file(s).
              src/main/cpp/udp.cpp
              src/main/cpp/nal.cpp
-             src/main/cpp/vr_context.cpp
              src/main/cpp/render.cpp
              src/main/cpp/latency_collector.cpp
              src/main/cpp/fec.cpp
              src/main/cpp/asset.cpp
              src/main/cpp/gltf_model.cpp
              ../ALVR-common/reedsolomon/rs.c
+             ${VRSOURECE}
              )
 
 # Searches for a specified prebuilt library and stores the path as a
