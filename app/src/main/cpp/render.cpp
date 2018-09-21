@@ -196,8 +196,8 @@ static const char VERTEX_SHADER[] =
                 "}\n";
 
 static const char FRAGMENT_SHADER[] =
-        "#extension GL_OES_EGL_image_external_essl3 : require\n"
-                "#extension GL_OES_EGL_image_external : require\n"
+        "#extension GL_OES_EGL_image_external_essl3 : enable\n"
+                "#extension GL_OES_EGL_image_external : enable\n"
                 "in lowp vec2 uv;\n"
                 "in lowp vec4 fragmentColor;\n"
                 "out lowp vec4 outColor;\n"
@@ -213,8 +213,8 @@ static const char FRAGMENT_SHADER[] =
                 "}\n";
 
 static const char FRAGMENT_SHADER_AR[] =
-        "#extension GL_OES_EGL_image_external_essl3 : require\n"
-                "#extension GL_OES_EGL_image_external : require\n"
+        "#extension GL_OES_EGL_image_external_essl3 : enable\n"
+                "#extension GL_OES_EGL_image_external : enable\n"
                 "in lowp vec2 uv;\n"
                 "in lowp vec4 fragmentColor;\n"
                 "out lowp vec4 outColor;\n"
