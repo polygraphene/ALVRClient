@@ -257,6 +257,7 @@ class VrThread extends Thread {
                 }
             }
             if(!mResumed) {
+                Log.i(TAG, "Exit waitFrame. mResumed=false.");
                 return -1;
             }
             mSurfaceTexture.updateTexImage();
