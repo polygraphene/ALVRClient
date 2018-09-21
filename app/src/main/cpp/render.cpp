@@ -792,6 +792,7 @@ void ovrGeometry_CreatePanel(ovrGeometry *geometry) {
 
     geometry->VertexAttribs[2].Index = -1;
     geometry->VertexAttribs[3].Index = -1;
+    geometry->VertexAttribs[4].Index = -1;
 
     GL(glGenBuffers(1, &geometry->VertexBuffer));
     GL(glBindBuffer(GL_ARRAY_BUFFER, geometry->VertexBuffer));
@@ -865,6 +866,7 @@ void ovrGeometry_CreateTestMode(ovrGeometry *geometry) {
     geometry->VertexAttribs[2].Pointer = (const GLvoid *) offsetof(ovrCubeVertices, uv);
 
     geometry->VertexAttribs[3].Index = -1;
+    geometry->VertexAttribs[4].Index = -1;
 
     GL(glGenBuffers(1, &geometry->VertexBuffer));
     GL(glBindBuffer(GL_ARRAY_BUFFER, geometry->VertexBuffer));
@@ -1083,6 +1085,8 @@ ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMul
         , int SurfaceTextureID, int LoadingTexture, int CameraTexture, bool ARMode) {
     renderer->NumBuffers = useMultiview ? 1 : VRAPI_FRAME_LAYER_EYE_MAX;
     renderer->UseMultiview = useMultiview;
+
+#ifdef OVR_SDK
     // Create the frame buffers.
     for (int eye = 0; eye < renderer->NumBuffers; eye++) {
         ovrFramebuffer_Create(&renderer->FrameBuffer[eye], useMultiview,
@@ -1091,6 +1095,7 @@ ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMul
                               NUM_MULTI_SAMPLES);
 
     }
+#endif
 
     renderer->Fence = (ovrFence *) malloc(MAX_FENCES * sizeof(ovrFence));
     for (int i = 0; i < MAX_FENCES; i++) {
@@ -1134,9 +1139,11 @@ void ovrRenderer_Destroy(ovrRenderer *renderer) {
         ovrGeometry_Destroy(&renderer->TestMode);
     }
 
+#ifdef OVR_SDK
     for (int eye = 0; eye < renderer->NumBuffers; eye++) {
         ovrFramebuffer_Destroy(&renderer->FrameBuffer[eye]);
     }
+#endif
 
     for (int i = 0; i < MAX_FENCES; i++) {
         ovrFence_Destroy(&renderer->Fence[i]);
@@ -1173,180 +1180,20 @@ ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava
         ovrFramebuffer *frameBuffer = &renderer->FrameBuffer[eye];
         ovrFramebuffer_SetCurrent(frameBuffer);
 
-        if (loading) {
-            GL(glUseProgram(renderer->ProgramLoading.Program));
-            if (renderer->ProgramLoading.UniformLocation[UNIFORM_VIEW_ID] >=
-                0)  // NOTE: will not be present when multiview path is enabled.
-            {
-                GL(glUniform1i(renderer->ProgramLoading.UniformLocation[UNIFORM_VIEW_ID], eye));
-            }
-        } else {
-            GL(glUseProgram(renderer->Program.Program));
-            GL(glUniform1i(renderer->Program.UniformLocation[UNIFORM_ENABLE_TEST_MODE], enableTestMode));
-            if (renderer->Program.UniformLocation[UNIFORM_VIEW_ID] >=
-                0)  // NOTE: will not be present when multiview path is enabled.
-            {
-                GL(glUniform1i(renderer->Program.UniformLocation[UNIFORM_VIEW_ID], eye));
-            }
-        }
-        GL(glEnable(GL_SCISSOR_TEST));
-        GL(glDepthMask(GL_TRUE));
-        GL(glEnable(GL_DEPTH_TEST));
-        GL(glDepthFunc(GL_LEQUAL));
-        GL(glEnable(GL_CULL_FACE));
-        GL(glCullFace(GL_BACK));
-        GL(glViewport(0, 0, frameBuffer->Width, frameBuffer->Height));
-        GL(glScissor(0, 0, frameBuffer->Width, frameBuffer->Height));
+        ovrMatrix4f mvpMatrix[2];
+        mvpMatrix[1] = mvpMatrix[0] = ovrMatrix4f_CreateTranslation(0, -1.5f, 0);
 
-        //enableTestMode = 0;
-        if ((enableTestMode & 1) != 0) {
-            int N = 10;
-            for (int i = 0; i < N; i++) {
-                ovrMatrix4f TestModeMatrix[2];
-                TestModeMatrix[0] = ovrMatrix4f_CreateIdentity();
-                if (i < 0) {
-                    ovrMatrix4f scale = ovrMatrix4f_CreateScale(10, 10, 10);
-                    TestModeMatrix[0] = ovrMatrix4f_Multiply(&scale, &TestModeMatrix[0]);
-                }
-                double theta = 2.0 * M_PI * i / (1.0 * N);
-                ovrMatrix4f translation = ovrMatrix4f_CreateTranslation(float(5.0 * cos(theta)), 0,
-                                                                        float(5 * sin(theta)));
-                TestModeMatrix[0] = ovrMatrix4f_Multiply(&translation, &TestModeMatrix[0]);
+        mvpMatrix[0] = ovrMatrix4f_Multiply(&tracking->Eye[0].ViewMatrix,
+                                            &mvpMatrix[0]);
+        mvpMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ViewMatrix,
+                                            &mvpMatrix[1]);
+        mvpMatrix[0] = ovrMatrix4f_Multiply(&tracking->Eye[0].ProjectionMatrix,
+                                            &mvpMatrix[0]);
+        mvpMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ProjectionMatrix,
+                                            &mvpMatrix[1]);
 
-                TestModeMatrix[1] = TestModeMatrix[0];
-
-                TestModeMatrix[0] = ovrMatrix4f_Multiply(&tracking->Eye[0].ViewMatrix,
-                                                         &TestModeMatrix[0]);
-                TestModeMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ViewMatrix,
-                                                         &TestModeMatrix[1]);
-                TestModeMatrix[0] = ovrMatrix4f_Multiply(&tracking->Eye[0].ProjectionMatrix,
-                                                         &TestModeMatrix[0]);
-                TestModeMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ProjectionMatrix,
-                                                         &TestModeMatrix[1]);
-
-                if (i == 0) {
-                    LOG("theta:%f", theta);
-                    LOG("rotate:%f %f %f %f", tracking->HeadPose.Pose.Orientation.x,
-                        tracking->HeadPose.Pose.Orientation.y,
-                        tracking->HeadPose.Pose.Orientation.z, tracking->HeadPose.Pose.Orientation.w
-                    );
-                    LOG("tran:\n%s", DumpMatrix(&translation).c_str());
-                    LOG("view:\n%s", DumpMatrix(&tracking->Eye[0].ViewMatrix).c_str());
-                    LOG("proj:\n%s", DumpMatrix(&tracking->Eye[0].ProjectionMatrix).c_str());
-                    LOG("mm:\n%s", DumpMatrix(&TestModeMatrix[0]).c_str());
-                }
-
-                GL(glUniformMatrix4fv(renderer->Program.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
-                                      (float *) TestModeMatrix));
-                GL(glBindVertexArray(renderer->TestMode.VertexArrayObject));
-
-                if (i < 2) {
-                    GL(glActiveTexture(GL_TEXTURE0));
-                    GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->SurfaceTextureID));
-                } else {
-                    GL(glActiveTexture(GL_TEXTURE0));
-                    GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
-                }
-
-                GL(glDrawElements(GL_TRIANGLES, renderer->TestMode.IndexCount, GL_UNSIGNED_SHORT, NULL));
-            }
-        } else if (loading) {
-            // For drawing back frace of the sphere in gltf
-            GL(glDisable(GL_CULL_FACE));
-            GL(glClearColor(0.88f, 0.95f, 0.95f, 1.0f));
-            GL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
-
-            GL(glEnable(GL_BLEND));
-            GL(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
-
-            ovrMatrix4f mvpMatrix[2];
-            mvpMatrix[1] = mvpMatrix[0] = ovrMatrix4f_CreateTranslation(0, -1.5f, 0);
-
-            mvpMatrix[0] = ovrMatrix4f_Multiply(&tracking->Eye[0].ViewMatrix,
-                                                &mvpMatrix[0]);
-            mvpMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ViewMatrix,
-                                                &mvpMatrix[1]);
-            mvpMatrix[0] = ovrMatrix4f_Multiply(&tracking->Eye[0].ProjectionMatrix,
-                                                &mvpMatrix[0]);
-            mvpMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ProjectionMatrix,
-                                                &mvpMatrix[1]);
-
-            GL(glUniformMatrix4fv(renderer->ProgramLoading.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
-                                  (float *) mvpMatrix));
-            GL(glActiveTexture(GL_TEXTURE0));
-            GL(glBindTexture(GL_TEXTURE_2D, renderer->LoadingTexture));
-            renderer->loadingScene->drawScene(VERTEX_ATTRIBUTE_LOCATION_POSITION,
-                                              VERTEX_ATTRIBUTE_LOCATION_UV,
-                                              VERTEX_ATTRIBUTE_LOCATION_NORMAL,
-                                              renderer->ProgramLoading.UniformLocation[UNIFORM_COLOR],
-                                              renderer->ProgramLoading.UniformLocation[UNIFORM_M_MATRIX],
-                                              renderer->ProgramLoading.UniformLocation[UNIFORM_MODE]);
-        } else {
-            GL(glClear(GL_DEPTH_BUFFER_BIT));
-
-            ovrMatrix4f mvpMatrix[2];
-            mvpMatrix[0] = ovrMatrix4f_CreateIdentity();
-            mvpMatrix[1] = ovrMatrix4f_CreateIdentity();
-
-            GL(glBindVertexArray(renderer->Panel.VertexArrayObject));
-
-            GL(glUniformMatrix4fv(renderer->Program.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
-                                  (float *) mvpMatrix));
-
-            if(AROverlayMode == 0) {
-                // VR 100%
-                GL(glUniform1f(renderer->Program.UniformLocation[UNIFORM_ALPHA], 2.0f));
-                GL(glActiveTexture(GL_TEXTURE0));
-                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->SurfaceTextureID));
-
-                GL(glDrawElements(GL_TRIANGLES, renderer->Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
-            }else {
-                if(AROverlayMode == 1) {
-                    // AR 30% VR 70%
-                    GL(glUniform1f(renderer->Program.UniformLocation[UNIFORM_ALPHA], 0.7f));
-                }else if(AROverlayMode == 2) {
-                    // AR 70% VR 30%
-                    GL(glUniform1f(renderer->Program.UniformLocation[UNIFORM_ALPHA], 0.3f));
-                }else if(AROverlayMode == 3) {
-                    // AR 100%
-                    GL(glUniform1f(renderer->Program.UniformLocation[UNIFORM_ALPHA], -2.0f));
-                }
-                GL(glActiveTexture(GL_TEXTURE0));
-                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->SurfaceTextureID));
-                GL(glActiveTexture(GL_TEXTURE1));
-                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->CameraTexture));
-                GL(glDrawElements(GL_TRIANGLES, renderer->Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
-            }
-        }
-
-        GL(glBindVertexArray(0));
-        if (loading) {
-            GL(glBindTexture(GL_TEXTURE_2D, 0));
-        } else {
-            GL(glActiveTexture(GL_TEXTURE0));
-            GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
-            GL(glActiveTexture(GL_TEXTURE1));
-            GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
-        }
-        GL(glUseProgram(0));
-
-        // Explicitly clear the border texels to black when GL_CLAMP_TO_BORDER is not available.
-        if (glExtensions.EXT_texture_border_clamp == false) {
-            // Clear to fully opaque black.
-            GL(glClearColor(0.0f, 0.0f, 0.0f, 1.0f));
-            // bottom
-            GL(glScissor(0, 0, frameBuffer->Width, 1));
-            GL(glClear(GL_COLOR_BUFFER_BIT));
-            // top
-            GL(glScissor(0, frameBuffer->Height - 1, frameBuffer->Width, 1));
-            GL(glClear(GL_COLOR_BUFFER_BIT));
-            // left
-            GL(glScissor(0, 0, 1, frameBuffer->Height));
-            GL(glClear(GL_COLOR_BUFFER_BIT));
-            // right
-            GL(glScissor(frameBuffer->Width - 1, 0, 1, frameBuffer->Height));
-            GL(glClear(GL_COLOR_BUFFER_BIT));
-        }
+        Recti viewport = {0, 0, frameBuffer->Width, frameBuffer->Height};
+        renderEye(eye, mvpMatrix, &viewport, renderer, tracking, loading, enableTestMode, AROverlayMode);
 
         ovrFramebuffer_Resolve(frameBuffer);
         ovrFramebuffer_Advance(frameBuffer);
@@ -1362,5 +1209,172 @@ ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava
     *completionFence = (size_t) fence->Sync;
 
     return layer;
+}
+
+void renderEye(int eye, ovrMatrix4f mvpMatrix[2], Recti *viewport, ovrRenderer *renderer, const ovrTracking2 *tracking,
+               bool loading, int enableTestMode, int AROverlayMode) {
+    if (loading) {
+        GL(glUseProgram(renderer->ProgramLoading.Program));
+        if (renderer->ProgramLoading.UniformLocation[UNIFORM_VIEW_ID] >=
+            0)  // NOTE: will not be present when multiview path is enabled.
+        {
+            GL(glUniform1i(renderer->ProgramLoading.UniformLocation[UNIFORM_VIEW_ID], eye));
+        }
+    } else {
+        GL(glUseProgram(renderer->Program.Program));
+        GL(glUniform1i(renderer->Program.UniformLocation[UNIFORM_ENABLE_TEST_MODE], enableTestMode));
+        if (renderer->Program.UniformLocation[UNIFORM_VIEW_ID] >=
+            0)  // NOTE: will not be present when multiview path is enabled.
+        {
+            GL(glUniform1i(renderer->Program.UniformLocation[UNIFORM_VIEW_ID], eye));
+        }
+    }
+    GL(glEnable(GL_SCISSOR_TEST));
+    GL(glDepthMask(GL_TRUE));
+    GL(glEnable(GL_DEPTH_TEST));
+    GL(glDepthFunc(GL_LEQUAL));
+    GL(glEnable(GL_CULL_FACE));
+    GL(glCullFace(GL_BACK));
+    GL(glViewport(viewport->x, viewport->y, viewport->width, viewport->height));
+    GL(glScissor(viewport->x, viewport->y, viewport->width, viewport->height));
+
+    //enableTestMode = 0;
+    if ((enableTestMode & 1) != 0) {
+        int N = 10;
+        for (int i = 0; i < N; i++) {
+            ovrMatrix4f TestModeMatrix[2];
+            TestModeMatrix[0] = ovrMatrix4f_CreateIdentity();
+            if (i < 0) {
+                ovrMatrix4f scale = ovrMatrix4f_CreateScale(10, 10, 10);
+                TestModeMatrix[0] = ovrMatrix4f_Multiply(&scale, &TestModeMatrix[0]);
+            }
+            double theta = 2.0 * M_PI * i / (1.0 * N);
+            ovrMatrix4f translation = ovrMatrix4f_CreateTranslation(float(5.0 * cos(theta)), 0,
+                                                                    float(5 * sin(theta)));
+            TestModeMatrix[0] = ovrMatrix4f_Multiply(&translation, &TestModeMatrix[0]);
+
+            TestModeMatrix[1] = TestModeMatrix[0];
+
+            TestModeMatrix[0] = ovrMatrix4f_Multiply(&tracking->Eye[0].ViewMatrix,
+                                                     &TestModeMatrix[0]);
+            TestModeMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ViewMatrix,
+                                                     &TestModeMatrix[1]);
+            TestModeMatrix[0] = ovrMatrix4f_Multiply(&tracking->Eye[0].ProjectionMatrix,
+                                                     &TestModeMatrix[0]);
+            TestModeMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ProjectionMatrix,
+                                                     &TestModeMatrix[1]);
+
+            if (i == 0) {
+                LOG("theta:%f", theta);
+                LOG("rotate:%f %f %f %f", tracking->HeadPose.Pose.Orientation.x,
+                    tracking->HeadPose.Pose.Orientation.y,
+                    tracking->HeadPose.Pose.Orientation.z, tracking->HeadPose.Pose.Orientation.w
+                );
+                LOG("tran:\n%s", DumpMatrix(&translation).c_str());
+                LOG("view:\n%s", DumpMatrix(&tracking->Eye[0].ViewMatrix).c_str());
+                LOG("proj:\n%s", DumpMatrix(&tracking->Eye[0].ProjectionMatrix).c_str());
+                LOG("mm:\n%s", DumpMatrix(&TestModeMatrix[0]).c_str());
+            }
+
+            GL(glUniformMatrix4fv(renderer->Program.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
+                                  (float *) TestModeMatrix));
+            GL(glBindVertexArray(renderer->TestMode.VertexArrayObject));
+
+            if (i < 2) {
+                GL(glActiveTexture(GL_TEXTURE0));
+                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->SurfaceTextureID));
+            } else {
+                GL(glActiveTexture(GL_TEXTURE0));
+                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
+            }
+
+            GL(glDrawElements(GL_TRIANGLES, renderer->TestMode.IndexCount, GL_UNSIGNED_SHORT, NULL));
+        }
+    } else if (loading) {
+        // For drawing back frace of the sphere in gltf
+        GL(glDisable(GL_CULL_FACE));
+        GL(glClearColor(0.88f, 0.95f, 0.95f, 1.0f));
+        GL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
+
+        GL(glEnable(GL_BLEND));
+        GL(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
+
+        LOG("mm:\n%s", DumpMatrix(&mvpMatrix[0]).c_str());
+        GL(glUniformMatrix4fv(renderer->ProgramLoading.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
+                              (float *) mvpMatrix));
+        GL(glActiveTexture(GL_TEXTURE0));
+        GL(glBindTexture(GL_TEXTURE_2D, renderer->LoadingTexture));
+        renderer->loadingScene->drawScene(VERTEX_ATTRIBUTE_LOCATION_POSITION,
+                                          VERTEX_ATTRIBUTE_LOCATION_UV,
+                                          VERTEX_ATTRIBUTE_LOCATION_NORMAL,
+                                          renderer->ProgramLoading.UniformLocation[UNIFORM_COLOR],
+                                          renderer->ProgramLoading.UniformLocation[UNIFORM_M_MATRIX],
+                                          renderer->ProgramLoading.UniformLocation[UNIFORM_MODE]);
+    } else {
+        GL(glClear(GL_DEPTH_BUFFER_BIT));
+
+        ovrMatrix4f mvpMatrix[2];
+        mvpMatrix[0] = ovrMatrix4f_CreateIdentity();
+        mvpMatrix[1] = ovrMatrix4f_CreateIdentity();
+
+        GL(glBindVertexArray(renderer->Panel.VertexArrayObject));
+
+        GL(glUniformMatrix4fv(renderer->Program.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
+                              (float *) mvpMatrix));
+
+        if(AROverlayMode == 0) {
+            // VR 100%
+            GL(glUniform1f(renderer->Program.UniformLocation[UNIFORM_ALPHA], 2.0f));
+            GL(glActiveTexture(GL_TEXTURE0));
+            GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->SurfaceTextureID));
+
+            GL(glDrawElements(GL_TRIANGLES, renderer->Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
+        }else {
+            if(AROverlayMode == 1) {
+                // AR 30% VR 70%
+                GL(glUniform1f(renderer->Program.UniformLocation[UNIFORM_ALPHA], 0.7f));
+            }else if(AROverlayMode == 2) {
+                // AR 70% VR 30%
+                GL(glUniform1f(renderer->Program.UniformLocation[UNIFORM_ALPHA], 0.3f));
+            }else if(AROverlayMode == 3) {
+                // AR 100%
+                GL(glUniform1f(renderer->Program.UniformLocation[UNIFORM_ALPHA], -2.0f));
+            }
+            GL(glActiveTexture(GL_TEXTURE0));
+            GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->SurfaceTextureID));
+            GL(glActiveTexture(GL_TEXTURE1));
+            GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->CameraTexture));
+            GL(glDrawElements(GL_TRIANGLES, renderer->Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
+        }
+    }
+
+    GL(glBindVertexArray(0));
+    if (loading) {
+        GL(glBindTexture(GL_TEXTURE_2D, 0));
+    } else {
+        GL(glActiveTexture(GL_TEXTURE0));
+        GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
+        GL(glActiveTexture(GL_TEXTURE1));
+        GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
+    }
+    GL(glUseProgram(0));
+
+    // Explicitly clear the border texels to black when GL_CLAMP_TO_BORDER is not available.
+    if (glExtensions.EXT_texture_border_clamp == false) {
+        // Clear to fully opaque black.
+        GL(glClearColor(0.0f, 0.0f, 0.0f, 1.0f));
+        // bottom
+        GL(glScissor(viewport->x, viewport->y, viewport->width, 1));
+        GL(glClear(GL_COLOR_BUFFER_BIT));
+        // top
+        GL(glScissor(viewport->x, viewport->height - 1, viewport->width, 1));
+        GL(glClear(GL_COLOR_BUFFER_BIT));
+        // left
+        GL(glScissor(viewport->x, viewport->y, 1, viewport->height));
+        GL(glClear(GL_COLOR_BUFFER_BIT));
+        // right
+        GL(glScissor(viewport->x + viewport->width - 1, viewport->y, 1, viewport->height));
+        GL(glClear(GL_COLOR_BUFFER_BIT));
+    }
 }
 

@@ -23,7 +23,7 @@ class GltfModel {
 
     void drawNodeTree(int node_i, const ovrMatrix4f &transform);
     void drawNode(int node_i, const ovrMatrix4f &transform);
-    ovrMatrix4f createNodeTrasform(const ovrMatrix4f &baseTransform, const tinygltf::Node &node);
+    ovrMatrix4f createNodeTransform(const ovrMatrix4f &baseTransform, const tinygltf::Node &node);
 public:
     void load();
     void drawScene(int position, int uv, int normal, GLint color, GLint mMatrix, GLint mode);

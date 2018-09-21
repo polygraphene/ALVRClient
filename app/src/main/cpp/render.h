@@ -10,6 +10,7 @@
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include "gltf_model.h"
+#include "utils.h"
 
 // Must use EGLSyncKHR because the VrApi still supports OpenGL ES 2.0
 #define EGL_SYNC
@@ -161,10 +162,15 @@ void ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool u
                         int SurfaceTextureID, int LoadingTexture, int CameraTexture, bool ARMode);
 void ovrRenderer_Destroy(ovrRenderer *renderer);
 void ovrRenderer_CreateScene(ovrRenderer *renderer);
+// Set up an OVR frame, render it, and submit it.
 ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava *java,
                                                    const ovrTracking2 *tracking, ovrMobile *ovr,
                                                    unsigned long long *completionFence,
                                                    bool loading, int enableTestMode,
                                             int AROverlayMode);
+
+// Render the contents of the frame in an SDK-neutral manner.
+void renderEye(int eye, ovrMatrix4f mvpMatrix[2], Recti *viewport, ovrRenderer *renderer, const ovrTracking2 *tracking,
+               bool loading, int enableTestMode, int AROverlayMode);
 
 #endif //ALVRCLIENT_RENDER_H

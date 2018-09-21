@@ -62,17 +62,18 @@ static const char *GlErrorString(GLenum error) {
     }
 }
 
-static void GLCheckErrors(int line) {
+static void GLCheckErrors(const char* file, int line) {
     for (int i = 0; i < 10; i++) {
         const GLenum error = glGetError();
         if (error == GL_NO_ERROR) {
             break;
         }
-        LOGE("GL error on line %d: %s", line, GlErrorString(error));
+        LOGE("GL error on %s : %d: %s", file, line, GlErrorString(error));
+        abort();
     }
 }
 
-#define GL(func)        func; GLCheckErrors( __LINE__ );
+#define GL(func)        func; GLCheckErrors(__FILE__, __LINE__ );
 #else // CHECK_GL_ERRORS
 #define GL(func)        func;
 #endif // CHECK_GL_ERRORS
@@ -127,6 +128,15 @@ public:
 //
 // Utility
 //
+
+/// Integer version of ovrRectf
+typedef struct Recti_
+{
+    int x;
+    int y;
+    int width;
+    int height;
+} Recti;
 
 inline std::string GetStringFromJNIString(JNIEnv *env, jstring string){
     const char *buf = env->GetStringUTFChars(string, 0);

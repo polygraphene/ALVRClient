@@ -67,7 +67,7 @@ void GltfModel::drawScene(int position, int uv,
 void GltfModel::drawNodeTree(int node_i, const ovrMatrix4f &transform) {
     auto &node = m_model.nodes[node_i];
 
-    ovrMatrix4f nodeTransform = createNodeTrasform(transform, node);
+    ovrMatrix4f nodeTransform = createNodeTransform(transform, node);
 
     drawNode(node_i, nodeTransform);
 
@@ -179,7 +179,7 @@ void GltfModel::drawNode(int node_i, const ovrMatrix4f &transform) {
 }
 
 ovrMatrix4f
-GltfModel::createNodeTrasform(const ovrMatrix4f &baseTransform, const tinygltf::Node &node) {
+GltfModel::createNodeTransform(const ovrMatrix4f &baseTransform, const tinygltf::Node &node) {
     ovrMatrix4f nodeTransform = baseTransform;
     if(node.translation.size() == 3) {
         ovrMatrix4f translation = ovrMatrix4f_CreateTranslation(node.translation[0], node.translation[1], node.translation[2]);
