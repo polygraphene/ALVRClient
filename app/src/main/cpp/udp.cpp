@@ -665,7 +665,7 @@ Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobje
     try {
         g_udpManager->initialize(env, port, deviceName_, broadcastAddrList_, is72Hz);
     } catch (Exception e) {
-        LOGE("Exception on initializing UdpManager. e=%s", e.what());
+        LOGE("Exception on initializing UdpManager. e=%ls", e.what());
         return 1;
     }
     return 0;

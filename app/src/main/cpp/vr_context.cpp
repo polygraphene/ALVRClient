@@ -41,6 +41,14 @@ void VrContext::onVrModeChange() {
                 return;
             }
 
+            if (support72hz) {
+                LOG("Use 72 Hz refresh rate.");
+                ovrResult result = vrapi_SetDisplayRefreshRate(Ovr, 72.0f);
+                LOG("vrapi_SetDisplayRefreshRate: Result=%d", result);
+            } else {
+                LOG("Use 60 Hz refresh rate.");
+            }
+
             int CpuLevel = 3;
             int GpuLevel = 3;
             vrapi_SetClockLevels(Ovr, CpuLevel, GpuLevel);
@@ -78,13 +86,6 @@ void VrContext::chooseRefreshRate() {
         }
     }
     LOG("Supported refresh rates: %s", refreshRateList.c_str());
-
-    if (support72hz) {
-        LOG("Use 72 Hz refresh rate.");
-        vrapi_SetDisplayRefreshRate(Ovr, 72.0f);
-    } else {
-        LOG("Use 60 Hz refresh rate.");
-    }
 }
 
 void VrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager, bool ARMode) {
