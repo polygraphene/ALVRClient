@@ -89,7 +89,7 @@ class VrThread extends Thread {
 
                 try {
                     mDecoderThread.start();
-                    if (!mReceiverThread.start(mVrContext.is72Hz(), mEGLContext, mMainActivity)) {
+                    if (!mReceiverThread.start(mVrContext, mEGLContext, mMainActivity)) {
                         Log.e(TAG, "FATAL: Initialization of ReceiverThread failed.");
                         return;
                     }
@@ -185,7 +185,7 @@ class VrThread extends Thread {
             notifyAll();
         }
 
-        mVrContext.initialize(mMainActivity, mMainActivity.getAssets(), Constants.IS_ARCORE_BUILD);
+        mVrContext.initialize(mMainActivity, mMainActivity.getAssets(), Constants.IS_ARCORE_BUILD, 60);
 
         mSurfaceTexture = new SurfaceTexture(mVrContext.getSurfaceTextureID());
         mSurfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
@@ -267,12 +267,13 @@ class VrThread extends Thread {
 
     private UdpReceiverThread.Callback mUdpReceiverCallback = new UdpReceiverThread.Callback() {
         @Override
-        public void onConnected(final int width, final int height, final int codec, final int frameQueueSize) {
+        public void onConnected(final int width, final int height, final int codec, final int frameQueueSize, final int refreshRate) {
             // We must wait completion of notifyGeometryChange
             // to ensure the first video frame arrives after notifyGeometryChange.
             send(new Runnable() {
                 @Override
                 public void run() {
+                    mVrContext.setRefreshRate(refreshRate);
                     mVrContext.setFrameGeometry(width, height);
                     mDecoderThread.onConnect(codec, frameQueueSize);
                 }

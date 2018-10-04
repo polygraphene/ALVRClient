@@ -12,8 +12,8 @@ public class VrContext {
 
     private long handle;
 
-    public void initialize(Activity activity, AssetManager assetManager, boolean ARMode) {
-        handle = initializeNative(activity, assetManager, ARMode);
+    public void initialize(Activity activity, AssetManager assetManager, boolean ARMode, int initialRefreshRate) {
+        handle = initializeNative(activity, assetManager, ARMode, initialRefreshRate);
     }
 
     public void destroy() {
@@ -76,15 +76,19 @@ public class VrContext {
         return isVrModeNative(handle);
     }
 
-    public boolean is72Hz() {
-        return is72HzNative(handle);
+    public void getRefreshRates(int[] refreshRates) {
+        getRefreshRatesNative(handle, refreshRates);
     }
 
     public void setFrameGeometry(int width, int height) {
         setFrameGeometryNative(handle, width, height);
     }
-    
-    private native long initializeNative(Activity activity, AssetManager assetManager, boolean ARMode);
+
+    public void setRefreshRate(int refreshRate) {
+        setRefreshRateNative(handle, refreshRate);
+    }
+
+    private native long initializeNative(Activity activity, AssetManager assetManager, boolean ARMode, int initialRefreshRate);
     private native void destroyNative(long handle);
 
     private native void onResumeNative(long handle);
@@ -105,7 +109,9 @@ public class VrContext {
     public native int getCameraTextureNative(long handle);
 
     private native boolean isVrModeNative(long handle);
-    private native boolean is72HzNative(long handle);
+    private native void getRefreshRatesNative(long handle, int[] refreshRates);
 
     private native void setFrameGeometryNative(long handle, int width, int height);
+    private native void setRefreshRateNative(long handle, int refreshRate);
+
 }

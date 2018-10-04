@@ -14,7 +14,7 @@
 
 class VrContext {
 public:
-    void initialize(JNIEnv *env, jobject activity, jobject assetManager, bool ARMode);
+    void initialize(JNIEnv *env, jobject activity, jobject assetManager, bool ARMode, int initialRefreshRate);
     void destroy();
 
     void onChangeSettings(int EnableTestMode, int Suspend);
@@ -25,25 +25,15 @@ public:
     void onPause();
     bool onKeyEvent(int keyCode, int action);
 
-    void onVrModeChange();
-
-    void chooseRefreshRate();
-
     void render(uint64_t renderedFrameIndex);
     void renderLoading();
 
-    void setControllerInfo(TrackingInfo *packet, double displayTime);
-
-    void sendTrackingInfo(TrackingInfo *packet, double displayTime, ovrTracking2 *tracking,
-                              const ovrVector3f *other_tracking_position,
-                              const ovrQuatf *other_tracking_orientation);
     void fetchTrackingInfo(JNIEnv *env_, UdpManager *udpManager,
                            ovrVector3f *position, ovrQuatf *orientation);
 
     void setFrameGeometry(int width, int height);
 
     bool isVrMode() { return Ovr != NULL; }
-    bool is72Hz() { return support72hz; }
 
     int getLoadingTexture(){
         return loadingTexture;
@@ -54,6 +44,10 @@ public:
     int getCameraTexture(){
         return CameraTexture;
     }
+
+    void getRefreshRates(JNIEnv *env_, jintArray refreshRates);
+
+    void setRefreshRate(int refreshRate, bool forceChange = true);
 
 private:
     ANativeWindow *window = NULL;
@@ -68,9 +62,11 @@ private:
     int enableTestMode = 0;
     int suspend = 0;
     bool Resumed = false;
-    bool support72hz = false;
     int FrameBufferWidth = 0;
     int FrameBufferHeight = 0;
+
+    static const int DEFAULT_REFRESH_RATE = 60;
+    int m_currentRefreshRate = DEFAULT_REFRESH_RATE;
 
     uint64_t FrameIndex = 0;
     uint64_t WantedFrameIndex = 0;
@@ -107,6 +103,18 @@ private:
     double BackButtonDownStartTime;
 
     ovrRenderer Renderer;
+
+    void setControllerInfo(TrackingInfo *packet, double displayTime);
+
+    void sendTrackingInfo(TrackingInfo *packet, double displayTime, ovrTracking2 *tracking,
+                          const ovrVector3f *other_tracking_position,
+                          const ovrQuatf *other_tracking_orientation);
+
+    void setInitialRefreshRate(int initialRefreshRate);
+
+    void enterVrMode();
+    void leaveVrMode();
+    void onVrModeChange();
 };
 
 #endif //ALVRCLIENT_VR_CONTEXT_H

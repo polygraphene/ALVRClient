@@ -24,71 +24,16 @@
 void VrContext::onVrModeChange() {
     if (Resumed && window != NULL) {
         if (Ovr == NULL) {
-            LOGI("Entering VR mode.");
-            ovrModeParms parms = vrapi_DefaultModeParms(&java);
-
-            parms.Flags |= VRAPI_MODE_FLAG_RESET_WINDOW_FULLSCREEN;
-
-            parms.Flags |= VRAPI_MODE_FLAG_NATIVE_WINDOW;
-            parms.Display = (size_t) egl.Display;
-            parms.WindowSurface = (size_t) window;
-            parms.ShareContext = (size_t) egl.Context;
-
-            Ovr = vrapi_EnterVrMode(&parms);
-
-            if (Ovr == NULL) {
-                LOGE("Invalid ANativeWindow");
-                return;
-            }
-
-            if (support72hz) {
-                LOG("Use 72 Hz refresh rate.");
-                ovrResult result = vrapi_SetDisplayRefreshRate(Ovr, 72.0f);
-                LOG("vrapi_SetDisplayRefreshRate: Result=%d", result);
-            } else {
-                LOG("Use 60 Hz refresh rate.");
-            }
-
-            int CpuLevel = 3;
-            int GpuLevel = 3;
-            vrapi_SetClockLevels(Ovr, CpuLevel, GpuLevel);
-            vrapi_SetPerfThread(Ovr, VRAPI_PERF_THREAD_TYPE_MAIN, gettid());
+            enterVrMode();
         }
     } else {
         if (Ovr != NULL) {
-            LOGI("Leaving VR mode.");
-            vrapi_LeaveVrMode(Ovr);
-
-            LOGI("Leaved VR mode.");
-            Ovr = NULL;
+            leaveVrMode();
         }
     }
 }
 
-void VrContext::chooseRefreshRate() {
-    int numberOfRefreshRates = vrapi_GetSystemPropertyInt(&java,
-                                                          VRAPI_SYS_PROP_NUM_SUPPORTED_DISPLAY_REFRESH_RATES);
-    std::vector<float> refreshRates(numberOfRefreshRates);
-    vrapi_GetSystemPropertyFloatArray(&java, VRAPI_SYS_PROP_SUPPORTED_DISPLAY_REFRESH_RATES,
-                                      &refreshRates[0], numberOfRefreshRates);
-
-    support72hz = false;
-    std::string refreshRateList = "";
-    char str[100];
-    for (int i = 0; i < numberOfRefreshRates; i++) {
-        snprintf(str, sizeof(str), "%f", refreshRates[i]);
-        refreshRateList += str;
-        if (i != numberOfRefreshRates - 1) {
-            refreshRateList += ", ";
-        }
-        if (((int) refreshRates[i]) == 72) {
-            support72hz = true;
-        }
-    }
-    LOG("Supported refresh rates: %s", refreshRateList.c_str());
-}
-
-void VrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager, bool ARMode) {
+void VrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager, bool ARMode, int initialRefreshRate) {
     LOG("Initializing EGL.");
 
     setAssetManager(env, assetManager);
@@ -122,7 +67,8 @@ void VrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager, 
     LOGI("GL_VERSION=%s", glGetString(GL_VERSION));
     LOGI("GL_MAX_TEXTURE_IMAGE_UNITS=%d", textureUnits);
 
-    chooseRefreshRate();
+    m_currentRefreshRate = DEFAULT_REFRESH_RATE;
+    setInitialRefreshRate(initialRefreshRate);
 
     //
     // Generate texture for SurfaceTexture which is output of MediaCodec.
@@ -638,12 +584,104 @@ void VrContext::setFrameGeometry(int width, int height) {
     }
 }
 
+void VrContext::getRefreshRates(JNIEnv *env_, jintArray refreshRates) {
+    jint *refreshRates_ = env_->GetIntArrayElements(refreshRates, NULL);
+
+    // Fill empty entry with 0.
+    memset(refreshRates_, 0, sizeof(jint) * ALVR_REFRESH_RATE_LIST_SIZE);
+
+    // Get list.
+    int numberOfRefreshRates = vrapi_GetSystemPropertyInt(&java,
+                                                          VRAPI_SYS_PROP_NUM_SUPPORTED_DISPLAY_REFRESH_RATES);
+    std::vector<float> refreshRatesArray(numberOfRefreshRates);
+    vrapi_GetSystemPropertyFloatArray(&java, VRAPI_SYS_PROP_SUPPORTED_DISPLAY_REFRESH_RATES,
+                                      &refreshRatesArray[0], numberOfRefreshRates);
+
+    std::string refreshRateList = "";
+    char str[100];
+    for (int i = 0; i < numberOfRefreshRates; i++) {
+        snprintf(str, sizeof(str), "%f%s", refreshRatesArray[i]
+        , (i != numberOfRefreshRates - 1) ? ", " : "");
+        refreshRateList += str;
+
+        if(i < ALVR_REFRESH_RATE_LIST_SIZE) {
+            refreshRates_[i] = (int) refreshRatesArray[i];
+        }
+    }
+    LOG("Supported refresh rates: %s", refreshRateList.c_str());
+    std::sort(refreshRates_, refreshRates_ + ALVR_REFRESH_RATE_LIST_SIZE, std::greater<jint>());
+
+    env_->ReleaseIntArrayElements(refreshRates, refreshRates_, 0);
+}
+
+void VrContext::setRefreshRate(int refreshRate, bool forceChange) {
+    if(m_currentRefreshRate == refreshRate) {
+        LOG("Refresh rate not changed. %d Hz", refreshRate);
+        return;
+    }
+    ovrResult result = vrapi_SetDisplayRefreshRate(Ovr, refreshRate);
+    if(result == ovrSuccess) {
+        LOG("Changed refresh rate. %d Hz", refreshRate);
+        m_currentRefreshRate = refreshRate;
+    } else {
+        LOG("Failed to change refresh rate. %d Hz Force=%d Result=%d", refreshRate, forceChange, result);
+        // Really needed?
+        if(forceChange) {
+            LOG("Force change refresh rete.");
+            leaveVrMode();
+            enterVrMode();
+        }
+    }
+}
+
+void VrContext::setInitialRefreshRate(int initialRefreshRate) {
+    setRefreshRate(initialRefreshRate, false);
+}
+
+void VrContext::enterVrMode() {
+    LOGI("Entering VR mode.");
+
+    ovrModeParms parms = vrapi_DefaultModeParms(&java);
+
+    parms.Flags |= VRAPI_MODE_FLAG_RESET_WINDOW_FULLSCREEN;
+
+    parms.Flags |= VRAPI_MODE_FLAG_NATIVE_WINDOW;
+    parms.Display = (size_t) egl.Display;
+    parms.WindowSurface = (size_t) window;
+    parms.ShareContext = (size_t) egl.Context;
+
+    Ovr = vrapi_EnterVrMode(&parms);
+
+    if (Ovr == NULL) {
+        LOGE("Invalid ANativeWindow");
+        return;
+    }
+
+    LOG("Setting refresh rate. %d Hz", m_currentRefreshRate);
+    ovrResult result = vrapi_SetDisplayRefreshRate(Ovr, m_currentRefreshRate);
+    LOG("vrapi_SetDisplayRefreshRate: Result=%d", result);
+
+    int CpuLevel = 3;
+    int GpuLevel = 3;
+    vrapi_SetClockLevels(Ovr, CpuLevel, GpuLevel);
+    vrapi_SetPerfThread(Ovr, VRAPI_PERF_THREAD_TYPE_MAIN, gettid());
+}
+
+void VrContext::leaveVrMode() {
+    LOGI("Leaving VR mode.");
+
+    vrapi_LeaveVrMode(Ovr);
+
+    LOGI("Leaved VR mode.");
+    Ovr = NULL;
+}
+
 extern "C"
 JNIEXPORT jlong JNICALL
 Java_com_polygraphene_alvr_VrContext_initializeNative(JNIEnv *env, jobject instance,
-                                                      jobject activity, jobject assetManager, bool ARMode) {
+                                                      jobject activity, jobject assetManager, bool ARMode, int initialRefreshRate) {
     VrContext *context = new VrContext();
-    context->initialize(env, activity, assetManager, ARMode);
+    context->initialize(env, activity, assetManager, ARMode, initialRefreshRate);
     return (jlong) context;
 }
 
@@ -768,9 +806,9 @@ Java_com_polygraphene_alvr_VrContext_isVrModeNative(JNIEnv *env, jobject instanc
 }
 
 extern "C"
-JNIEXPORT jboolean JNICALL
-Java_com_polygraphene_alvr_VrContext_is72HzNative(JNIEnv *env, jobject instance, jlong handle) {
-    return ((VrContext *) handle)->is72Hz();
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_VrContext_getRefreshRatesNative(JNIEnv *env, jobject instance, jlong handle, jintArray refreshRates) {
+    ((VrContext *) handle)->getRefreshRates(env, refreshRates);
 }
 
 extern "C"
@@ -787,4 +825,11 @@ Java_com_polygraphene_alvr_VrContext_onKeyEventNative(JNIEnv *env, jobject insta
                                                       jint keyCode,
                                                       jint action) {
     return ((VrContext *) handle)->onKeyEvent(keyCode, action);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_VrContext_setRefreshRateNative(JNIEnv *env, jobject instance,
+                                                          jlong handle, jint refreshRate) {
+    return ((VrContext *) handle)->setRefreshRate(refreshRate);
 }

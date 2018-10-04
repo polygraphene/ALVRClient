@@ -22,7 +22,7 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
     private TrackingThread mTrackingThread;
     private VrContext mVrContext;
     private int mPort;
-    private boolean mIs72Hz = false;
+    private int[] mRefreshRates = new int[4];
     private boolean mInitialized = false;
     private boolean mInitializeFailed = false;
 
@@ -30,7 +30,7 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
     private int mPreviousServerPort;
 
     interface Callback {
-        void onConnected(int width, int height, int codec, int frameQueueSize);
+        void onConnected(int width, int height, int codec, int frameQueueSize, int refreshRate);
 
         void onChangeSettings(int enableTestMode, int suspend, int frameQueueSize);
 
@@ -65,10 +65,10 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
         mPreviousServerPort = serverPort;
     }
 
-    public boolean start(final boolean is72Hz, EGLContext mEGLContext, MainActivity mainActivity) {
-        mTrackingThread = new TrackingThread(is72Hz ? 72 : 60);
+    public boolean start(VrContext vrContext, EGLContext mEGLContext, MainActivity mainActivity) {
+        mTrackingThread = new TrackingThread();
         mTrackingThread.setCallback(this);
-        mIs72Hz = is72Hz;
+        vrContext.getRefreshRates(mRefreshRates);
 
         super.startBase();
 
@@ -100,7 +100,7 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
         try {
             String[] broadcastList = getBroadcastAddressList();
 
-            int ret = initializeSocket(mPort, getDeviceName(), broadcastList, mIs72Hz);
+            int ret = initializeSocket(mPort, getDeviceName(), broadcastList, mRefreshRates);
             if (ret != 0) {
                 Log.e(TAG, "Error on initializing socket. Code=" + ret + ".");
                 synchronized (this) {
@@ -182,9 +182,9 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
 
     // called from native
     @SuppressWarnings("unused")
-    public void onConnected(int width, int height, int codec, int frameQueueSize) {
+    public void onConnected(int width, int height, int codec, int frameQueueSize, int refreshRate) {
         Log.v(TAG, "onConnected is called.");
-        mCallback.onConnected(width, height, codec, frameQueueSize);
+        mCallback.onConnected(width, height, codec, frameQueueSize, refreshRate);
         mTrackingThread.onConnect();
     }
 
@@ -200,7 +200,7 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
         mCallback.onChangeSettings(EnableTestMode, suspend, frameQueueSize);
     }
 
-    private native int initializeSocket(int port, String deviceName, String[] broadcastAddrList, boolean is72Hz);
+    private native int initializeSocket(int port, String deviceName, String[] broadcastAddrList, int[] refreshRates);
     private native void closeSocket();
     private native void runLoop(String serverAddress, int serverPort);
     private native void interruptNative();

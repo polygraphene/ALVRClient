@@ -7,7 +7,7 @@ import java.util.concurrent.TimeUnit;
 
 class TrackingThread extends ThreadBase {
     private static final String TAG = "TrackingThread";
-    private int mRefreshRate;
+    private int mRefreshRate = 60;
 
     interface TrackingCallback {
         void onTracking(float[] position, float[] orientation);
@@ -16,12 +16,15 @@ class TrackingThread extends ThreadBase {
     private TrackingCallback mCallback;
     private ArThread mArThread;
 
-    public TrackingThread(int refreshRate) {
-        mRefreshRate = refreshRate;
+    public TrackingThread() {
     }
 
     public void setCallback(TrackingCallback callback) {
         mCallback = callback;
+    }
+
+    void changeRefreshRate(int refreshRate) {
+        mRefreshRate = refreshRate;
     }
 
     public void start(EGLContext mEGLContext, MainActivity mainActivity, int cameraTexture) {

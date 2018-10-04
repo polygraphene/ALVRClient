@@ -80,7 +80,7 @@ public:
     UdpManager();
     ~UdpManager();
     void initialize(JNIEnv *env, jint port, jstring deviceName_, jobjectArray broadcastAddrList_,
-                        jboolean is72Hz);
+                    jintArray refreshRates_);
 
     NALParser &getNalParser() {
         return *m_nalParser;
@@ -117,7 +117,7 @@ private:
     std::shared_ptr<SoundPlayer> m_soundPlayer;
     std::shared_ptr<NALParser> m_nalParser;
 
-    bool m_is72Hz = false;
+    uint8_t m_refreshRates[ALVR_REFRESH_RATE_LIST_SIZE];
 
     JNIEnv *m_env;
     jobject m_instance;
@@ -153,6 +153,8 @@ private:
     void onConnect(const ConnectionMessage &connectionMessage);
     void onBroadcastRequest();
     void onPacketRecv(const char *packet, size_t packetSize);
+
+    void loadRefreshRates(JNIEnv *refreshRates, jintArray pArray);
 };
 
 #endif //ALVRCLIENT_UDP_H

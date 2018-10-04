@@ -215,7 +215,7 @@ UdpManager::~UdpManager() {
 
 void
 UdpManager::initialize(JNIEnv *env, jint port, jstring deviceName_, jobjectArray broadcastAddrList_,
-                       jboolean is72Hz) {
+                       jintArray refreshRates_) {
     //
     // Initialize variables
     //
@@ -228,7 +228,7 @@ UdpManager::initialize(JNIEnv *env, jint port, jstring deviceName_, jobjectArray
     m_prevSoundSequence = 0;
     m_timeDiff = 0;
 
-    m_is72Hz = is72Hz;
+    loadRefreshRates(env, refreshRates_);
 
     m_deviceName = GetStringFromJNIString(env, deviceName_);
 
@@ -388,7 +388,7 @@ void UdpManager::sendBroadcast() {
         helloMessage.version = ALVR_PROTOCOL_VERSION;
         memcpy(helloMessage.deviceName, m_deviceName.c_str(),
                std::min(m_deviceName.length(), sizeof(helloMessage.deviceName)));
-        helloMessage.refreshRate = m_is72Hz ? 72 : 60;
+        memcpy(helloMessage.refreshRate, m_refreshRates, sizeof(m_refreshRates));
 
         m_socket.sendBroadcast(&helloMessage, sizeof(helloMessage));
     }
@@ -517,9 +517,10 @@ void UdpManager::onConnect(const ConnectionMessage &connectionMessage) {
     m_nalParser->setCodec(m_connectionMessage.codec);
 
     jclass clazz = m_env->GetObjectClass(m_instance);
-    jmethodID method = m_env->GetMethodID(clazz, "onConnected", "(IIII)V");
-    m_env->CallVoidMethod(m_instance, method, m_connectionMessage.videoWidth,
-                         m_connectionMessage.videoHeight, m_connectionMessage.codec, m_connectionMessage.frameQueueSize);
+    jmethodID method = m_env->GetMethodID(clazz, "onConnected", "(IIIII)V");
+    m_env->CallVoidMethod(m_instance, method, m_connectionMessage.videoWidth
+            , m_connectionMessage.videoHeight, m_connectionMessage.codec
+            , m_connectionMessage.frameQueueSize, m_connectionMessage.refreshRate);
     m_env->DeleteLocalRef(clazz);
 
     // Start stream.
@@ -654,16 +655,24 @@ void UdpManager::updateTimeout() {
     m_lastReceived = getTimestampUs();
 }
 
+void UdpManager::loadRefreshRates(JNIEnv *env, jintArray refreshRates_) {
+    jint *refreshRates = env->GetIntArrayElements(refreshRates_, NULL);
+    for(int i = 0; i < ALVR_REFRESH_RATE_LIST_SIZE; i++) {
+        m_refreshRates[i] = refreshRates[i];
+    }
+    env->ReleaseIntArrayElements(refreshRates_, refreshRates, 0);
+}
+
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobject instance,
                                                               jint port,
                                                               jstring deviceName_,
                                                               jobjectArray broadcastAddrList_,
-                                                              jboolean is72Hz) {
+                                                              jintArray refreshRates_) {
     g_udpManager = std::make_shared<UdpManager>();
     try {
-        g_udpManager->initialize(env, port, deviceName_, broadcastAddrList_, is72Hz);
+        g_udpManager->initialize(env, port, deviceName_, broadcastAddrList_, refreshRates_);
     } catch (Exception e) {
         LOGE("Exception on initializing UdpManager. e=%ls", e.what());
         return 1;
