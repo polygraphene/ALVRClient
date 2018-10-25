@@ -373,6 +373,8 @@ void UdpManager::sendTimeSync() {
         timeSync.fecFailureTotal = LatencyCollector::Instance().getFecFailureTotal();
         timeSync.fecFailureInSecond = LatencyCollector::Instance().getFecFailureInSecond();
 
+        timeSync.fps = LatencyCollector::Instance().getFramesInSecond();
+
         m_socket.send(&timeSync, sizeof(timeSync));
     }
     m_prevSentSync = current;

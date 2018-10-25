@@ -13,6 +13,7 @@ public:
     uint64_t getPacketsLostInSecond();
     uint64_t getFecFailureTotal();
     uint64_t getFecFailureInSecond();
+    uint32_t getFramesInSecond();
 
     void packetLoss(int64_t lost);
     void fecFailure();
@@ -32,7 +33,10 @@ private:
     LatencyCollector();
 
     void updateLatency(uint64_t *latency);
+    void submitNewFrame();
+
     void resetSecond();
+    void checkAndResetSecond();
 
     static LatencyCollector m_Instance;
 
@@ -66,6 +70,9 @@ private:
     uint64_t m_Latency[3][4];
 
     uint64_t m_PreviousLatency[3][4];
+
+    uint32_t m_framesInSecond = 0;
+    uint32_t m_framesPrevious = 0;
 
     FrameTimestamp & getFrame(uint64_t frameIndex);
 };
