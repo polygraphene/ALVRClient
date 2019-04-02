@@ -2,12 +2,7 @@ package com.polygraphene.alvr;
 
 import android.app.Activity;
 import android.content.Context;
-import android.content.Intent;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
 import android.media.AudioManager;
-import android.media.MediaCodecInfo;
-import android.media.MediaCodecList;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.util.Log;
@@ -124,17 +119,6 @@ public class MainActivity extends Activity {
     {
         AudioManager audio = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, 0);
-    }
-
-    public String getVersionName(){
-        try {
-            PackageInfo pInfo = this.getPackageManager().getPackageInfo(getPackageName(), 0);
-            String version = pInfo.versionName;
-            return getString(R.string.app_name) + " v" + version;
-        } catch (PackageManager.NameNotFoundException e) {
-            e.printStackTrace();
-            return getString(R.string.app_name) + " Unknown version";
-        }
     }
 
     @Override

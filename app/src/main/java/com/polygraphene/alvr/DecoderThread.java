@@ -1,5 +1,6 @@
 package com.polygraphene.alvr;
 
+import android.content.Context;
 import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.support.annotation.NonNull;
@@ -30,7 +31,7 @@ class DecoderThread extends ThreadBase {
     private boolean mWaitNextIDR = false;
 
     @SuppressWarnings("unused")
-    private MainActivity mMainActivity = null;
+    private Context mContext = null;
 
     private boolean mDebugIDRFrame = false;
 
@@ -71,10 +72,10 @@ class DecoderThread extends ThreadBase {
     private final List<Integer> mAvailableInputs = new LinkedList<>();
 
     DecoderThread(NALParser nalParser,
-                  Surface surface, MainActivity mainActivity) {
+                  Surface surface, Context context) {
         mNalParser = nalParser;
         mSurface = surface;
-        mMainActivity = mainActivity;
+        mContext = context;
     }
 
     private void frameLog(String s) {
@@ -210,7 +211,7 @@ class DecoderThread extends ThreadBase {
         }
         if (mDebugIDRFrame) {
             try {
-                String path = mMainActivity.getExternalMediaDirs()[0].getAbsolutePath() + "/" + buf.frameIndex + ".h264";
+                String path = mContext.getExternalMediaDirs()[0].getAbsolutePath() + "/" + buf.frameIndex + ".h264";
                 FileOutputStream stream = new FileOutputStream(path);
                 stream.write(spsBuffer.buf, 0, spsBuffer.length);
                 stream.write(ppsBuffer.buf, 0, ppsBuffer.length);

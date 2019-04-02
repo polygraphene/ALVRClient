@@ -1,5 +1,6 @@
 package com.polygraphene.alvr;
 
+import android.app.Activity;
 import android.opengl.EGLContext;
 import android.util.Log;
 
@@ -28,6 +29,8 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
 
     private String mPreviousServerAddress;
     private int mPreviousServerPort;
+
+    private TrackingThread.TrackingCallback mGvrTrackingCallback;
 
     interface Callback {
         void onConnected(int width, int height, int codec, int frameQueueSize, int refreshRate);
@@ -65,7 +68,7 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
         mPreviousServerPort = serverPort;
     }
 
-    public boolean start(VrContext vrContext, EGLContext mEGLContext, MainActivity mainActivity) {
+    public boolean start(VrContext vrContext, EGLContext mEGLContext, Activity activity) {
         mTrackingThread = new TrackingThread();
         mTrackingThread.setCallback(this);
         vrContext.getRefreshRates(mRefreshRates);
@@ -83,7 +86,7 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
         }
 
         if(!mInitializeFailed) {
-            mTrackingThread.start(mEGLContext, mainActivity, mVrContext.getCameraTexture());
+            mTrackingThread.start(mEGLContext, activity, mVrContext.getCameraTexture());
         }
         return !mInitializeFailed;
     }
@@ -168,7 +171,8 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
     @Override
     public void onTracking(float[] position, float[] orientation) {
         if (isTracking()) {
-            mVrContext.fetchTrackingInfo(getPointer(), position, orientation);
+            //mVrContext.fetchTrackingInfo(getPointer(), position, orientation);
+            mGvrTrackingCallback.onTracking(position, orientation);
         }
     }
 
@@ -200,6 +204,10 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
         mCallback.onChangeSettings(EnableTestMode, suspend, frameQueueSize);
     }
 
+    public void setTrackingCallback(TrackingThread.TrackingCallback callback) {
+        mGvrTrackingCallback = callback;
+    }
+
     private native int initializeSocket(int port, String deviceName, String[] broadcastAddrList, int[] refreshRates);
     private native void closeSocket();
     private native void runLoop(String serverAddress, int serverPort);
@@ -207,7 +215,7 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
 
     public native boolean isConnected();
 
-    private native long getPointer();
+    public native long getPointer();
     private native String getServerAddress();
     private native int getServerPort();
 

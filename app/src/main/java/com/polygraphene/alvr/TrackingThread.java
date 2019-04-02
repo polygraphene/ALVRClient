@@ -1,5 +1,6 @@
 package com.polygraphene.alvr;
 
+import android.app.Activity;
 import android.opengl.EGLContext;
 import android.util.Log;
 
@@ -27,9 +28,9 @@ class TrackingThread extends ThreadBase {
         mRefreshRate = refreshRate;
     }
 
-    public void start(EGLContext mEGLContext, MainActivity mainActivity, int cameraTexture) {
+    public void start(EGLContext mEGLContext, Activity activity, int cameraTexture) {
         mArThread = new ArThread(mEGLContext);
-        mArThread.initialize(mainActivity);
+        mArThread.initialize(activity);
         mArThread.setCameraTexture(cameraTexture);
 
         super.startBase();

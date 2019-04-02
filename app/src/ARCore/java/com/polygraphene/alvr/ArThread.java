@@ -161,7 +161,7 @@ public class ArThread extends ThreadBase {
         }
     }
 
-    private Session createArSession(MainActivity activity, boolean installRequested)
+    private Session createArSession(Activity activity, boolean installRequested)
             throws UnavailableException {
         Session session = null;
         // if we have the camera permission, create the session
@@ -185,7 +185,7 @@ public class ArThread extends ThreadBase {
     /**
      * Check to see we have the necessary permissions for this app.
      */
-    private static boolean hasCameraPermission(MainActivity activity) {
+    private static boolean hasCameraPermission(Activity activity) {
         return ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED;
     }
@@ -193,7 +193,7 @@ public class ArThread extends ThreadBase {
     /**
      * Check to see if we need to show the rationale for this permission.
      */
-    private static boolean shouldShowRequestPermissionRationale(MainActivity activity) {
+    private static boolean shouldShowRequestPermissionRationale(Activity activity) {
         return ActivityCompat.shouldShowRequestPermissionRationale(
                 activity, Manifest.permission.CAMERA);
     }
@@ -223,7 +223,7 @@ public class ArThread extends ThreadBase {
         }
     }
 
-    public static boolean onRequestPermissionsResult(MainActivity activity) {
+    public static boolean onRequestPermissionsResult(Activity activity) {
         if (!hasCameraPermission(activity)) {
             Toast.makeText(
                     activity, "Camera permission is needed to run this application", Toast.LENGTH_LONG)

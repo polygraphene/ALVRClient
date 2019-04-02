@@ -25,9 +25,9 @@ void GvrRenderer::glInit(JNIEnv* env, int width, int height) {
 }
 
 
-void GvrRenderer::renderFrame(ovrMatrix4f mvpMatrix[2], Recti viewport[2]) {
-    renderEye(0, mvpMatrix, &viewport[0], &Renderer, nullptr, true, false, false);
-    renderEye(1, mvpMatrix, &viewport[1], &Renderer, nullptr, true, false, false);
+void GvrRenderer::renderFrame(ovrMatrix4f mvpMatrix[2], Recti viewport[2], bool loading) {
+    renderEye(0, mvpMatrix, &viewport[0], &Renderer, nullptr, loading, false, false);
+    renderEye(1, mvpMatrix, &viewport[1], &Renderer, nullptr, loading, false, false);
 }
 
 GvrRenderer::~GvrRenderer() {
@@ -56,11 +56,18 @@ Java_com_polygraphene_alvr_GvrRenderer_getLoadingTexture(JNIEnv *env, jobject gv
 }
 
 extern "C"
+JNIEXPORT jint JNICALL
+Java_com_polygraphene_alvr_GvrRenderer_getSurfaceTexture(JNIEnv *env, jobject instance,
+                                                         jlong nativeHandle) {
+    return ((GvrRenderer *) nativeHandle)->getSurfaceTexture();
+}
+
+extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_GvrRenderer_renderNative(JNIEnv *env, jobject gvrRenderer,
                                                     jlong instance, jfloatArray leftMvp,
                                                     jfloatArray rightMvp, jintArray leftViewport,
-                                                    jintArray rightViewport) {
+                                                    jintArray rightViewport, jboolean loading, jlong frameIndex) {
     ovrMatrix4f mvpMatrix[2];
 
     {
@@ -87,7 +94,7 @@ Java_com_polygraphene_alvr_GvrRenderer_renderNative(JNIEnv *env, jobject gvrRend
         env->ReleaseIntArrayElements(rightViewport, array, 0);
     }
 
-    ((GvrRenderer *) instance)->renderFrame(mvpMatrix, viewport);
+    ((GvrRenderer *) instance)->renderFrame(mvpMatrix, viewport, loading);
 }
 
 extern "C"
@@ -95,3 +102,4 @@ JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_GvrRenderer_destroyNative(JNIEnv *env, jobject gvrRenderer, jlong instance) {
     delete ((GvrRenderer *) instance);
 }
+

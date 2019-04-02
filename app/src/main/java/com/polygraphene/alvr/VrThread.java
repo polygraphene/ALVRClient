@@ -1,9 +1,9 @@
 package com.polygraphene.alvr;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.SurfaceTexture;
-import android.media.MediaCodec;
 import android.opengl.EGL14;
 import android.opengl.EGLContext;
 import android.util.Log;
@@ -17,14 +17,14 @@ class VrThread extends Thread {
 
     private static final int PORT = 9944;
 
-    private MainActivity mMainActivity;
+    private Activity mActivity;
 
     private VrContext mVrContext = new VrContext();
     private ThreadQueue mQueue = null;
     private boolean mResumed = false;
 
     private SurfaceTexture mSurfaceTexture;
-    private Surface mSurface;
+    public Surface mSurface;
 
     private final Object mWaiter = new Object();
     private boolean mFrameAvailable = false;
@@ -37,8 +37,12 @@ class VrThread extends Thread {
 
     private EGLContext mEGLContext;
 
-    public VrThread(MainActivity mainActivity) {
-        this.mMainActivity = mainActivity;
+    private int mSurfaceTextureID;
+
+    TrackingThread.TrackingCallback mGvrTrackingCallback = null;
+
+    public VrThread(Activity activity) {
+        this.mActivity = activity;
     }
 
     public void onSurfaceCreated(final Surface surface) {
@@ -84,12 +88,15 @@ class VrThread extends Thread {
 
                 mReceiverThread = new UdpReceiverThread(mUdpReceiverCallback, mVrContext);
                 mReceiverThread.setPort(PORT);
+                mReceiverThread.setTrackingCallback(mGvrTrackingCallback);
                 loadConnectionState();
-                mDecoderThread = new DecoderThread(mReceiverThread, mSurface, mMainActivity);
+
+                Log.v("GvrRenderer", "resume");
+                mDecoderThread = new DecoderThread(mReceiverThread, mSurface, mActivity);
 
                 try {
                     mDecoderThread.start();
-                    if (!mReceiverThread.start(mVrContext, mEGLContext, mMainActivity)) {
+                    if (!mReceiverThread.start(mVrContext, mEGLContext, mActivity)) {
                         Log.e(TAG, "FATAL: Initialization of ReceiverThread failed.");
                         return;
                     }
@@ -185,7 +192,7 @@ class VrThread extends Thread {
             notifyAll();
         }
 
-        mVrContext.initialize(mMainActivity, mMainActivity.getAssets(), Constants.IS_ARCORE_BUILD, 60);
+        mVrContext.initialize(mActivity, mActivity.getAssets(), Constants.IS_ARCORE_BUILD, 60);
 
         mSurfaceTexture = new SurfaceTexture(mVrContext.getSurfaceTextureID());
         mSurfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
@@ -197,10 +204,12 @@ class VrThread extends Thread {
                 }
             }
         });
-        mSurface = new Surface(mSurfaceTexture);
 
+        //mSurface = new Surface(mSurfaceTexture);
+
+        Log.v("GvrRenderer", "Vrthread");
         mLoadingTexture.initializeMessageCanvas(mVrContext.getLoadingTexture());
-        mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\nLoading...");
+        mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\nLoading...");
 
         mEGLContext = EGL14.eglGetCurrentContext();
 
@@ -210,7 +219,7 @@ class VrThread extends Thread {
                 mQueue.waitNext();
                 continue;
             }
-            render();
+            //render();
         }
 
         Log.v(TAG, "Destroying vrapi state.");
@@ -225,12 +234,12 @@ class VrThread extends Thread {
             }
         } else {
             if (mReceiverThread.getErrorMessage() != null) {
-                mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \n!!! Error on ARCore initialization !!!\n" + mReceiverThread.getErrorMessage());
+                mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\n \n!!! Error on ARCore initialization !!!\n" + mReceiverThread.getErrorMessage());
             } else {
                 if (mReceiverThread.isConnected()) {
-                    mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \nConnected!\nStreaming will begin soon!");
+                    mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\n \nConnected!\nStreaming will begin soon!");
                 } else {
-                    mLoadingTexture.drawMessage(mMainActivity.getVersionName() + "\n \nPress CONNECT button\non ALVR server.");
+                    mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\n \nPress CONNECT button\non ALVR server.");
                 }
             }
             mVrContext.renderLoading();
@@ -299,7 +308,7 @@ class VrThread extends Thread {
 
     private void saveConnectionState(String serverAddress, int serverPort) {
         Log.v(TAG, "save connection state: " + serverAddress + " " + serverPort);
-        SharedPreferences pref = mMainActivity.getSharedPreferences("pref", Context.MODE_PRIVATE);
+        SharedPreferences pref = mActivity.getSharedPreferences("pref", Context.MODE_PRIVATE);
         SharedPreferences.Editor edit = pref.edit();
         // If server address is NULL, it means no preserved connection.
         edit.putString(KEY_SERVER_ADDRESS, serverAddress);
@@ -308,7 +317,7 @@ class VrThread extends Thread {
     }
 
     private void loadConnectionState() {
-        SharedPreferences pref = mMainActivity.getSharedPreferences("pref", Context.MODE_PRIVATE);
+        SharedPreferences pref = mActivity.getSharedPreferences("pref", Context.MODE_PRIVATE);
         String serverAddress = pref.getString(KEY_SERVER_ADDRESS, null);
         int serverPort = pref.getInt(KEY_SERVER_PORT, 0);
 
@@ -321,5 +330,29 @@ class VrThread extends Thread {
     public boolean isTracking() {
         return mVrContext != null && mReceiverThread != null
                 && mVrContext.isVrMode() && mReceiverThread.isConnected();
+    }
+
+    public void setSurfaceTexture(int surfaceTexture) {
+        mSurfaceTextureID = surfaceTexture;
+    }
+
+    public DecoderThread getDecoderThread() {
+        return mDecoderThread;
+    }
+
+    public VrContext getVrContext() {
+        return mVrContext;
+    }
+
+    public void sendTrackingGvr(long frameIndex, float[] headOrientation, float[] headPosition){
+        mVrContext.sendTracking(mReceiverThread.getPointer(), frameIndex, headOrientation, headPosition);
+    }
+
+    public void setTrackingCallback(TrackingThread.TrackingCallback callback) {
+        mGvrTrackingCallback = callback;
+    }
+
+    public void initializeGvr(long nativeGvrContext) {
+        mVrContext.initializeGvr(nativeGvrContext);
     }
 }

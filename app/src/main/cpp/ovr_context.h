@@ -1,5 +1,5 @@
-#ifndef ALVRCLIENT_DAYDREAM_GVRCONTEXT_H
-#define ALVRCLIENT_DAYDREAM_GVRCONTEXT_H
+#ifndef ALVRCLIENT_DAYDREAM_OVRCONTEXT_H
+#define ALVRCLIENT_DAYDREAM_OVRCONTEXT_H
 
 #include <memory>
 #include <map>
@@ -12,11 +12,7 @@
 #include "udp.h"
 #include "vr_context.h"
 
-#include "vr/gvr/capi/include/gvr.h"
-#include "vr/gvr/capi/include/gvr_controller.h"
-#include "vr/gvr/capi/include/gvr_types.h"
-
-class GvrContext : public VrContextBase {
+class OvrContext : public VrContextBase {
 public:
     void initialize(JNIEnv *env, jobject activity, jobject assetManager, bool ARMode, int initialRefreshRate);
     void destroy();
@@ -37,7 +33,7 @@ public:
 
     void setFrameGeometry(int width, int height);
 
-    bool isVrMode() { return true; }
+    bool isVrMode() { return Ovr != NULL; }
 
     int getLoadingTexture(){
         return loadingTexture;
@@ -53,10 +49,6 @@ public:
 
     void setRefreshRate(int refreshRate, bool forceChange = true);
 
-    void sendTrackingInfoGvr(JNIEnv *env_, UdpManager *udpManager, uint64_t frameIndex, const float *headOrientation,
-                             const float *headPosition);
-
-    void initializeGvr(jlong nativeGvrContext);
 private:
     ANativeWindow *window = NULL;
     ovrMobile *Ovr;
@@ -76,7 +68,7 @@ private:
     static const int DEFAULT_REFRESH_RATE = 60;
     int m_currentRefreshRate = DEFAULT_REFRESH_RATE;
 
-    //uint64_t FrameIndex = 0;
+    uint64_t FrameIndex = 0;
     uint64_t WantedFrameIndex = 0;
 
     // For ARCore
@@ -112,16 +104,18 @@ private:
 
     ovrRenderer Renderer;
 
-    // GVR APIs
-    gvr::ControllerApi* controllerApi;
-    gvr::ControllerState controllerState;
-
     void setControllerInfo(TrackingInfo *packet, double displayTime);
+
+    void sendTrackingInfo(TrackingInfo *packet, double displayTime, ovrTracking2 *tracking,
+                          const ovrVector3f *other_tracking_position,
+                          const ovrQuatf *other_tracking_orientation);
+
     void setInitialRefreshRate(int initialRefreshRate);
 
-    void sendTrackingInfo(TrackingInfo *packet, UdpManager *udpManager, double displayTime, uint64_t frameIndex,
-                          const float *headOrientation, const float *headPosition);
+    void enterVrMode();
+    void leaveVrMode();
+    void onVrModeChange();
 };
 
 
-#endif //ALVRCLIENT_DAYDREAM_GVRCONTEXT_H
+#endif //ALVRCLIENT_DAYDREAM_OVRCONTEXT_H

@@ -1,5 +1,6 @@
 package com.polygraphene.alvr;
 
+import android.app.Activity;
 import android.opengl.EGLContext;
 
 class ArThread {
@@ -15,7 +16,7 @@ class ArThread {
     public void join() {
     }
 
-    public void initialize(MainActivity activity) {
+    public void initialize(Activity activity) {
     }
 
     public void onConnect() {
@@ -24,7 +25,7 @@ class ArThread {
     public void onDisconnect() {
     }
 
-    public static boolean onRequestPermissionsResult(MainActivity activity) {
+    public static boolean onRequestPermissionsResult(Activity activity) {
         return true;
     }
 

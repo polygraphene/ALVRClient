@@ -11,10 +11,12 @@ class GvrRenderer {
 public:
     GvrRenderer();
     void glInit(JNIEnv* env, int width, int height);
-    void renderFrame(ovrMatrix4f mvpMatrix[2], Recti viewports[2]);
+    void renderFrame(ovrMatrix4f mvpMatrix[2], Recti viewports[2], bool loading);
     ~GvrRenderer();
 
     int getLoadingTexture() {return loadingTexture;};
+
+    int getSurfaceTexture() { return SurfaceTextureID; }
 
 private:
     ovrRenderer Renderer;

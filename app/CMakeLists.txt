@@ -15,11 +15,12 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -g")
 link_directories(src/main/jniLibs/${ANDROID_ABI})
 
 if (VRSDK STREQUAL "ovr")
-    set(VRSOURCE "src/main/cpp/vr_context.cpp")
     add_definitions(-DOVR_SDK)
+    set(VRSOURCE "src/main/cpp/ovr_context.cpp")
 elseif (VRSDK STREQUAL "gvr")
     add_definitions(-DGVR_SDK)
-    set(VRSOURCE "src/main/cpp/gvr_render.cpp")
+    set(VRSOURCE "src/main/cpp/gvr_render.cpp"
+            "src/main/cpp/gvr_context.cpp")
 endif()
 
 add_library( # Sets the name of the library.
@@ -36,6 +37,7 @@ add_library( # Sets the name of the library.
              src/main/cpp/fec.cpp
              src/main/cpp/asset.cpp
              src/main/cpp/gltf_model.cpp
+             src/main/cpp/vr_context.cpp
              ../ALVR-common/reedsolomon/rs.c
              ../ALVR-common/common-utils.cpp
              ../ALVR-common/exception.cpp
@@ -68,6 +70,8 @@ target_link_libraries( # Specifies the target library.
                        ${log-lib}
 
                        vrapi
+        gvr
+        gvr_audio
                        GLESv3
                        EGL
                        android

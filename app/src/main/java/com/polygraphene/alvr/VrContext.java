@@ -88,6 +88,14 @@ public class VrContext {
         setRefreshRateNative(handle, refreshRate);
     }
 
+    public void sendTracking(long udpManager, long frameIndex, float[] headOrientation, float[] headPosition) {
+        sendTrackingNative(handle, udpManager, frameIndex, headOrientation, headPosition);
+    }
+
+    public void initializeGvr(long gvrNativeHandle) {
+        initializeGvrNative(handle, gvrNativeHandle);
+    }
+
     private native long initializeNative(Activity activity, AssetManager assetManager, boolean ARMode, int initialRefreshRate);
     private native void destroyNative(long handle);
 
@@ -113,5 +121,8 @@ public class VrContext {
 
     private native void setFrameGeometryNative(long handle, int width, int height);
     private native void setRefreshRateNative(long handle, int refreshRate);
+
+    private native void sendTrackingNative(long handle, long updManager, long frameIndex, float[] headOrientation, float[] headPosition);
+    private native void initializeGvrNative(long handle, long gvrNativeHandle);
 
 }

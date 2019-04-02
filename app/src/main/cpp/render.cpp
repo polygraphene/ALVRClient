@@ -187,7 +187,7 @@ static const char VERTEX_SHADER[] =
                 "void main()\n"
                 "{\n"
                 "	gl_Position = mvpMatrix[VIEW_ID] * vec4( vertexPosition, 1.0 );\n"
-                "   if(VIEW_ID == uint(0)){\n"
+                "   if(uint(VIEW_ID) == uint(0)){\n"
                 "      uv = vec2(vertexUv.x, vertexUv.y);\n"
                 "   }else{\n"
                 "      uv = vec2(vertexUv.x + 0.5, vertexUv.y);\n"
@@ -1299,7 +1299,7 @@ void renderEye(int eye, ovrMatrix4f mvpMatrix[2], Recti *viewport, ovrRenderer *
         GL(glEnable(GL_BLEND));
         GL(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
 
-        LOG("mm:\n%s", DumpMatrix(&mvpMatrix[0]).c_str());
+        //LOG("mm:\n%s", DumpMatrix(&mvpMatrix[0]).c_str());
         GL(glUniformMatrix4fv(renderer->ProgramLoading.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
                               (float *) mvpMatrix));
         GL(glActiveTexture(GL_TEXTURE0));
