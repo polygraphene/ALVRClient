@@ -8,7 +8,7 @@ import java.util.concurrent.TimeUnit;
 
 class TrackingThread extends ThreadBase {
     private static final String TAG = "TrackingThread";
-    private int mRefreshRate = 60;
+    private int mRefreshRate = 75;
 
     interface TrackingCallback {
         void onTracking(float[] position, float[] orientation);
@@ -72,7 +72,7 @@ class TrackingThread extends ThreadBase {
         Log.v(TAG, "TrackingThread has stopped.");
     }
 
-    public boolean onRequestPermissionsResult(MainActivity activity) {
+    public boolean onRequestPermissionsResult(BaseActivity activity) {
         return mArThread.onRequestPermissionsResult(activity);
     }
 

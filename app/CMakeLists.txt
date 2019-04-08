@@ -20,7 +20,7 @@ if (VRSDK STREQUAL "ovr")
 elseif (VRSDK STREQUAL "gvr")
     add_definitions(-DGVR_SDK)
     set(VRSOURCE "src/main/cpp/gvr_render.cpp"
-            "src/main/cpp/gvr_context.cpp")
+            "src/main/cpp/gvr_tracking.cpp")
 endif()
 
 add_library( # Sets the name of the library.
@@ -37,7 +37,6 @@ add_library( # Sets the name of the library.
              src/main/cpp/fec.cpp
              src/main/cpp/asset.cpp
              src/main/cpp/gltf_model.cpp
-             src/main/cpp/vr_context.cpp
              ../ALVR-common/reedsolomon/rs.c
              ../ALVR-common/common-utils.cpp
              ../ALVR-common/exception.cpp

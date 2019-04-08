@@ -62,14 +62,23 @@ public class OutputFrameQueue {
         notifyAll();
     }
 
-    synchronized public long render() {
+    synchronized public long render(int waitMs) {
+        try {
+            wait(waitMs);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        if(mQueue.size() == 0) {
+            return -1;
+        }
+        /*
         while (mQueue.size() == 0 && !mStopped) {
             try {
-                wait();
+                wait(5);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-        }
+        }*/
         if (mStopped) {
             return -1;
         }

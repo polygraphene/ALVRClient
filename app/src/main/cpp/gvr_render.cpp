@@ -31,9 +31,9 @@ void GvrRenderer::renderFrame(ovrMatrix4f mvpMatrix[2], Recti viewport[2], bool 
 }
 
 GvrRenderer::~GvrRenderer() {
-     ovrRenderer_Destroy(&Renderer);
-    GLuint textures[2] = {SurfaceTextureID, loadingTexture};
-    glDeleteTextures(2, textures);
+    ovrRenderer_Destroy(&Renderer);
+    //GLuint textures[2] = {SurfaceTextureID, loadingTexture};
+    //glDeleteTextures(2, textures);
 }
 
 extern "C"

@@ -1145,9 +1145,12 @@ void ovrRenderer_Destroy(ovrRenderer *renderer) {
     }
 #endif
 
+    // On Gvr, ovrFence_Destroy produces error because we cannot call it on GL render thread.
+#if !defined(GVR_SDK)
     for (int i = 0; i < MAX_FENCES; i++) {
         ovrFence_Destroy(&renderer->Fence[i]);
     }
+#endif
     free(renderer->Fence);
 }
 
@@ -1210,6 +1213,7 @@ ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava
 
     return layer;
 }
+
 
 void renderEye(int eye, ovrMatrix4f mvpMatrix[2], Recti *viewport, ovrRenderer *renderer, const ovrTracking2 *tracking,
                bool loading, int enableTestMode, int AROverlayMode) {

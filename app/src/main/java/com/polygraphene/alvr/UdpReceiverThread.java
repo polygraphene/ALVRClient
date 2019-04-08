@@ -19,18 +19,17 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
     }
 
     private static final String BROADCAST_ADDRESS = "255.255.255.255";
+    private static final int PORT = 9944;
+    private static final int REFRESH_RATE_COUNT = 4;
 
     private TrackingThread mTrackingThread;
-    private VrContext mVrContext;
-    private int mPort;
-    private int[] mRefreshRates = new int[4];
+    private int mPort = PORT;
+    private int[] mRefreshRates = new int[REFRESH_RATE_COUNT];
     private boolean mInitialized = false;
     private boolean mInitializeFailed = false;
 
     private String mPreviousServerAddress;
     private int mPreviousServerPort;
-
-    private TrackingThread.TrackingCallback mGvrTrackingCallback;
 
     interface Callback {
         void onConnected(int width, int height, int codec, int frameQueueSize, int refreshRate);
@@ -40,17 +39,14 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
         void onShutdown(String serverAddr, int serverPort);
 
         void onDisconnect();
+
+        void onTracking(float[] position, float[] orientation);
     }
 
     private Callback mCallback;
 
-    UdpReceiverThread(Callback callback, VrContext vrContext) {
+    UdpReceiverThread(Callback callback) {
         mCallback = callback;
-        mVrContext = vrContext;
-    }
-
-    public void setPort(int port) {
-        mPort = port;
     }
 
     private String getDeviceName() {
@@ -68,10 +64,11 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
         mPreviousServerPort = serverPort;
     }
 
-    public boolean start(VrContext vrContext, EGLContext mEGLContext, Activity activity) {
+    public boolean start(EGLContext mEGLContext, Activity activity, int[] refreshRates, int cameraTexture) {
         mTrackingThread = new TrackingThread();
         mTrackingThread.setCallback(this);
-        vrContext.getRefreshRates(mRefreshRates);
+
+        System.arraycopy(refreshRates, 0, mRefreshRates, 0, REFRESH_RATE_COUNT);
 
         super.startBase();
 
@@ -86,7 +83,7 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
         }
 
         if(!mInitializeFailed) {
-            mTrackingThread.start(mEGLContext, activity, mVrContext.getCameraTexture());
+            mTrackingThread.start(mEGLContext, activity, cameraTexture);
         }
         return !mInitializeFailed;
     }
@@ -170,14 +167,9 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
 
     @Override
     public void onTracking(float[] position, float[] orientation) {
-        if (isTracking()) {
-            //mVrContext.fetchTrackingInfo(getPointer(), position, orientation);
-            mGvrTrackingCallback.onTracking(position, orientation);
+        if (isConnected()) {
+            mCallback.onTracking(position, orientation);
         }
-    }
-
-    public boolean isTracking() {
-        return mVrContext.isVrMode() && isConnected();
     }
 
     public String getErrorMessage() {
@@ -202,10 +194,6 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
     @SuppressWarnings("unused")
     public void onChangeSettings(int EnableTestMode, int suspend, int frameQueueSize) {
         mCallback.onChangeSettings(EnableTestMode, suspend, frameQueueSize);
-    }
-
-    public void setTrackingCallback(TrackingThread.TrackingCallback callback) {
-        mGvrTrackingCallback = callback;
     }
 
     private native int initializeSocket(int port, String deviceName, String[] broadcastAddrList, int[] refreshRates);

@@ -1,5 +1,5 @@
-#ifndef ALVRCLIENT_DAYDREAM_OVRCONTEXT_H
-#define ALVRCLIENT_DAYDREAM_OVRCONTEXT_H
+#ifndef ALVRCLIENT_VR_CONTEXT_H
+#define ALVRCLIENT_VR_CONTEXT_H
 
 #include <memory>
 #include <map>
@@ -10,9 +10,9 @@
 #include "render.h"
 #include "utils.h"
 #include "udp.h"
-#include "vr_context.h"
 
-class OvrContext : public VrContextBase {
+
+class OvrContext {
 public:
     void initialize(JNIEnv *env, jobject activity, jobject assetManager, bool ARMode, int initialRefreshRate);
     void destroy();
@@ -117,5 +117,4 @@ private:
     void onVrModeChange();
 };
 
-
-#endif //ALVRCLIENT_DAYDREAM_OVRCONTEXT_H
+#endif //ALVRCLIENT_VR_CONTEXT_H

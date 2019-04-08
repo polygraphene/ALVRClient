@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.content.Context;
 import android.media.AudioManager;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.SurfaceHolder;
@@ -12,12 +11,8 @@ import android.view.SurfaceView;
 import android.view.Window;
 import android.view.WindowManager;
 
-public class MainActivity extends Activity {
-    private final static String TAG = "MainActivity";
-
-    static {
-        System.loadLibrary("native-lib");
-    }
+public class OvrActivity extends BaseActivity {
+    private final static String TAG = "OvrActivity";
 
     private VrThread mVrThread = null;
 
@@ -39,7 +34,7 @@ public class MainActivity extends Activity {
     };
 
     @Override
-    public void onCreate(Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -55,8 +50,6 @@ public class MainActivity extends Activity {
         Log.v(TAG, "onCreate: Starting VrThread");
         mVrThread = new VrThread(this);
         mVrThread.start();
-
-        ArThread.requestPermissions(this);
     }
 
     @Override
@@ -119,12 +112,5 @@ public class MainActivity extends Activity {
     {
         AudioManager audio = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, 0);
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        if (!ArThread.onRequestPermissionsResult(this)) {
-            finish();
-        }
     }
 }

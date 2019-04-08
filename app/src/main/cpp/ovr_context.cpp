@@ -1,5 +1,3 @@
-#include "ovr_context.h"
-
 #include <unistd.h>
 #include <jni.h>
 #include <VrApi.h>
@@ -17,7 +15,7 @@
 #include <vector>
 #include "utils.h"
 #include "render.h"
-#include "vr_context.h"
+#include "ovr_context.h"
 #include "latency_collector.h"
 #include "packet_types.h"
 #include "udp.h"
@@ -676,4 +674,162 @@ void OvrContext::leaveVrMode() {
 
     LOGI("Leaved VR mode.");
     Ovr = NULL;
+}
+
+extern "C"
+JNIEXPORT jlong JNICALL
+Java_com_polygraphene_alvr_VrContext_initializeNative(JNIEnv *env, jobject instance,
+                                                      jobject activity, jobject assetManager, bool ARMode, int initialRefreshRate) {
+    OvrContext *context = new OvrContext();
+    context->initialize(env, activity, assetManager, ARMode, initialRefreshRate);
+    return (jlong) context;
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_OvrContext_destroyNative(JNIEnv *env, jobject instance, jlong handle) {
+    ((OvrContext *) handle)->destroy();
+}
+
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_polygraphene_alvr_OvrContext_getLoadingTextureNative(JNIEnv *env, jobject instance,
+                                                             jlong handle) {
+    return ((OvrContext *) handle)->getLoadingTexture();
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_polygraphene_alvr_OvrContext_getSurfaceTextureIDNative(JNIEnv *env, jobject instance,
+                                                               jlong handle) {
+    return ((OvrContext *) handle)->getSurfaceTextureID();
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_polygraphene_alvr_OvrContext_getCameraTextureNative(JNIEnv *env, jobject instance,
+                                                            jlong handle) {
+    return ((OvrContext *) handle)->getCameraTexture();
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_OvrContext_renderNative(JNIEnv *env, jobject instance, jlong handle,
+                                                  jlong renderedFrameIndex) {
+    return ((OvrContext *) handle)->render(renderedFrameIndex);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_OvrContext_renderLoadingNative(JNIEnv *env, jobject instance,
+                                                         jlong handle) {
+    return ((OvrContext *) handle)->renderLoading();
+}
+
+// Called from TrackingThread
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_OvrContext_fetchTrackingInfoNative(JNIEnv *env, jobject instance,
+                                                             jlong handle,
+                                                             jlong udpManager,
+                                                             jfloatArray position_,
+                                                             jfloatArray orientation_) {
+    if(position_ != NULL && orientation_ != NULL) {
+        ovrVector3f position;
+        ovrQuatf orientation;
+
+        jfloat *position_c = env->GetFloatArrayElements(position_, NULL);
+        memcpy(&position, position_c, sizeof(float) * 3);
+        env->ReleaseFloatArrayElements(position_, position_c, 0);
+
+        jfloat *orientation_c = env->GetFloatArrayElements(orientation_, NULL);
+        memcpy(&orientation, orientation_c, sizeof(float) * 4);
+        env->ReleaseFloatArrayElements(orientation_, orientation_c, 0);
+
+        ((OvrContext *) handle)->fetchTrackingInfo(env, (UdpManager *)udpManager, &position, &orientation);
+    }else {
+        ((OvrContext *) handle)->fetchTrackingInfo(env, (UdpManager *) udpManager, NULL, NULL);
+    }
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_OvrContext_onChangeSettingsNative(JNIEnv *env, jobject instance,
+                                                            jlong handle,
+                                                            jint EnableTestMode, jint Suspend) {
+    ((OvrContext *) handle)->onChangeSettings(EnableTestMode, Suspend);
+}
+
+//
+// Life cycle management.
+//
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_OvrContext_onSurfaceCreatedNative(JNIEnv *env, jobject instance,
+                                                            jlong handle,
+                                                            jobject surface) {
+    ((OvrContext *) handle)->onSurfaceCreated(surface);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_OvrContext_onSurfaceDestroyedNative(JNIEnv *env, jobject instance,
+                                                              jlong handle) {
+    ((OvrContext *) handle)->onSurfaceDestroyed();
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_OvrContext_onSurfaceChangedNative(JNIEnv *env, jobject instance,
+                                                            jlong handle, jobject surface) {
+    ((OvrContext *) handle)->onSurfaceChanged(surface);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_OvrContext_onResumeNative(JNIEnv *env, jobject instance, jlong handle) {
+    ((OvrContext *) handle)->onResume();
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_OvrContext_onPauseNative(JNIEnv *env, jobject instance, jlong handle) {
+    ((OvrContext *) handle)->onPause();
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_polygraphene_alvr_OvrContext_isVrModeNative(JNIEnv *env, jobject instance, jlong handle) {
+    return ((OvrContext *) handle)->isVrMode();
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_OvrContext_getRefreshRatesNative(JNIEnv *env, jobject instance, jlong handle, jintArray refreshRates) {
+    ((OvrContext *) handle)->getRefreshRates(env, refreshRates);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_OvrContext_setFrameGeometryNative(JNIEnv *env, jobject instance,
+                                                            jlong handle, jint width,
+                                                            jint height) {
+    ((OvrContext *) handle)->setFrameGeometry(width, height);
+}
+
+extern "C"
+JNIEXPORT bool JNICALL
+Java_com_polygraphene_alvr_VrContext_onKeyEventNative(JNIEnv *env, jobject instance, jlong handle,
+                                                      jint keyCode,
+                                                      jint action) {
+    return ((OvrContext *) handle)->onKeyEvent(keyCode, action);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_OvrContext_setRefreshRateNative(JNIEnv *env, jobject instance,
+                                                          jlong handle, jint refreshRate) {
+    return ((OvrContext *) handle)->setRefreshRate(refreshRate);
 }

@@ -92,7 +92,8 @@ class DecoderThread extends ThreadBase {
             mAvailableInputs.notifyAll();
         }
         mNalParser.notifyWaitingThread();
-        mQueue.stop();
+        if(mQueue != null)
+            mQueue.stop();
     }
 
     protected void run() {
@@ -299,11 +300,11 @@ class DecoderThread extends ThreadBase {
         return mQueue != null && mQueue.isFrameAvailable();
     }
 
-    public long render() {
+    public long render(int waitMs) {
         if (mQueue == null) {
             return -1;
         }
-        return mQueue.render();
+        return mQueue.render(waitMs);
     }
 
     public void onConnect(int codec, int frameQueueSize) {

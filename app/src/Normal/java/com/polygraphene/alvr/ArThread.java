@@ -44,7 +44,7 @@ class ArThread {
         return null;
     }
 
-    public static void requestPermissions(MainActivity activity) {
+    public static void requestPermissions(BaseActivity activity) {
     }
 
     public void stopAndWait() {

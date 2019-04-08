@@ -66,7 +66,7 @@ public class ArThread extends ThreadBase {
         super.startBase();
     }
 
-    public static void requestPermissions(MainActivity activity) {
+    public static void requestPermissions(BaseActivity activity) {
         ActivityCompat.requestPermissions(
                 activity, new String[]{Manifest.permission.CAMERA}, RC_PERMISSIONS);
     }
@@ -87,7 +87,7 @@ public class ArThread extends ThreadBase {
         return mErrorMessage;
     }
 
-    public void initialize(MainActivity activity) {
+    public void initialize(BaseActivity activity) {
         try {
             Session session = createArSession(activity, mInstallRequested);
             if (session == null) {
@@ -201,7 +201,7 @@ public class ArThread extends ThreadBase {
     /**
      * Launch Application Setting to grant permission.
      */
-    private void launchPermissionSettings(MainActivity activity) {
+    private void launchPermissionSettings(BaseActivity activity) {
         Intent intent = new Intent();
         intent.setAction(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
         intent.setData(Uri.fromParts("package", activity.getPackageName(), null));
@@ -260,7 +260,7 @@ public class ArThread extends ThreadBase {
         }
     }
 
-    public void debugReadPixel(MainActivity activity) {
+    public void debugReadPixel(BaseActivity activity) {
         //Generate a new FBO. It will contain your texture.
         int fb[] = new int[1];
         GLES11Ext.glGenFramebuffersOES(1, IntBuffer.wrap(fb));
