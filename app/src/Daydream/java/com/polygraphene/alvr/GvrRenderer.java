@@ -160,7 +160,7 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
             float r = (float) Math.tan(Math.toRadians(mEyeFov.right)) * 1f;
             float b = (float) -Math.tan(Math.toRadians(mEyeFov.bottom)) * 1f;
             float t = (float) Math.tan(Math.toRadians(mEyeFov.top)) * 1f;
-            Matrix.frustumM(mEyePerspective, 0, l, r, b, t, 0.1f, 30f);
+            Matrix.frustumM(mEyePerspective, 0, l, r, b, t, 1f, 10f);
 
             if(eye == 0) {
                 System.arraycopy(mEyePerspective, 0, mTmpLeftEyePerspective, 0, 16);
