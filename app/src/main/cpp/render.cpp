@@ -1130,6 +1130,8 @@ void ovrRenderer_CreateScene(ovrRenderer *renderer) {
 }
 
 void ovrRenderer_Destroy(ovrRenderer *renderer) {
+    // On Gvr, ovrFence_Destroy produces error because we cannot call it on GL render thread.
+#if !defined(GVR_SDK)
     if(renderer->SceneCreated) {
         ovrProgram_Destroy(&renderer->Program);
         ovrProgram_Destroy(&renderer->ProgramLoading);
@@ -1138,6 +1140,7 @@ void ovrRenderer_Destroy(ovrRenderer *renderer) {
         ovrGeometry_DestroyVAO(&renderer->TestMode);
         ovrGeometry_Destroy(&renderer->TestMode);
     }
+#endif
 
 #ifdef OVR_SDK
     for (int eye = 0; eye < renderer->NumBuffers; eye++) {
@@ -1145,7 +1148,6 @@ void ovrRenderer_Destroy(ovrRenderer *renderer) {
     }
 #endif
 
-    // On Gvr, ovrFence_Destroy produces error because we cannot call it on GL render thread.
 #if !defined(GVR_SDK)
     for (int i = 0; i < MAX_FENCES; i++) {
         ovrFence_Destroy(&renderer->Fence[i]);
@@ -1307,6 +1309,7 @@ void renderEye(int eye, ovrMatrix4f mvpMatrix[2], Recti *viewport, ovrRenderer *
         GL(glUniformMatrix4fv(renderer->ProgramLoading.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
                               (float *) mvpMatrix));
         GL(glActiveTexture(GL_TEXTURE0));
+        LOG("Rendering LoadingTexture: %d", renderer->LoadingTexture);
         GL(glBindTexture(GL_TEXTURE_2D, renderer->LoadingTexture));
         renderer->loadingScene->drawScene(VERTEX_ATTRIBUTE_LOCATION_POSITION,
                                           VERTEX_ATTRIBUTE_LOCATION_UV,

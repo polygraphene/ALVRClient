@@ -13,7 +13,7 @@ import java.nio.ByteBuffer;
 import java.util.LinkedList;
 import java.util.List;
 
-class DecoderThread extends ThreadBase {
+public class DecoderThread extends ThreadBase {
     private static final String TAG = "DecoderThread";
 
     private static final int CODEC_H264 = 0;
@@ -71,11 +71,12 @@ class DecoderThread extends ThreadBase {
 
     private final List<Integer> mAvailableInputs = new LinkedList<>();
 
-    DecoderThread(NALParser nalParser,
+    public DecoderThread(NALParser nalParser,
                   Surface surface, Context context) {
         mNalParser = nalParser;
         mSurface = surface;
         mContext = context;
+        mQueue = new OutputFrameQueue();
     }
 
     private void frameLog(String s) {
@@ -111,6 +112,7 @@ class DecoderThread extends ThreadBase {
                 } catch (IllegalStateException e) {
                     e.printStackTrace();
                 }
+                mDecoder = null;
             }
         }
         Log.v(TAG, "DecoderThread stopped.");
@@ -132,7 +134,7 @@ class DecoderThread extends ThreadBase {
         }
         mDecoder = MediaCodec.createDecoderByType(mFormat);
 
-        mQueue = new OutputFrameQueue(mDecoder);
+        mQueue.setCodec(mDecoder);
 
         mDecoder.setVideoScalingMode(MediaCodec.VIDEO_SCALING_MODE_SCALE_TO_FIT);
         mDecoder.setCallback(new Callback());
@@ -287,12 +289,12 @@ class DecoderThread extends ThreadBase {
 
         @Override
         public void onError(@NonNull MediaCodec codec, @NonNull MediaCodec.CodecException e) {
-            Log.e("DecodeActivity", "Codec Error: " + e.getMessage() + "\n" + e.getDiagnosticInfo());
+            Log.e(TAG, "Codec Error: " + e.getMessage() + "\n" + e.getDiagnosticInfo());
         }
 
         @Override
         public void onOutputFormatChanged(@NonNull MediaCodec codec, @NonNull MediaFormat format) {
-            Log.d("DecodeActivity", "New format " + mDecoder.getOutputFormat());
+            Log.d(TAG, "New format " + mDecoder.getOutputFormat());
         }
     }
 

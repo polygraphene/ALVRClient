@@ -66,7 +66,6 @@ class TrackingThread extends ThreadBase {
                     TimeUnit.NANOSECONDS.sleep(next);
                 }
             } catch (InterruptedException e) {
-                e.printStackTrace();
             }
         }
         Log.v(TAG, "TrackingThread has stopped.");

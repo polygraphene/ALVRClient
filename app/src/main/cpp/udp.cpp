@@ -672,7 +672,6 @@ Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobje
                                                               jstring deviceName_,
                                                               jobjectArray broadcastAddrList_,
                                                               jintArray refreshRates_) {
-    LOGE("Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket: %p", g_udpManager.get());
     g_udpManager = std::make_shared<UdpManager>();
     try {
         g_udpManager->initialize(env, port, deviceName_, broadcastAddrList_, refreshRates_);
@@ -686,9 +685,7 @@ Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobje
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_closeSocket(JNIEnv *env, jobject instance) {
-    LOGE("Java_com_polygraphene_alvr_UdpReceiverThread_closeSocket: enter %p", g_udpManager.get());
     g_udpManager.reset();
-    LOGE("Java_com_polygraphene_alvr_UdpReceiverThread_closeSocket: exit %p", g_udpManager.get());
 }
 
 extern "C"

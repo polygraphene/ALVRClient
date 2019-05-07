@@ -22,7 +22,10 @@ public class OutputFrameQueue {
     private boolean mFrameAvailable;
     private int mQueueSize = 1;
 
-    OutputFrameQueue(MediaCodec codec) {
+    OutputFrameQueue() {
+    }
+
+    public void setCodec(MediaCodec codec) {
         mCodec = codec;
     }
 
@@ -69,6 +72,7 @@ public class OutputFrameQueue {
             e.printStackTrace();
         }
         if(mQueue.size() == 0) {
+            Log.v(TAG, "Timeout to wait for frame.");
             return -1;
         }
         /*
@@ -83,6 +87,7 @@ public class OutputFrameQueue {
             return -1;
         }
         Element element = mQueue.removeFirst();
+        Utils.frameLog(element.frameIndex, "Got frame from queue");
         mCodec.releaseOutputBuffer(element.index, true);
         return element.frameIndex;
     }

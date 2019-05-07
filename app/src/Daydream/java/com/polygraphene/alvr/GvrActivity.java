@@ -1,11 +1,9 @@
 package com.polygraphene.alvr;
 
-import android.graphics.SurfaceTexture;
 import android.opengl.GLSurfaceView;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.Surface;
 import android.view.View;
 
 import com.google.vr.ndk.base.GvrLayout;
@@ -22,10 +20,6 @@ public class GvrActivity extends BaseActivity {
 
     private DecoderThread mDecoderThread;
     private UdpReceiverThread mReceiverThread;
-
-    private boolean mResumed = false;
-    private boolean mThreadStarted = false;
-    private boolean mSurfaceCreated = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,8 +41,7 @@ public class GvrActivity extends BaseActivity {
         mRenderer.setOnSurfaceCreatedListener(new Runnable() {
             @Override
             public void run() {
-                mSurfaceCreated = true;
-                resumeThreads();
+                startWorkerThreads();
             }
         });
         mSurfaceView.setRenderer(mRenderer);
@@ -74,23 +67,13 @@ public class GvrActivity extends BaseActivity {
                     | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                     | View.SYSTEM_UI_FLAG_FULLSCREEN
                     | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
-
-        mResumed = true;
-        resumeThreads();
     }
 
     /**
      * Called from onResume or when surface has created. To feed surface to decoder, we must wait for surface prepared.
      */
-    private void resumeThreads(){
-        if(!mResumed || !mSurfaceCreated) {
-            return;
-        }
-        if(mThreadStarted) {
-            return;
-        }
-        Log.v(TAG, "resumeThreads");
-        mThreadStarted = true;
+    private void startWorkerThreads(){
+        Log.v(TAG, "startWorkerThreads");
 
         mReceiverThread = new UdpReceiverThread(mUdpReceiverCallback);
 
@@ -120,7 +103,7 @@ public class GvrActivity extends BaseActivity {
 
         mRenderer.onResume(mReceiverThread, mDecoderThread);
 
-        Log.v(TAG, "resumeThreads: Resume done.");
+        Log.v(TAG, "startWorkerThreads: Done.");
     }
 
     /**
@@ -141,16 +124,13 @@ public class GvrActivity extends BaseActivity {
     @Override
     protected void onPause() {
         Log.v(TAG, "onPause");
-        mResumed = false;
-        mThreadStarted = false;
 
         super.onPause();
         mGvrLayout.onPause();
+
         // Must call Renderer.onPause() before SurfaceView.onPause().
         // Because SurfaceView.onPause() wait for the exit of Renderer.onDraw() call.
         mRenderer.onPause();
-        Log.v(TAG, "Call mSurfaceView.onPause");
-        mSurfaceView.onPause();
 
         // Stop worker threads.
         Log.v(TAG, "VrThread.onPause: Stopping worker threads.");
@@ -158,11 +138,18 @@ public class GvrActivity extends BaseActivity {
         if (mDecoderThread != null) {
             Log.v(TAG, "VrThread.onPause: Stopping DecoderThread.");
             mDecoderThread.stopAndWait();
+            mDecoderThread = null;
         }
         if (mReceiverThread != null) {
             Log.v(TAG, "VrThread.onPause: Stopping ReceiverThread.");
             mReceiverThread.stopAndWait();
+            mReceiverThread = null;
         }
+
+        Log.v(TAG, "Call mSurfaceView.onPause");
+        mSurfaceView.onPause();
+
+        Log.v(TAG, "onPause: exit");
     }
 
     @Override
@@ -177,6 +164,7 @@ public class GvrActivity extends BaseActivity {
         Log.v(TAG, "onStop");
         super.onStop();
         mRenderer.shutdown();
+        Log.v(TAG, "onStop: exit");
     }
 
     private UdpReceiverThread.Callback mUdpReceiverCallback = new UdpReceiverThread.Callback() {

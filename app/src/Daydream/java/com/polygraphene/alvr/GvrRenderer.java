@@ -40,8 +40,10 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     private final GvrActivity mActivity;
     private final GvrApi mApi;
     private GvrTracking mGvrTracking;
+
     private UdpReceiverThread mReceiverThread;
     private DecoderThread mDecoderThread;
+
     private Object mWaiter = new Object();
     private boolean mFrameAvailable = false;
 
@@ -72,6 +74,9 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
 
     private final float[] mTmpHeadPosition = new float[3];
     private final float[] mTmpHeadOrientation = new float[4];
+
+    private final RectF mEyeUv = new RectF();
+
     private long currentFrameIndex = 0;
     private LongSparseArray<float[]> mFrameMap = new LongSparseArray<>();
 
@@ -106,47 +111,14 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     @Override
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
         Log.v(TAG, "onSurfaceCreated");
-        mApi.initializeGl();
 
-        // This tends to be 50% taller & wider than the device's screen so it has 2.4x as many pixels
-        // as the screen.
-        mApi.getMaximumEffectiveRenderTargetSize(mTargetSize);
+        initializeGlObjects();
 
-        // Configure the pixel buffers that the app renders to. There is only one in this sample.
-        BufferSpec bufferSpec = mApi.createBufferSpec();
-        bufferSpec.setSize(mTargetSize);
-
-        // Create the queue of frames with a given spec.
-        BufferSpec[] specList = {bufferSpec};
-        mSwapChain = mApi.createSwapChain(specList);
-
-        // Free this early since we no longer need it.
-        bufferSpec.shutdown();
-
-        glInitNative(nativeHandle, mTargetSize.x, mTargetSize.y);
-
-        mLoadingTexture.initializeMessageCanvas(getLoadingTexture(nativeHandle));
-
-        mSurfaceTexture = new SurfaceTexture(getSurfaceTexture(nativeHandle));
-        mSurfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
-            @Override
-            public void onFrameAvailable(SurfaceTexture surfaceTexture) {
-                Log.v(TAG, "onFrameAvailable");
-                synchronized (mWaiter) {
-                    mFrameAvailable = true;
-                    mWaiter.notifyAll();
-                }
-            }
-        });
-        mSurface = new Surface(mSurfaceTexture);
-
-        mSurfaceCreatedListener.run();
-
-        Log.v(TAG, "onSurfaceCreated: end");
     }
 
     @Override
     public void onSurfaceChanged(GL10 gl, int width, int height) {
+        Log.v(TAG, "onSurfaceChanged");
     }
 
     public void onResume(UdpReceiverThread receiverThread, DecoderThread decoderThread) {
@@ -155,11 +127,12 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     }
 
     public void onPause() {
-        mReceiverThread = null;
-        mDecoderThread = null;
+        synchronized (mWaiter) {
+            mReceiverThread = null;
+            mDecoderThread = null;
+            mWaiter.notifyAll();
+        }
     }
-
-    private final RectF mEyeUv = new RectF();
 
     @Override
     public void onDrawFrame(GL10 gl) {
@@ -170,9 +143,7 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         mApi.getHeadSpaceFromStartSpaceTransform(mHeadFromWorld, System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(50));
 
         // Send tracking info to the server.
-        if(mReceiverThread != null && mReceiverThread.isConnected()) {
-            sendTracking(mHeadFromWorld);
-        }
+        sendTracking(mHeadFromWorld);
 
         // Get the parts of each frame associated with each eye in world space. The list is
         // {left eye, right eye}.
@@ -236,6 +207,47 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         frame.submit(mViewportList, mHeadFromWorld);
     }
 
+    private void initializeGlObjects() {
+        Log.v(TAG, "initializeGl");
+
+        mApi.initializeGl();
+
+        // This tends to be 50% taller & wider than the device's screen so it has 2.4x as many pixels
+        // as the screen.
+        mApi.getMaximumEffectiveRenderTargetSize(mTargetSize);
+
+        // Configure the pixel buffers that the app renders to. There is only one in this sample.
+        BufferSpec bufferSpec = mApi.createBufferSpec();
+        bufferSpec.setSize(mTargetSize);
+
+        // Create the queue of frames with a given spec.
+        BufferSpec[] specList = {bufferSpec};
+        mSwapChain = mApi.createSwapChain(specList);
+
+        // Free this early since we no longer need it.
+        bufferSpec.shutdown();
+
+        glInitNative(nativeHandle, mTargetSize.x, mTargetSize.y);
+
+        mLoadingTexture.initializeMessageCanvas(getLoadingTexture(nativeHandle));
+        mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\nLoading...");
+
+        mSurfaceTexture = new SurfaceTexture(getSurfaceTexture(nativeHandle));
+        mSurfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
+            @Override
+            public void onFrameAvailable(SurfaceTexture surfaceTexture) {
+                Log.v(TAG, "onFrameAvailable");
+                synchronized (mWaiter) {
+                    mFrameAvailable = true;
+                    mWaiter.notifyAll();
+                }
+            }
+        });
+        mSurface = new Surface(mSurfaceTexture);
+
+        mSurfaceCreatedListener.run();
+    }
+
     public void shutdown() {
         mViewportList.shutdown();
         mViewportList = null;
@@ -259,6 +271,10 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
             }
 
             while (!mFrameAvailable) {
+                if(mReceiverThread == null || !mReceiverThread.isConnected()) {
+                    Log.v(TAG, "Discard frame because mReceiverThread == null.");
+                    return -1;
+                }
                 try {
                     mWaiter.wait();
                 } catch (InterruptedException e) {
@@ -275,7 +291,16 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     float[] mTmpEyeFromHead = new float[16];
     float[] mTmpEyeFromWorld = new float[16];
 
+
     private void sendTracking(float[] headFromWorld) {
+        synchronized (mWaiter) {
+            if(mReceiverThread != null && mReceiverThread.isConnected()) {
+                sendTrackingLocked(headFromWorld);
+            }
+        }
+    }
+
+    private void sendTrackingLocked(float[] headFromWorld) {
         // Extract quaternion since that's what steam expects.
         float[] m = headFromWorld;
         float t0 = m[0] + m[5] + m[10];

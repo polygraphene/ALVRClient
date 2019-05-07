@@ -18,7 +18,6 @@ public class ThreadBase {
             try {
                 mThread.join();
             } catch (InterruptedException e) {
-                e.printStackTrace();
             }
         }
     }

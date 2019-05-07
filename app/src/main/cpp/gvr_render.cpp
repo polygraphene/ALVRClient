@@ -20,6 +20,8 @@ void GvrRenderer::glInit(JNIEnv* env, int width, int height) {
     SurfaceTextureID = textures[0];
     loadingTexture = textures[1];
 
+    LOG("GvrRenderer::glInit: Surface=%d Loading=%d", SurfaceTextureID, loadingTexture);
+
     ovrRenderer_Create(&Renderer, &java, false, width, height, SurfaceTextureID, loadingTexture, 0, false);
     ovrRenderer_CreateScene(&Renderer);
 }
