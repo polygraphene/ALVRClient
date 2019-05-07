@@ -30,6 +30,8 @@ public class LoadingTexture {
 
         // Create texture for draw error/information messages.
         mTexture = texture;
+
+        mCurrentText = "";
     }
 
     void drawMessage(String text) {
