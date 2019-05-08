@@ -65,24 +65,14 @@ public class OutputFrameQueue {
         notifyAll();
     }
 
-    synchronized public long render(int waitMs) {
-        try {
-            wait(waitMs);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-        if(mQueue.size() == 0) {
-            Log.v(TAG, "Timeout to wait for frame.");
-            return -1;
-        }
-        /*
+    synchronized public long render() {
         while (mQueue.size() == 0 && !mStopped) {
             try {
                 wait(5);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-        }*/
+        }
         if (mStopped) {
             return -1;
         }

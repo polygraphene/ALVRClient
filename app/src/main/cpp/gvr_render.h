@@ -19,6 +19,7 @@ public:
     int getSurfaceTexture() { return SurfaceTextureID; }
 
 private:
+    bool mRendererInitialized = false;
     ovrRenderer Renderer;
     GLuint SurfaceTextureID = 0;
     GLuint loadingTexture = 0;

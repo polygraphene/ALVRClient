@@ -41,10 +41,12 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     private final GvrApi mApi;
     private GvrTracking mGvrTracking;
 
+    private boolean mResumed = false;
+
     private UdpReceiverThread mReceiverThread;
     private DecoderThread mDecoderThread;
 
-    private Object mWaiter = new Object();
+    private final Object mWaiter = new Object();
     private boolean mFrameAvailable = false;
 
     // Manages a queue of frames that our app renders to.
@@ -102,6 +104,7 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     }
 
     public void start() {
+        Log.v(TAG, "start");
         // Initialize native objects. It's important to call .shutdown to release resources.
         mViewportList = mApi.createBufferViewportList();
         mTmpViewport = mApi.createBufferViewport();
@@ -113,7 +116,6 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         Log.v(TAG, "onSurfaceCreated");
 
         initializeGlObjects();
-
     }
 
     @Override
@@ -121,17 +123,48 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         Log.v(TAG, "onSurfaceChanged");
     }
 
-    public void onResume(UdpReceiverThread receiverThread, DecoderThread decoderThread) {
+    public void onResume() {
+        mResumed = true;
+    }
+
+    public void setThreads(UdpReceiverThread receiverThread, DecoderThread decoderThread) {
         mReceiverThread = receiverThread;
         mDecoderThread = decoderThread;
     }
 
     public void onPause() {
         synchronized (mWaiter) {
+            mResumed = false;
             mReceiverThread = null;
             mDecoderThread = null;
             mWaiter.notifyAll();
         }
+    }
+
+    public void shutdown() {
+        Log.v(TAG, "shutdown");
+        mViewportList.shutdown();
+        mViewportList = null;
+        mTmpViewport.shutdown();
+        mTmpViewport = null;
+        if(mSwapChain != null) {
+            mSwapChain.shutdown();
+        }
+        mSwapChain = null;
+        destroyNative(nativeHandle);
+        nativeHandle = 0;
+    }
+
+    public EGLContext getEGLContext() {
+        return EGL14.eglGetCurrentContext();
+    }
+
+    public Surface getSurface() {
+        return mSurface;
+    }
+
+    private boolean isConnected() {
+        return mReceiverThread != null && mReceiverThread.isConnected();
     }
 
     @Override
@@ -178,23 +211,14 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
             viewport[3] = (int) (-mEyeUv.height() * mTargetSize.y);
         }
 
-        if(mReceiverThread != null && mReceiverThread.isConnected()) {
-            while(mReceiverThread != null && mReceiverThread.isConnected()) {
-                long frameIndex = waitFrame(5);
-                if (frameIndex != -1) {
-                    float[] matrix = mFrameMap.get(frameIndex);
-                    if (matrix != null) {
-                        System.arraycopy(matrix, 0, mHeadFromWorld, 0, matrix.length);
-                    }
-                    renderNative(nativeHandle, mLeftMvp, mRightMvp, mLeftViewport, mRightViewport, false, frameIndex);
-                    break;
-                } else {
-                    // Send tracking info to the server.
-                    if(mReceiverThread != null && mReceiverThread.isConnected()) {
-                        mApi.getHeadSpaceFromStartSpaceTransform(mHeadFromWorld, System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(50));
-                        sendTracking(mHeadFromWorld);
-                    }
+        if(isConnected()) {
+            long frameIndex = waitFrame();
+            if(frameIndex != -1) {
+                float[] matrix = mFrameMap.get(frameIndex);
+                if(matrix != null) {
+                    System.arraycopy(matrix, 0, mHeadFromWorld, 0, matrix.length);
                 }
+                renderNative(nativeHandle, mLeftMvp, mRightMvp, mLeftViewport, mRightViewport, false, frameIndex);
             }
         } else {
             mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\nLoading...");
@@ -208,7 +232,11 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     }
 
     private void initializeGlObjects() {
-        Log.v(TAG, "initializeGl");
+        if(!mResumed) {
+            Log.i(TAG, "initializeGlObjects is called on mResumed == false. Activity is already paused? Ignore.");
+            return;
+        }
+        Log.v(TAG, "initializeGlObjects");
 
         mApi.initializeGl();
 
@@ -248,24 +276,11 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         mSurfaceCreatedListener.run();
     }
 
-    public void shutdown() {
-        mViewportList.shutdown();
-        mViewportList = null;
-        mTmpViewport.shutdown();
-        mTmpViewport = null;
-        if(mSwapChain != null) {
-            mSwapChain.shutdown();
-        }
-        mSwapChain = null;
-        destroyNative(nativeHandle);
-        nativeHandle = 0;
-    }
-
-    private long waitFrame(int waitMs) {
+    private long waitFrame() {
         synchronized (mWaiter) {
             mFrameAvailable = false;
 
-            long frameIndex = mDecoderThread.render(waitMs);
+            long frameIndex = mDecoderThread.render();
             if (frameIndex < 0) {
                 return frameIndex;
             }
@@ -287,10 +302,9 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         }
     }
 
-    float[] mTmpMVPMatrix = new float[16];
-    float[] mTmpEyeFromHead = new float[16];
-    float[] mTmpEyeFromWorld = new float[16];
-
+    private float[] mTmpMVPMatrix = new float[16];
+    private float[] mTmpEyeFromHead = new float[16];
+    private float[] mTmpEyeFromWorld = new float[16];
 
     private void sendTracking(float[] headFromWorld) {
         synchronized (mWaiter) {
@@ -366,14 +380,6 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         mGvrTracking.sendTrackingInfo(mReceiverThread.getPointer(), currentFrameIndex, mTmpHeadOrientation, mTmpHeadPosition);
         //Log.e("XXX", "saving frame " + z + " " + Arrays.toString(m) + Math.sqrt(x * x + y * y + z * z + w * w));
 
-    }
-
-    public EGLContext getEGLContext() {
-        return EGL14.eglGetCurrentContext();
-    }
-
-    public Surface getSurface() {
-        return mSurface;
     }
 
     private native long createNative(AssetManager assetManager);

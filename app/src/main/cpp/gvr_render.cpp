@@ -28,12 +28,15 @@ void GvrRenderer::glInit(JNIEnv* env, int width, int height) {
 
 
 void GvrRenderer::renderFrame(ovrMatrix4f mvpMatrix[2], Recti viewport[2], bool loading) {
+    mRendererInitialized = true;
     renderEye(0, mvpMatrix, &viewport[0], &Renderer, nullptr, loading, false, false);
     renderEye(1, mvpMatrix, &viewport[1], &Renderer, nullptr, loading, false, false);
 }
 
 GvrRenderer::~GvrRenderer() {
-    ovrRenderer_Destroy(&Renderer);
+    if (mRendererInitialized) {
+        ovrRenderer_Destroy(&Renderer);
+    }
     //GLuint textures[2] = {SurfaceTextureID, loadingTexture};
     //glDeleteTextures(2, textures);
 }

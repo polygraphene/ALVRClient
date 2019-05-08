@@ -8,6 +8,10 @@ import android.view.View;
 
 import com.google.vr.ndk.base.GvrLayout;
 
+import javax.microedition.khronos.egl.EGL10;
+import javax.microedition.khronos.egl.EGLConfig;
+import javax.microedition.khronos.egl.EGLDisplay;
+
 /**
  * Activity used when running on Daydream
  */
@@ -50,11 +54,12 @@ public class GvrActivity extends BaseActivity {
     // Notify components when there are lifecycle changes.
     @Override
     protected void onResume() {
-        Log.v(TAG, "onResume");
+        Log.v(TAG, "onResume: enter");
 
         super.onResume();
         mGvrLayout.onResume();
         mSurfaceView.onResume();
+        mRenderer.onResume();
 
         // Go fullscreen. Depending on the lifecycle of your app, you may need to do this in a different
         // place.
@@ -70,7 +75,7 @@ public class GvrActivity extends BaseActivity {
     }
 
     /**
-     * Called from onResume or when surface has created. To feed surface to decoder, we must wait for surface prepared.
+     * Called when surface is created to start worker threads.
      */
     private void startWorkerThreads(){
         Log.v(TAG, "startWorkerThreads");
@@ -81,7 +86,7 @@ public class GvrActivity extends BaseActivity {
         ConnectionStateHolder.loadConnectionState(this, connectionState);
 
         if(connectionState.serverAddr != null && connectionState.serverPort != 0) {
-            Log.v(TAG, "load connection state: " + connectionState.serverAddr + " " + connectionState.serverPort);
+            Log.v(TAG, "Load connection state: " + connectionState.serverAddr + " " + connectionState.serverPort);
             mReceiverThread.recoverConnectionState(connectionState.serverAddr, connectionState.serverPort);
         }
 
@@ -101,7 +106,7 @@ public class GvrActivity extends BaseActivity {
             e.printStackTrace();
         }
 
-        mRenderer.onResume(mReceiverThread, mDecoderThread);
+        mRenderer.setThreads(mReceiverThread, mDecoderThread);
 
         Log.v(TAG, "startWorkerThreads: Done.");
     }
@@ -128,10 +133,6 @@ public class GvrActivity extends BaseActivity {
         super.onPause();
         mGvrLayout.onPause();
 
-        // Must call Renderer.onPause() before SurfaceView.onPause().
-        // Because SurfaceView.onPause() wait for the exit of Renderer.onDraw() call.
-        mRenderer.onPause();
-
         // Stop worker threads.
         Log.v(TAG, "VrThread.onPause: Stopping worker threads.");
         // DecoderThread must be stopped before ReceiverThread and setting mResumed=false.
@@ -145,6 +146,10 @@ public class GvrActivity extends BaseActivity {
             mReceiverThread.stopAndWait();
             mReceiverThread = null;
         }
+
+        // Must call Renderer.onPause() before SurfaceView.onPause().
+        // Because SurfaceView.onPause() wait for the exit of Renderer.onDraw() call.
+        mRenderer.onPause();
 
         Log.v(TAG, "Call mSurfaceView.onPause");
         mSurfaceView.onPause();
