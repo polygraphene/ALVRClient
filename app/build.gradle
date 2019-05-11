@@ -42,7 +42,7 @@ android {
     // Remove osig file from release apk
     applicationVariants.all { variant ->
         if (variant.buildType.name == 'release') {
-            variant.mergeAssets.doLast {
+            variant.mergeAssetsProvider.get().doLast {
                 delete(fileTree(dir: variant.mergeAssets.outputDir, includes: ['oculussig_*']))
             }
         }
