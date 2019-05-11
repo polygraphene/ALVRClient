@@ -37,6 +37,10 @@ void Socket::initialize(JNIEnv *env, int port, jobjectArray broadcastAddrList_) 
     val = 1;
     setsockopt(m_sock, SOL_SOCKET, SO_BROADCAST, (char *) &val, sizeof(val));
 
+    // To avoid EADDRINUSE when previous process (or thread) remains live.
+    val = 1;
+    setsockopt(m_sock, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
+
     //
     // Socket recv buffer
     //

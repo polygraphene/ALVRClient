@@ -24,9 +24,14 @@
 
 static const int64_t USECS_IN_SEC = 1000 * 1000;
 
+extern bool gEnableFrameLog;
+
 inline void FrameLog(uint64_t frameIndex, const char *format, ...)
 {
     char buf[10000];
+    if (!gEnableFrameLog) {
+        return;
+    }
 
     va_list args;
     va_start(args, format);

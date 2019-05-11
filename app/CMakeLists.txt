@@ -37,6 +37,7 @@ add_library( # Sets the name of the library.
              src/main/cpp/fec.cpp
              src/main/cpp/asset.cpp
              src/main/cpp/gltf_model.cpp
+             src/main/cpp/utils.cpp
              ../ALVR-common/reedsolomon/rs.c
              ../ALVR-common/common-utils.cpp
              ../ALVR-common/exception.cpp

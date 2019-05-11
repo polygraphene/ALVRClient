@@ -6,6 +6,7 @@
 
 #include "asset.h"
 #include "gvr_render.h"
+#include "latency_collector.h"
 
 GvrRenderer::GvrRenderer() {
 }
@@ -99,7 +100,9 @@ Java_com_polygraphene_alvr_GvrRenderer_renderNative(JNIEnv *env, jobject gvrRend
         env->ReleaseIntArrayElements(rightViewport, array, 0);
     }
 
+    LatencyCollector::Instance().rendered1(frameIndex);
     ((GvrRenderer *) instance)->renderFrame(mvpMatrix, viewport, loading);
+    LatencyCollector::Instance().rendered2(frameIndex);
 }
 
 extern "C"

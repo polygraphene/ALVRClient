@@ -228,9 +228,10 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
             viewport[3] = (int) (-mEyeUv.height() * mTargetSize.y);
         }
 
+        long frameIndex = -1;
         if(isConnected()) {
             while(isConnected()) {
-                long frameIndex = waitFrame(5);
+                frameIndex = waitFrame(5);
                 if (frameIndex >= 0) {
                     float[] matrix = mFrameMap.get(frameIndex);
                     if (matrix != null) {
@@ -251,6 +252,10 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         // Send the frame to the compositor
         frame.unbind();
         frame.submit(mViewportList, mHeadFromWorld);
+
+        if(frameIndex >= 0) {
+            LatencyCollector.Submit(frameIndex);
+        }
     }
 
     private void initializeGlObjects() {
@@ -286,7 +291,9 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         mSurfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
             @Override
             public void onFrameAvailable(SurfaceTexture surfaceTexture) {
-                Log.v(TAG, "onFrameAvailable");
+                if (Utils.sEnableLog) {
+                    Log.v(TAG, "onFrameAvailable");
+                }
                 synchronized (mWaiter) {
                     mFrameAvailable = true;
                     mWaiter.notifyAll();

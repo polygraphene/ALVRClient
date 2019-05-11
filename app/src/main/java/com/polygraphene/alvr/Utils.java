@@ -6,8 +6,18 @@ import android.content.pm.PackageManager;
 import android.util.Log;
 
 public class Utils {
+    public static boolean sEnableLog = false;
+
+    static {
+        setFrameLogEnabled(sEnableLog);
+    }
+
+    public static native void setFrameLogEnabled(boolean enabled);
+
     public static void frameLog(long frameIndex, String s) {
-        Log.v("FrameTracking", "[Frame " + frameIndex + "] " + s);
+        if(sEnableLog) {
+            Log.v("FrameTracking", "[Frame " + frameIndex + "] " + s);
+        }
     }
 
     public static String getVersionName(Context context){

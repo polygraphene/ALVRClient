@@ -180,3 +180,9 @@ Java_com_polygraphene_alvr_LatencyCollector_DecoderOutput(JNIEnv *env, jclass ty
                                                           jlong frameIndex) {
     LatencyCollector::Instance().decoderOutput((uint64_t)frameIndex);
 }
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_LatencyCollector_Submit(JNIEnv *env, jclass type, jlong frameIndex) {
+    LatencyCollector::Instance().submit((uint64_t)frameIndex);
+}

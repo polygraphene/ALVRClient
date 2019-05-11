@@ -79,10 +79,6 @@ public class DecoderThread extends ThreadBase {
         mQueue = new OutputFrameQueue();
     }
 
-    private void frameLog(String s) {
-        Log.v(TAG, s);
-    }
-
     public void start() {
         super.startBase();
     }
@@ -102,9 +98,9 @@ public class DecoderThread extends ThreadBase {
             decodeLoop();
         } catch (IOException | InterruptedException | IllegalStateException e) {
             e.printStackTrace();
-            Log.v(TAG, "DecoderThread stopped by Exception.");
+            Log.e(TAG, "DecoderThread stopped by Exception.");
         } finally {
-            Log.v(TAG, "Stopping decoder.");
+            Log.i(TAG, "Stopping decoder.");
             if (mDecoder != null) {
                 try {
                     mDecoder.stop();
@@ -115,7 +111,7 @@ public class DecoderThread extends ThreadBase {
                 mDecoder = null;
             }
         }
-        Log.v(TAG, "DecoderThread stopped.");
+        Log.i(TAG, "DecoderThread stopped.");
     }
 
     private void decodeLoop() throws InterruptedException, IOException {
@@ -148,11 +144,11 @@ public class DecoderThread extends ThreadBase {
         while (!isStopped()) {
             NAL nal = mNalParser.waitNal();
             if (nal == null) {
-                Log.v(TAG, "decodeLoop Stopped. nal==null.");
+                Log.i(TAG, "decodeLoop Stopped. nal==null.");
                 break;
             }
             if (isStopped()) {
-                Log.v(TAG, "decodeLoop Stopped. mStopped==true.");
+                Log.i(TAG, "decodeLoop Stopped. mStopped==true.");
                 mNalParser.recycleNal(nal);
                 break;
             }
@@ -274,7 +270,7 @@ public class DecoderThread extends ThreadBase {
     class Callback extends MediaCodec.Callback {
         @Override
         public void onInputBufferAvailable(@NonNull MediaCodec codec, int index) {
-            frameLog("onInputBufferAvailable " + index);
+            //Log.v(TAG, "onInputBufferAvailable " + index);
 
             synchronized (mAvailableInputs) {
                 mAvailableInputs.add(index);
