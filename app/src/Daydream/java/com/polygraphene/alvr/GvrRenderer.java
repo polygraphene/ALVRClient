@@ -1,13 +1,11 @@
 package com.polygraphene.alvr;
 
-import android.content.Context;
 import android.content.res.AssetManager;
 import android.graphics.Point;
 import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.opengl.EGL14;
 import android.opengl.EGLContext;
-import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import android.opengl.Matrix;
 import android.util.Log;
@@ -22,7 +20,6 @@ import com.google.vr.ndk.base.GvrApi;
 import com.google.vr.ndk.base.SwapChain;
 
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
 
 import javax.microedition.khronos.egl.EGLConfig;
@@ -58,6 +55,11 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     // Size of the frame that our app renders to.
     private final Point mTargetSize = new Point();
 
+    // HMD device information which is sent to server.
+    private DeviceDescriptor mDeviceDescriptor = new DeviceDescriptor();
+
+
+    // Variables for onDrawFrame().
     private final float[] mHeadFromWorld = new float[16];
     private final float[] mEyeFromHead = new float[16];
     private final float[] mEyeFromWorld = new float[16];
@@ -68,7 +70,9 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     private final int[] mLeftViewport = new int[4];
     private final int[] mRightViewport = new int[4];
 
+    private final RectF mEyeUv = new RectF();
 
+    // Variables for sendTracking().
     private final float[] mTmpLeftEyePerspective = new float[16];
 
     private final float[] invRotationMatrix = new float[16];
@@ -77,7 +81,10 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     private final float[] mTmpHeadPosition = new float[3];
     private final float[] mTmpHeadOrientation = new float[4];
 
-    private final RectF mEyeUv = new RectF();
+    private final float[] mTmpMVPMatrix = new float[16];
+    private final float[] mTmpEyeFromHead = new float[16];
+    private final float[] mTmpEyeFromWorld = new float[16];
+    private final float[] mHeadFromWorld2 = new float[16];
 
     private long currentFrameIndex = 0;
     private LongSparseArray<float[]> mFrameMap = new LongSparseArray<>();
@@ -128,8 +135,10 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     }
 
     public void setThreads(UdpReceiverThread receiverThread, DecoderThread decoderThread) {
-        mReceiverThread = receiverThread;
-        mDecoderThread = decoderThread;
+        synchronized (mWaiter) {
+            mReceiverThread = receiverThread;
+            mDecoderThread = decoderThread;
+        }
     }
 
     public void onPause() {
@@ -163,8 +172,15 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         return mSurface;
     }
 
+    public DeviceDescriptor getDeviceDescriptor() {
+        return mDeviceDescriptor;
+    }
+
     private boolean isConnected() {
-        return mReceiverThread != null && mReceiverThread.isConnected();
+        synchronized (mWaiter) {
+            return mReceiverThread != null && mReceiverThread.isConnected() &&
+                    mDecoderThread != null && !mDecoderThread.isStopped();
+        }
     }
 
     @Override
@@ -173,10 +189,10 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         // thread to sleep until the compositor wakes it up.
         Frame frame = mSwapChain.acquireFrame();
 
-        mApi.getHeadSpaceFromStartSpaceTransform(mHeadFromWorld, System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(50));
+        mApi.getHeadSpaceFromStartSpaceTransform(mHeadFromWorld, System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(5));
 
         // Send tracking info to the server.
-        sendTracking(mHeadFromWorld);
+        sendTracking();
 
         // Get the parts of each frame associated with each eye in world space. The list is
         // {left eye, right eye}.
@@ -189,11 +205,12 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
             mViewportList.get(eye, mTmpViewport);
             mTmpViewport.getSourceFov(mEyeFov);
             //Log.v(TAG, "EyeFov[" + eye + "] l:" + mEyeFov.left + ", r:" + mEyeFov.right + ", b:" + mEyeFov.bottom + ", t:" + mEyeFov.top);
-            float l = (float) -Math.tan(Math.toRadians(mEyeFov.left)) * 1f;
-            float r = (float) Math.tan(Math.toRadians(mEyeFov.right)) * 1f;
-            float b = (float) -Math.tan(Math.toRadians(mEyeFov.bottom)) * 1f;
-            float t = (float) Math.tan(Math.toRadians(mEyeFov.top)) * 1f;
-            Matrix.frustumM(mEyePerspective, 0, l, r, b, t, 1f, 10f);
+            float near = 0.1f;
+            float l = (float) -Math.tan(Math.toRadians(mEyeFov.left)) * near;
+            float r = (float) Math.tan(Math.toRadians(mEyeFov.right)) * near;
+            float b = (float) -Math.tan(Math.toRadians(mEyeFov.bottom)) * near;
+            float t = (float) Math.tan(Math.toRadians(mEyeFov.top)) * near;
+            Matrix.frustumM(mEyePerspective, 0, l, r, b, t, near, 30f);
 
             if(eye == 0) {
                 System.arraycopy(mEyePerspective, 0, mTmpLeftEyePerspective, 0, 16);
@@ -212,13 +229,18 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         }
 
         if(isConnected()) {
-            long frameIndex = waitFrame();
-            if(frameIndex != -1) {
-                float[] matrix = mFrameMap.get(frameIndex);
-                if(matrix != null) {
-                    System.arraycopy(matrix, 0, mHeadFromWorld, 0, matrix.length);
+            while(isConnected()) {
+                long frameIndex = waitFrame(5);
+                if (frameIndex >= 0) {
+                    float[] matrix = mFrameMap.get(frameIndex);
+                    if (matrix != null) {
+                        System.arraycopy(matrix, 0, mHeadFromWorld, 0, matrix.length);
+                    }
+                    renderNative(nativeHandle, mLeftMvp, mRightMvp, mLeftViewport, mRightViewport, false, frameIndex);
+                    break;
                 }
-                renderNative(nativeHandle, mLeftMvp, mRightMvp, mLeftViewport, mRightViewport, false, frameIndex);
+                // Send tracking info to the server.
+                sendTracking();
             }
         } else {
             mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\nLoading...");
@@ -273,20 +295,72 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         });
         mSurface = new Surface(mSurfaceTexture);
 
+        buildDeviceDescriptor();
+
         mSurfaceCreatedListener.run();
     }
 
-    private long waitFrame() {
+    private void buildDeviceDescriptor() {
+        Log.v(TAG, "Checking device model. Type=" + mApi.getViewerType() + " Vendor=" +
+                mApi.getViewerVendor() + " Model=" + mApi.getViewerModel() +
+                " Width=" + mTargetSize.x + " Height=" + mTargetSize.y);
+
+        mDeviceDescriptor.mRenderWidth = mTargetSize.x;
+        mDeviceDescriptor.mRenderHeight = mTargetSize.y;
+
+        mApi.getRecommendedBufferViewports(mViewportList);
+        for (int eye = 0; eye < 2; ++eye) {
+            mViewportList.get(eye, mTmpViewport);
+            mTmpViewport.getSourceFov(mEyeFov);
+
+            mDeviceDescriptor.mFov[eye * 4 + 0] = mEyeFov.left;
+            mDeviceDescriptor.mFov[eye * 4 + 1] = mEyeFov.right;
+            mDeviceDescriptor.mFov[eye * 4 + 2] = mEyeFov.top;
+            mDeviceDescriptor.mFov[eye * 4 + 3] = mEyeFov.bottom;
+
+            Log.v(TAG, "EyeFov[" + eye + "] (l,r,t,b)=(" +
+                    mEyeFov.left + "," + mEyeFov.right + "," +
+                    mEyeFov.top + "," + mEyeFov.bottom + ")");
+        }
+
+        mDeviceDescriptor.mDeviceCapabilityFlags = 0;
+        mDeviceDescriptor.mControllerCapabilityFlags = DeviceDescriptor.ALVR_CONTROLLER_CAPABILITY_FLAG_ONE_CONTROLLER;
+
+        if(mApi.getViewerType() == 0) {
+            // GVR_VIEWER_TYPE_CARDBOARD
+            mDeviceDescriptor.mDeviceType = DeviceDescriptor.ALVR_DEVICE_TYPE_CARDBOARD;
+            mDeviceDescriptor.mDeviceSubType = DeviceDescriptor.ALVR_DEVICE_SUBTYPE_CARDBOARD_GENERIC;
+        }else{
+            // GVR_VIEWER_TYPE_DAYDREAM
+            mDeviceDescriptor.mDeviceType = DeviceDescriptor.ALVR_DEVICE_TYPE_DAYDREAM;
+            mDeviceDescriptor.mDeviceSubType = DeviceDescriptor.ALVR_DEVICE_SUBTYPE_DAYDREAM_GENERIC;
+        }
+
+        if(mApi.getViewerVendor().equals("Lenovo") && mApi.getViewerModel().equals("Mirage Solo")) {
+            Log.v(TAG, "Lenovo Mirage Solo is detected. Assume refresh rate is 75Hz.");
+            mDeviceDescriptor.mRefreshRates[0] = 75;
+            mDeviceDescriptor.mDeviceSubType = DeviceDescriptor.ALVR_DEVICE_SUBTYPE_DAYDREAM_MIRAGE_SOLO;
+            mDeviceDescriptor.mDeviceCapabilityFlags |= DeviceDescriptor.ALVR_DEVICE_CAPABILITY_FLAG_HMD_6DOF;
+        } else {
+            Log.v(TAG, "General Daydream device is detected. Assume refresh rate is 60Hz.");
+            mDeviceDescriptor.mRefreshRates[0] = 60;
+        }
+        mDeviceDescriptor.mRefreshRates[1]
+                = mDeviceDescriptor.mRefreshRates[2]
+                = mDeviceDescriptor.mRefreshRates[3] = 0;
+    }
+
+    private long waitFrame(int waitMs) {
         synchronized (mWaiter) {
             mFrameAvailable = false;
 
-            long frameIndex = mDecoderThread.render();
+            long frameIndex = mDecoderThread.render(waitMs);
             if (frameIndex < 0) {
                 return frameIndex;
             }
 
             while (!mFrameAvailable) {
-                if(mReceiverThread == null || !mReceiverThread.isConnected()) {
+                if(!isConnected()) {
                     Log.v(TAG, "Discard frame because mReceiverThread == null.");
                     return -1;
                 }
@@ -302,14 +376,12 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         }
     }
 
-    private float[] mTmpMVPMatrix = new float[16];
-    private float[] mTmpEyeFromHead = new float[16];
-    private float[] mTmpEyeFromWorld = new float[16];
 
-    private void sendTracking(float[] headFromWorld) {
+    private void sendTracking() {
         synchronized (mWaiter) {
-            if(mReceiverThread != null && mReceiverThread.isConnected()) {
-                sendTrackingLocked(headFromWorld);
+            if(isConnected()) {
+                mApi.getHeadSpaceFromStartSpaceTransform(mHeadFromWorld2, System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(50));
+                sendTrackingLocked(mHeadFromWorld2);
             }
         }
     }
@@ -355,6 +427,8 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         Matrix.translateM(mTmpEyeFromWorld, 0, 0, -1.5f, 0);
         Matrix.multiplyMM(mTmpMVPMatrix, 0, mTmpLeftEyePerspective, 0, mTmpEyeFromWorld, 0);
 
+        //Log.v(TAG, "[" + (currentFrameIndex + 1) + "] " + " Left P:\n" + matToString(mTmpLeftEyePerspective) + "\nLeft MVP:\n" + matToString(mTmpMVPMatrix));
+
         // Extract translation. But first undo the rotation.
         Matrix.transposeM(invRotationMatrix, 0, headFromWorld, 0);
         invRotationMatrix[3] = invRotationMatrix[7] = invRotationMatrix[11] = 0;
@@ -377,9 +451,20 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         }
 
         // Set tracking and save the current head pose. The headFromWorld value is saved in frameTracker via a call to trackFrame by the TrackingThread.
-        mGvrTracking.sendTrackingInfo(mReceiverThread.getPointer(), currentFrameIndex, mTmpHeadOrientation, mTmpHeadPosition);
+        mGvrTracking.sendTrackingInfo(mReceiverThread, currentFrameIndex, mTmpHeadOrientation, mTmpHeadPosition);
         //Log.e("XXX", "saving frame " + z + " " + Arrays.toString(m) + Math.sqrt(x * x + y * y + z * z + w * w));
+    }
 
+    private String matToString(float[] m) {
+        StringBuilder sb = new StringBuilder();
+        for(int i = 0; i < 4; i++) {
+            sb.append("[");
+            for(int j = 0; j < 4; j++) {
+                sb.append(String.format("%+.5f ", m[j * 4 + i]));
+            }
+            sb.append("]\n");
+        }
+        return sb.toString();
     }
 
     private native long createNative(AssetManager assetManager);

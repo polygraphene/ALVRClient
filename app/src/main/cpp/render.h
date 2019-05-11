@@ -150,9 +150,9 @@ typedef struct {
     ovrProgram ProgramLoading;
     ovrGeometry Panel;
     ovrGeometry TestMode;
-    int SurfaceTextureID;
-    int CameraTexture;
-    int LoadingTexture;
+    GLuint SurfaceTextureID;
+    GLuint CameraTexture;
+    GLuint LoadingTexture;
     bool ARMode;
     GltfModel *loadingScene;
 } ovrRenderer;

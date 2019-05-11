@@ -13,7 +13,7 @@
             android:value="vr_only" />
 
         <activity
-            android:name="com.polygraphene.alvr.MainActivity"
+            android:name="com.polygraphene.alvr.OvrActivity"
             android:configChanges="screenSize|screenLayout|orientation|keyboardHidden|keyboard|navigation|uiMode|density"
             android:excludeFromRecents="true"
             android:icon="@mipmap/ic_launcher"

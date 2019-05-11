@@ -15,11 +15,11 @@ public class GvrTracking {
         handle = initializeNative(nativeGvrContext);
     }
 
-    public void sendTrackingInfo(long udpManager, long frameIndex, float[] headOrientation, float[] headPosition) {
-        sendTrackingInfoNative(handle, udpManager, frameIndex, headOrientation, headPosition);
+    public void sendTrackingInfo(UdpReceiverThread udpReceiverThread, long frameIndex, float[] headOrientation, float[] headPosition) {
+        sendTrackingInfoNative(handle, udpReceiverThread, frameIndex, headOrientation, headPosition);
     }
 
     private native long initializeNative(long nativeGvrContext);
-    private native void sendTrackingInfoNative(long nativeHandle, long udpManager
+    private native void sendTrackingInfoNative(long nativeHandle, UdpReceiverThread udpReceiverThread
             , long frameIndex, float[] headOrientation, float[] headPosition);
 }

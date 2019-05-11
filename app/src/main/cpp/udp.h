@@ -80,7 +80,8 @@ public:
     UdpManager();
     ~UdpManager();
     void initialize(JNIEnv *env, jint port, jstring deviceName_, jobjectArray broadcastAddrList_,
-                    jintArray refreshRates_);
+                    jintArray refreshRates_, jint renderWidth, jint renderHeight, jfloatArray fov,
+                    jint deviceType, jint deviceSubType, jint deviceCapabilityFlags, jint controllerCapabilityFlags);
 
     NALParser &getNalParser() {
         return *m_nalParser;
@@ -109,7 +110,6 @@ private:
     uint64_t timeSyncSequence = (uint64_t) -1;
     uint64_t m_lastReceived = 0;
     uint64_t m_lastFrameIndex = 0;
-    std::string m_deviceName;
     ConnectionMessage m_connectionMessage = {};
 
     uint32_t m_prevVideoSequence = 0;
@@ -117,7 +117,7 @@ private:
     std::shared_ptr<SoundPlayer> m_soundPlayer;
     std::shared_ptr<NALParser> m_nalParser;
 
-    uint8_t m_refreshRates[ALVR_REFRESH_RATE_LIST_SIZE];
+    HelloMessage mHelloMessage;
 
     JNIEnv *m_env;
     jobject m_instance;
@@ -141,8 +141,8 @@ private:
 
     void processReadPipe(int pipefd);
 
-    void sendTimeSync();
-    void sendBroadcast();
+    void sendTimeSyncLocked();
+    void sendBroadcastLocked();
     void doPeriodicWork();
 
     void recoverConnection(std::string serverAddress, int serverPort);
@@ -155,6 +155,7 @@ private:
     void onPacketRecv(const char *packet, size_t packetSize);
 
     void loadRefreshRates(JNIEnv *refreshRates, jintArray pArray);
+    void loadFov(JNIEnv *env, jfloatArray fov_);
 };
 
 #endif //ALVRCLIENT_UDP_H

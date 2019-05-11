@@ -1309,7 +1309,7 @@ void renderEye(int eye, ovrMatrix4f mvpMatrix[2], Recti *viewport, ovrRenderer *
         GL(glUniformMatrix4fv(renderer->ProgramLoading.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
                               (float *) mvpMatrix));
         GL(glActiveTexture(GL_TEXTURE0));
-        LOG("Rendering LoadingTexture: %d", renderer->LoadingTexture);
+
         GL(glBindTexture(GL_TEXTURE_2D, renderer->LoadingTexture));
         renderer->loadingScene->drawScene(VERTEX_ATTRIBUTE_LOCATION_POSITION,
                                           VERTEX_ATTRIBUTE_LOCATION_UV,

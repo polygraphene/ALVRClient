@@ -14,9 +14,6 @@
 #include "udp.h"
 #include "exception.h"
 
-std::shared_ptr<UdpManager> g_udpManager;
-
-
 Socket::Socket() {
 }
 
@@ -88,7 +85,7 @@ void Socket::setBroadcastAddrList(JNIEnv *env, int port, jobjectArray broadcastA
 }
 
 int Socket::send(const void *buf, size_t len) {
-    return sendto(m_sock, buf, len, 0, (sockaddr *) &m_serverAddr,
+    return (int)sendto(m_sock, buf, len, 0, (sockaddr *) &m_serverAddr,
                   sizeof(m_serverAddr));
 }
 
@@ -98,8 +95,8 @@ void Socket::recv() {
     socklen_t socklen = sizeof(addr);
 
     while (true) {
-        int packetSize = recvfrom(m_sock, packet, MAX_PACKET_SIZE, 0, (sockaddr *) &addr,
-                                  &socklen);
+        int packetSize = static_cast<int>(recvfrom(m_sock, packet, MAX_PACKET_SIZE, 0, (sockaddr *) &addr,
+                                                   &socklen));
         if (packetSize <= 0) {
             return;
         }
@@ -215,7 +212,8 @@ UdpManager::~UdpManager() {
 
 void
 UdpManager::initialize(JNIEnv *env, jint port, jstring deviceName_, jobjectArray broadcastAddrList_,
-                       jintArray refreshRates_) {
+                       jintArray refreshRates_, jint renderWidth, jint renderHeight, jfloatArray fov,
+                       jint deviceType, jint deviceSubType, jint deviceCapabilityFlags, jint controllerCapabilityFlags) {
     //
     // Initialize variables
     //
@@ -228,11 +226,34 @@ UdpManager::initialize(JNIEnv *env, jint port, jstring deviceName_, jobjectArray
     m_prevSoundSequence = 0;
     m_timeDiff = 0;
 
+    m_nalParser = std::make_shared<NALParser>(env);
+
+    //
+    // Fill hello message
+    //
+
+    memset(&mHelloMessage, 0, sizeof(mHelloMessage));
+
+    mHelloMessage.type = ALVR_PACKET_TYPE_HELLO_MESSAGE;
+    memcpy(mHelloMessage.signature, ALVR_HELLO_PACKET_SIGNATURE, sizeof(mHelloMessage.signature));
+    mHelloMessage.version = ALVR_PROTOCOL_VERSION;
+
+    auto deviceName = GetStringFromJNIString(env, deviceName_);
+
+    memcpy(mHelloMessage.deviceName, deviceName.c_str(),
+           std::min(deviceName.length(), sizeof(mHelloMessage.deviceName)));
+
     loadRefreshRates(env, refreshRates_);
 
-    m_deviceName = GetStringFromJNIString(env, deviceName_);
+    mHelloMessage.renderWidth = static_cast<uint16_t>(renderWidth);
+    mHelloMessage.renderHeight = static_cast<uint16_t>(renderHeight);
 
-    m_nalParser = std::make_shared<NALParser>(env);
+    loadFov(env, fov);
+
+    mHelloMessage.deviceType = static_cast<uint8_t>(deviceType);
+    mHelloMessage.deviceSubType = static_cast<uint8_t>(deviceSubType);
+    mHelloMessage.deviceCapabilityFlags = static_cast<uint32_t>(deviceCapabilityFlags);
+    mHelloMessage.controllerCapabilityFlags = static_cast<uint32_t>(controllerCapabilityFlags);
 
     //
     // Socket
@@ -315,7 +336,7 @@ void UdpManager::processReadPipe(int pipefd) {
     char buf[2000];
     int len = 1;
 
-    int ret = read(pipefd, buf, len);
+    int ret = static_cast<int>(read(pipefd, buf, len));
     if (ret <= 0) {
         return;
     }
@@ -343,8 +364,8 @@ void UdpManager::processReadPipe(int pipefd) {
     return;
 }
 
-void UdpManager::sendTimeSync() {
-    time_t current = time(NULL);
+void UdpManager::sendTimeSyncLocked() {
+    time_t current = time(nullptr);
     if (m_prevSentSync != current && m_socket.isConnected()) {
         LOGI("Sending timesync.");
 
@@ -380,26 +401,18 @@ void UdpManager::sendTimeSync() {
     m_prevSentSync = current;
 }
 
-void UdpManager::sendBroadcast() {
-    time_t current = time(NULL);
+void UdpManager::sendBroadcastLocked() {
+    time_t current = time(nullptr);
     if (m_prevSentBroadcast != current && !m_socket.isConnected()) {
         LOGI("Sending broadcast hello.");
-
-        HelloMessage helloMessage = {};
-        helloMessage.type = 1;
-        helloMessage.version = ALVR_PROTOCOL_VERSION;
-        memcpy(helloMessage.deviceName, m_deviceName.c_str(),
-               std::min(m_deviceName.length(), sizeof(helloMessage.deviceName)));
-        memcpy(helloMessage.refreshRate, m_refreshRates, sizeof(m_refreshRates));
-
-        m_socket.sendBroadcast(&helloMessage, sizeof(helloMessage));
+        m_socket.sendBroadcast(&mHelloMessage, sizeof(mHelloMessage));
     }
     m_prevSentBroadcast = current;
 }
 
 void UdpManager::doPeriodicWork() {
-    sendTimeSync();
-    sendBroadcast();
+    sendTimeSyncLocked();
+    sendBroadcastLocked();
     checkConnection();
 }
 
@@ -534,11 +547,7 @@ void UdpManager::onConnect(const ConnectionMessage &connectionMessage) {
 
 void UdpManager::onBroadcastRequest() {
     // Respond with hello message.
-    HelloMessage message = {};
-    message.type = ALVR_PACKET_TYPE_HELLO_MESSAGE;
-    memcpy(message.deviceName, m_deviceName.c_str(),
-           std::min(m_deviceName.length(), sizeof(message.deviceName)));
-    m_socket.send(&message, sizeof(message));
+    m_socket.send(&mHelloMessage, sizeof(mHelloMessage));
 }
 
 void UdpManager::onPacketRecv(const char *packet, size_t packetSize) {
@@ -614,8 +623,8 @@ void UdpManager::onPacketRecv(const char *packet, size_t packetSize) {
                                    packetSize - sizeof(*header));
         }
 
-        LOG("Received audio frame start: Counter=%d Size=%d PresentationTime=%lu",
-            header->packetCounter, header->frameByteSize, header->presentationTime);
+        //LOG("Received audio frame start: Counter=%d Size=%d PresentationTime=%lu",
+        //    header->packetCounter, header->frameByteSize, header->presentationTime);
     } else if (type == ALVR_PACKET_TYPE_AUDIO_FRAME) {
         // Change settings
         if (packetSize < sizeof(AudioFrame)) {
@@ -630,7 +639,7 @@ void UdpManager::onPacketRecv(const char *packet, size_t packetSize) {
                                    packetSize - sizeof(*header));
         }
 
-        LOG("Received audio frame: Counter=%d", header->packetCounter);
+        //LOG("Received audio frame: Counter=%d", header->packetCounter);
     }
 }
 
@@ -658,116 +667,131 @@ void UdpManager::updateTimeout() {
 }
 
 void UdpManager::loadRefreshRates(JNIEnv *env, jintArray refreshRates_) {
-    jint *refreshRates = env->GetIntArrayElements(refreshRates_, NULL);
+    jint *refreshRates = env->GetIntArrayElements(refreshRates_, nullptr);
     for(int i = 0; i < ALVR_REFRESH_RATE_LIST_SIZE; i++) {
-        m_refreshRates[i] = refreshRates[i];
+        mHelloMessage.refreshRate[i] = (uint8_t) refreshRates[i];
     }
     env->ReleaseIntArrayElements(refreshRates_, refreshRates, 0);
 }
 
-extern "C"
-JNIEXPORT jint JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(JNIEnv *env, jobject instance,
-                                                              jint port,
-                                                              jstring deviceName_,
-                                                              jobjectArray broadcastAddrList_,
-                                                              jintArray refreshRates_) {
-    g_udpManager = std::make_shared<UdpManager>();
-    try {
-        g_udpManager->initialize(env, port, deviceName_, broadcastAddrList_, refreshRates_);
-    } catch (Exception e) {
-        LOGE("Exception on initializing UdpManager. e=%ls", e.what());
-        return 1;
+void UdpManager::loadFov(JNIEnv *env, jfloatArray fov_) {
+    jfloat *fov = env->GetFloatArrayElements(fov_, nullptr);
+    for(int eye = 0; eye < 2; eye++) {
+        mHelloMessage.eyeFov[eye].left = fov[eye * 2 + 0];
+        mHelloMessage.eyeFov[eye].right = fov[eye * 2 + 1];
+        mHelloMessage.eyeFov[eye].top = fov[eye * 2 + 2];
+        mHelloMessage.eyeFov[eye].bottom = fov[eye * 2 + 3];
     }
-    return 0;
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_closeSocket(JNIEnv *env, jobject instance) {
-    g_udpManager.reset();
-}
-
-extern "C"
-JNIEXPORT jint JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_getNalListSize(JNIEnv *env, jobject instance) {
-    return g_udpManager->getNalParser().getQueueSize(env);
-}
-
-extern "C"
-JNIEXPORT jobject JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_waitNal(JNIEnv *env, jobject instance) {
-    return g_udpManager->getNalParser().wait(env);
-}
-
-extern "C"
-JNIEXPORT jobject JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_getNal(JNIEnv *env, jobject instance) {
-    return g_udpManager->getNalParser().get(env);
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_recycleNal(JNIEnv *env, jobject instance,
-                                                        jobject nal) {
-    g_udpManager->getNalParser().recycle(env, nal);
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_flushNALList(JNIEnv *env, jobject instance) {
-    g_udpManager->getNalParser().flush(env);
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_runLoop(JNIEnv *env, jobject instance,
-                                                     jstring serverAddress, int serverPort) {
-    g_udpManager->runLoop(env, instance, serverAddress, serverPort);
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_interruptNative(JNIEnv *env, jobject instance) {
-    if (g_udpManager) {
-        g_udpManager->interrupt();
-    }
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_notifyWaitingThread(JNIEnv *env, jobject instance) {
-    if (g_udpManager) {
-        g_udpManager->notifyWaitingThread(env);
-    }
-}
-
-extern "C"
-JNIEXPORT jboolean JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_isConnected(JNIEnv *env, jobject instance) {
-    return g_udpManager && g_udpManager->isConnected();
-}
-
-extern "C"
-JNIEXPORT jstring JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_getServerAddress(JNIEnv *env, jobject instance) {
-    return g_udpManager->getServerAddress(env);
-}
-
-extern "C"
-JNIEXPORT jint JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_getServerPort(JNIEnv *env, jobject instance) {
-    return g_udpManager->getServerPort();
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_clearStopped(JNIEnv *env, jobject instance) {
-    g_udpManager->getNalParser().clearStopped();
+    env->ReleaseFloatArrayElements(fov_, fov, 0);
 }
 
 extern "C"
 JNIEXPORT jlong JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_getPointer(JNIEnv *env, jobject instance) {
-    return (jlong) g_udpManager.get();
+Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(
+        JNIEnv *env, jobject instance,
+        jint port, jstring deviceName_, jobjectArray broadcastAddrList_,
+        jintArray refreshRates_, jint renderWidth, jint renderHeight, jfloatArray fov,
+        jint deviceType, jint deviceSubType, jint deviceCapabilityFlags, jint controllerCapabilityFlags) {
+    auto udpManager = new UdpManager();
+    try {
+        udpManager->initialize(env, port, deviceName_,
+                broadcastAddrList_, refreshRates_, renderWidth, renderHeight, fov,
+                deviceType, deviceSubType, deviceCapabilityFlags, controllerCapabilityFlags);
+    } catch (Exception &e) {
+        LOGE("Exception on initializing UdpManager. e=%ls", e.what());
+        delete udpManager;
+        return 0;
+    }
+    return reinterpret_cast<jlong>(udpManager);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_closeSocket(JNIEnv *env, jobject instance, jlong nativeHandle) {
+    delete reinterpret_cast<UdpManager *>(nativeHandle);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_runLoop(JNIEnv *env, jobject instance, jlong nativeHandle,
+                                                     jstring serverAddress, jint serverPort) {
+    reinterpret_cast<UdpManager *>(nativeHandle)->runLoop(env, instance, serverAddress, serverPort);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_interruptNative(JNIEnv *env, jobject instance, jlong nativeHandle) {
+    reinterpret_cast<UdpManager *>(nativeHandle)->interrupt();
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_isConnectedNative(JNIEnv *env, jobject instance, jlong nativeHandle) {
+    return nativeHandle != 0 && reinterpret_cast<UdpManager *>(nativeHandle)->isConnected();
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_getServerAddress(JNIEnv *env, jobject instance, jlong nativeHandle) {
+    return reinterpret_cast<UdpManager *>(nativeHandle)->getServerAddress(env);
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_getServerPort(JNIEnv *env, jobject instance, jlong nativeHandle) {
+    return reinterpret_cast<UdpManager *>(nativeHandle)->getServerPort();
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_sendNative(JNIEnv *env, jobject instance,
+                                                        jlong nativeHandle, jlong nativeBuffer,
+                                                        jint bufferLength) {
+    return reinterpret_cast<UdpManager *>(nativeHandle)->send(reinterpret_cast<char*>(nativeBuffer), bufferLength);
+}
+//
+// Native implementation of NALParser interface
+//
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_getNalListSizeNative(JNIEnv *env, jobject instance, jlong nativeHandle) {
+    return reinterpret_cast<UdpManager *>(nativeHandle)->getNalParser().getQueueSize(env);
+}
+
+extern "C"
+JNIEXPORT jobject JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_waitNalNative(JNIEnv *env, jobject instance, jlong nativeHandle) {
+    return reinterpret_cast<UdpManager *>(nativeHandle)->getNalParser().wait(env);
+}
+
+extern "C"
+JNIEXPORT jobject JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_getNalNative(JNIEnv *env, jobject instance, jlong nativeHandle) {
+    return reinterpret_cast<UdpManager *>(nativeHandle)->getNalParser().get(env);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_recycleNalNative(JNIEnv *env, jobject instance, jlong nativeHandle,
+                                                        jobject nal) {
+    reinterpret_cast<UdpManager *>(nativeHandle)->getNalParser().recycle(env, nal);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_flushNALListNative(JNIEnv *env, jobject instance, jlong nativeHandle) {
+    reinterpret_cast<UdpManager *>(nativeHandle)->getNalParser().flush(env);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_notifyWaitingThreadNative(JNIEnv *env, jobject instance, jlong nativeHandle) {
+    reinterpret_cast<UdpManager *>(nativeHandle)->notifyWaitingThread(env);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_clearStoppedNative(JNIEnv *env, jobject instance, jlong nativeHandle) {
+    reinterpret_cast<UdpManager *>(nativeHandle)->getNalParser().clearStopped();
 }

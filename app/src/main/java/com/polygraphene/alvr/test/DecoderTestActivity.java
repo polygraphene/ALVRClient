@@ -13,7 +13,6 @@ import com.polygraphene.alvr.NALParser;
 import com.polygraphene.alvr.R;
 
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 
 public class DecoderTestActivity extends AppCompatActivity {
@@ -48,7 +47,7 @@ public class DecoderTestActivity extends AppCompatActivity {
                 surfaceView.postDelayed(new Runnable() {
                     @Override
                     public void run() {
-                        long ret = decoderThread.render();
+                        long ret = decoderThread.render(50);
 
                         if(ret >= 0) {
                             mFrameIndex++;

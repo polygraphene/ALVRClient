@@ -8,10 +8,6 @@ import android.view.View;
 
 import com.google.vr.ndk.base.GvrLayout;
 
-import javax.microedition.khronos.egl.EGL10;
-import javax.microedition.khronos.egl.EGLConfig;
-import javax.microedition.khronos.egl.EGLDisplay;
-
 /**
  * Activity used when running on Daydream
  */
@@ -95,10 +91,7 @@ public class GvrActivity extends BaseActivity {
         try {
             mDecoderThread.start();
 
-            int[] refreshRates = new int[] {0, 0, 0, 0};
-            refreshRates[0] = getRefreshRate();
-
-            if (!mReceiverThread.start(mRenderer.getEGLContext(), this, refreshRates, 0)) {
+            if (!mReceiverThread.start(mRenderer.getEGLContext(), this, mRenderer.getDeviceDescriptor(), 0)) {
                 Log.e(TAG, "FATAL: Initialization of ReceiverThread failed.");
                 return;
             }
@@ -109,21 +102,6 @@ public class GvrActivity extends BaseActivity {
         mRenderer.setThreads(mReceiverThread, mDecoderThread);
 
         Log.v(TAG, "startWorkerThreads: Done.");
-    }
-
-    /**
-     * Detect supported refresh rate on the device.
-     * @return refresh rate in Hz.
-     */
-    private int getRefreshRate() {
-        Log.v(TAG, "Checking device model. MANUFACTURER=" + Build.MANUFACTURER + " MODEL=" + Build.MODEL);
-        if(Build.MANUFACTURER.equals("Lenovo") && Build.MODEL.equals("VR-1541F")) {
-            Log.v(TAG, "Lenovo Mirage Solo is detected. Assume refresh rate is 75Hz.");
-            return 75;
-        } else {
-            Log.v(TAG, "General Daydream device is detected. Assume refresh rate is 60Hz.");
-            return 60;
-        }
     }
 
     @Override

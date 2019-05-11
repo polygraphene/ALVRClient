@@ -65,15 +65,17 @@ public class OutputFrameQueue {
         notifyAll();
     }
 
-    synchronized public long render() {
-        while (mQueue.size() == 0 && !mStopped) {
+    synchronized public long render(int waitMs) {
+        if (mStopped) {
+            return -1;
+        }
+        if (mQueue.size() == 0) {
             try {
-                wait(5);
+                wait(waitMs);
             } catch (InterruptedException e) {
-                e.printStackTrace();
             }
         }
-        if (mStopped) {
+        if (mStopped || mQueue.size() == 0) {
             return -1;
         }
         Element element = mQueue.removeFirst();

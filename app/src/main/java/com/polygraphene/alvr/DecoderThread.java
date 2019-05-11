@@ -302,11 +302,11 @@ public class DecoderThread extends ThreadBase {
         return mQueue != null && mQueue.isFrameAvailable();
     }
 
-    public long render() {
+    public long render(int waitMs) {
         if (mQueue == null) {
             return -1;
         }
-        return mQueue.render();
+        return mQueue.render(waitMs);
     }
 
     public void onConnect(int codec, int frameQueueSize) {

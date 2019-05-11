@@ -28,10 +28,14 @@
 #include "vr/gvr/capi/include/gvr_controller.h"
 #include "vr/gvr/capi/include/gvr_types.h"
 
-void GvrTracking::initialize(jlong nativeGvrContext) {
+void GvrTracking::initialize(JNIEnv *env, jlong nativeGvrContext) {
     controllerApi = new gvr::ControllerApi();
     controllerApi->Init(gvr::ControllerApi::DefaultOptions() | GVR_CONTROLLER_ENABLE_ARM_MODEL, (gvr_context*)nativeGvrContext);
     controllerApi->Resume();
+
+    jclass clazz = env->FindClass("com/polygraphene/alvr/UdpReceiverThread");
+    mUdpReceiverThread_send = env->GetMethodID(clazz, "send", "(JI)V");
+    env->DeleteLocalRef(clazz);
 }
 
 void GvrTracking::destroy() {
@@ -110,21 +114,11 @@ void GvrTracking::fillControllerInfo(TrackingInfo *packet) {
 }
 
 // Called TrackingThread. So, we can't use this->env.
-void GvrTracking::buildTrackingInfo(TrackingInfo *packet, UdpManager *udpManager,
-                                    double displayTime, uint64_t frameIndex,
-                                    const float *headOrientation,
-                                    const float *headPosition) {
-
-}
-
-// Called TrackingThread. So, we can't use this->env.
-void GvrTracking::sendTrackingInfo(UdpManager *udpManager,
-                                   uint64_t frameIndex,
-                                   const float *headOrientation,
-                                   const float *headPosition) {
-    TrackingInfo info = {};
-
+void GvrTracking::sendTrackingInfo(JNIEnv *env, jobject udpReceiverThread, uint64_t frameIndex,
+                                   const float *headOrientation, const float *headPosition) {
     uint64_t clientTime = getTimestampUs();
+
+    TrackingInfo info = {};
 
     info.type = ALVR_PACKET_TYPE_TRACKING_INFO;
     info.flags = 0;
@@ -140,28 +134,29 @@ void GvrTracking::sendTrackingInfo(UdpManager *udpManager,
     FrameLog(frameIndex, "Sending tracking info.");
     LatencyCollector::Instance().tracking(frameIndex);
 
-    udpManager->send(&info, sizeof(info));
+    env->CallVoidMethod(udpReceiverThread, mUdpReceiverThread_send, reinterpret_cast<jlong>(&info), static_cast<int>(sizeof(info)));
 }
 
 extern "C"
 JNIEXPORT jlong JNICALL
 Java_com_polygraphene_alvr_GvrTracking_initializeNative(JNIEnv *env, jobject instance, jlong nativeGvrContext) {
     GvrTracking *gvrTracking = new GvrTracking();
-    gvrTracking->initialize(nativeGvrContext);
+    gvrTracking->initialize(env, nativeGvrContext);
     return (jlong) gvrTracking;
 }
 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_GvrTracking_sendTrackingInfoNative(JNIEnv *env, jobject instance,
-                                                              jlong nativeHandle, jlong udpManager,
+                                                              jlong nativeHandle, jobject udpReceiverThread,
                                                               jlong frameIndex,
                                                               jfloatArray headOrientation_,
                                                               jfloatArray headPosition_) {
     jfloat *headOrientation = env->GetFloatArrayElements(headOrientation_, NULL);
     jfloat *headPosition = env->GetFloatArrayElements(headPosition_, NULL);
 
-    ((GvrTracking *) nativeHandle)->sendTrackingInfo((UdpManager *)udpManager, (uint64_t)frameIndex, headOrientation, headPosition);
+    ((GvrTracking *) nativeHandle)->sendTrackingInfo(env, udpReceiverThread,
+                                                     (uint64_t) frameIndex, headOrientation, headPosition);
 
     env->ReleaseFloatArrayElements(headOrientation_, headOrientation, 0);
     env->ReleaseFloatArrayElements(headPosition_, headPosition, 0);
