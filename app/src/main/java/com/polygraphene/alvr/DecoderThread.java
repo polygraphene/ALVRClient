@@ -333,6 +333,7 @@ public class DecoderThread extends ThreadBase {
             } else {
                 mFormat = VIDEO_FORMAT_H265;
             }
+            mQueue.reset();
             mNalParser.clearStopped();
             start();
         } else {
