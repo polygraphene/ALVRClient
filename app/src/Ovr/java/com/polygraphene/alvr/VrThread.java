@@ -82,7 +82,7 @@ class VrThread extends Thread {
                 ConnectionStateHolder.ConnectionState connectionState = new ConnectionStateHolder.ConnectionState();
                 ConnectionStateHolder.loadConnectionState(mActivity, connectionState);
 
-                if(!connectionState.serverAddr.isEmpty() && connectionState.serverPort != 0) {
+                if(connectionState.serverAddr != null && connectionState.serverPort != 0) {
                     Log.v(TAG, "load connection state: " + connectionState.serverAddr + " " + connectionState.serverPort);
                     mReceiverThread.recoverConnectionState(connectionState.serverAddr, connectionState.serverPort);
                 }
@@ -93,9 +93,9 @@ class VrThread extends Thread {
                 try {
                     mDecoderThread.start();
 
-                    int[] refreshRates = new int[4];
-                    mOvrContext.getRefreshRates(refreshRates);
-                    if (!mReceiverThread.start(mEGLContext, mActivity, refreshRates, mOvrContext.getCameraTexture())) {
+                    DeviceDescriptor deviceDescriptor = new DeviceDescriptor();
+                    mOvrContext.getDeviceDescriptor(deviceDescriptor);
+                    if (!mReceiverThread.start(mEGLContext, mActivity, deviceDescriptor, mOvrContext.getCameraTexture())) {
                         Log.e(TAG, "FATAL: Initialization of ReceiverThread failed.");
                         return;
                     }
@@ -307,7 +307,7 @@ class VrThread extends Thread {
         @Override
         public void onTracking(float[] position, float[] orientation) {
             if(mOvrContext.isVrMode()) {
-                mOvrContext.fetchTrackingInfo(mReceiverThread.getPointer(), position, orientation);
+                mOvrContext.fetchTrackingInfo(mReceiverThread, position, orientation);
             }
         }
     };

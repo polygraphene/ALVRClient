@@ -69,10 +69,19 @@ public class OutputFrameQueue {
         if (mStopped) {
             return -1;
         }
-        if (mQueue.size() == 0) {
-            try {
-                wait(waitMs);
-            } catch (InterruptedException e) {
+        if(waitMs < 0) {
+            while (mQueue.size() == 0 && !mStopped) {
+                try {
+                    wait();
+                } catch (InterruptedException e) {
+                }
+            }
+        }else{
+            if (mQueue.size() == 0) {
+                try {
+                    wait(waitMs);
+                } catch (InterruptedException e) {
+                }
             }
         }
         if (mStopped || mQueue.size() == 0) {
@@ -82,6 +91,11 @@ public class OutputFrameQueue {
         Utils.frameLog(element.frameIndex, "Got frame from queue");
         mCodec.releaseOutputBuffer(element.index, true);
         return element.frameIndex;
+    }
+
+    public long render() {
+        // Wait infinite.
+        return render(-1);
     }
 
     synchronized public boolean isFrameAvailable() {

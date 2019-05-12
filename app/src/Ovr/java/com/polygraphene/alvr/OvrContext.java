@@ -48,8 +48,8 @@ public class OvrContext {
         renderLoadingNative(handle);
     }
 
-    public void fetchTrackingInfo(long udpManager, float[] position, float[] orientation) {
-        fetchTrackingInfoNative(handle, udpManager, position, orientation);
+    public void fetchTrackingInfo(UdpReceiverThread udpReceiverThread, float[] position, float[] orientation) {
+        fetchTrackingInfoNative(handle, udpReceiverThread, position, orientation);
     }
 
     public void onChangeSettings(int EnableTestMode, int suspend) {
@@ -80,6 +80,10 @@ public class OvrContext {
         getRefreshRatesNative(handle, refreshRates);
     }
 
+    public void getDeviceDescriptor(DeviceDescriptor deviceDescriptor) {
+        getDeviceDescriptorNative(handle, deviceDescriptor);
+    }
+
     public void setFrameGeometry(int width, int height) {
         setFrameGeometryNative(handle, width, height);
     }
@@ -103,7 +107,7 @@ public class OvrContext {
     private native void onSurfaceDestroyedNative(long handle);
     private native void renderNative(long handle, long renderedFrameIndex);
     private native void renderLoadingNative(long handle);
-    private native void fetchTrackingInfoNative(long handle, long udpManager, float[] position, float[] orientation);
+    private native void fetchTrackingInfoNative(long handle, UdpReceiverThread udpReceiverThread, float[] position, float[] orientation);
 
     private native void onChangeSettingsNative(long handle, int EnableTestMode, int suspend);
     private native boolean onKeyEventNative(long handle, int keyCode, int action);
@@ -114,6 +118,7 @@ public class OvrContext {
 
     private native boolean isVrModeNative(long handle);
     private native void getRefreshRatesNative(long handle, int[] refreshRates);
+    private native void getDeviceDescriptorNative(long handle, DeviceDescriptor deviceDescriptor);
 
     private native void setFrameGeometryNative(long handle, int width, int height);
     private native void setRefreshRateNative(long handle, int refreshRate);

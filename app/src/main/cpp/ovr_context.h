@@ -28,7 +28,7 @@ public:
     void render(uint64_t renderedFrameIndex);
     void renderLoading();
 
-    void fetchTrackingInfo(JNIEnv *env_, UdpManager *udpManager,
+    void fetchTrackingInfo(JNIEnv *env_, jobject udpReceiverThread,
                            ovrVector3f *position, ovrQuatf *orientation);
 
     void setFrameGeometry(int width, int height);
@@ -48,6 +48,8 @@ public:
     void getRefreshRates(JNIEnv *env_, jintArray refreshRates);
 
     void setRefreshRate(int refreshRate, bool forceChange = true);
+
+    void getDeviceDescriptor(JNIEnv *env, jobject deviceDescriptor);
 
 private:
     ANativeWindow *window = NULL;
@@ -104,6 +106,8 @@ private:
 
     ovrRenderer Renderer;
 
+    jmethodID mUdpReceiverThread_send;
+
     void setControllerInfo(TrackingInfo *packet, double displayTime);
 
     void sendTrackingInfo(TrackingInfo *packet, double displayTime, ovrTracking2 *tracking,
@@ -115,6 +119,8 @@ private:
     void enterVrMode();
     void leaveVrMode();
     void onVrModeChange();
+
+    void getFov(JNIEnv *env, jfloatArray fov);
 };
 
 #endif //ALVRCLIENT_VR_CONTEXT_H

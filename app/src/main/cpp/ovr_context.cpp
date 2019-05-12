@@ -123,6 +123,10 @@ void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager,
     BackButtonDownStartTime = 0.0;
 
     position_offset_y = 0.0;
+
+    jclass clazz = env->FindClass("com/polygraphene/alvr/UdpReceiverThread");
+    mUdpReceiverThread_send = env->GetMethodID(clazz, "send", "(JI)V");
+    env->DeleteLocalRef(clazz);
 }
 
 
@@ -314,7 +318,7 @@ void OvrContext::sendTrackingInfo(TrackingInfo *packet, double displayTime, ovrT
 }
 
 // Called TrackingThread. So, we can't use this->env.
-void OvrContext::fetchTrackingInfo(JNIEnv *env_, UdpManager *udpManager, ovrVector3f *position,
+void OvrContext::fetchTrackingInfo(JNIEnv *env_, jobject udpReceiverThread, ovrVector3f *position,
                                   ovrQuatf *orientation) {
     std::shared_ptr<TrackingFrame> frame(new TrackingFrame());
 
@@ -358,7 +362,8 @@ void OvrContext::fetchTrackingInfo(JNIEnv *env_, UdpManager *udpManager, ovrVect
     }
     LatencyCollector::Instance().tracking(frame->frameIndex);
 
-    udpManager->send(&info, sizeof(info));
+    env_->CallVoidMethod(udpReceiverThread, mUdpReceiverThread_send, reinterpret_cast<jlong>(&info),
+                        static_cast<jint>(sizeof(info)));
 }
 
 
@@ -676,9 +681,82 @@ void OvrContext::leaveVrMode() {
     Ovr = NULL;
 }
 
+// Fill device descriptor.
+void OvrContext::getDeviceDescriptor(JNIEnv *env, jobject deviceDescriptor) {
+    int renderWidth = vrapi_GetSystemPropertyInt(&java,
+                                                  VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_WIDTH);
+    int renderHeight = vrapi_GetSystemPropertyInt(&java,
+                                                   VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_HEIGHT);
+
+    int deviceType = ALVR_DEVICE_TYPE_OCULUS_MOBILE;
+    int deviceSubType = 0;
+    int deviceCapabilityFlags = 0;
+    int controllerCapabilityFlags = ALVR_CONTROLLER_CAPABILITY_FLAG_ONE_CONTROLLER;
+
+    int ovrDeviceType = vrapi_GetSystemPropertyInt(&java, VRAPI_SYS_PROP_DEVICE_TYPE);
+    if(VRAPI_DEVICE_TYPE_GEARVR_START <= ovrDeviceType &&
+       ovrDeviceType <= VRAPI_DEVICE_TYPE_GEARVR_END) {
+        deviceSubType = ALVR_DEVICE_SUBTYPE_OCULUS_MOBILE_GEARVR;
+    } else if(VRAPI_DEVICE_TYPE_OCULUSGO_START <= ovrDeviceType &&
+              ovrDeviceType <= VRAPI_DEVICE_TYPE_OCULUSGO_END){
+        // Including MiVR.
+        deviceSubType = ALVR_DEVICE_SUBTYPE_OCULUS_MOBILE_GO;
+    } else {
+        // Unknown
+        deviceSubType = 0;
+    }
+
+    jfieldID fieldID;
+    jclass clazz = env->GetObjectClass(deviceDescriptor);
+
+    fieldID = env->GetFieldID(clazz, "mRefreshRates", "[I");
+
+    // Array instance is already set on deviceDescriptor.
+    jintArray refreshRates = static_cast<jintArray>(env->GetObjectField(deviceDescriptor, fieldID));
+    getRefreshRates(env, refreshRates);
+    env->SetObjectField(deviceDescriptor, fieldID, refreshRates);
+    env->DeleteLocalRef(refreshRates);
+
+    fieldID = env->GetFieldID(clazz, "mRenderWidth", "I");
+    env->SetIntField(deviceDescriptor, fieldID, renderWidth);
+    fieldID = env->GetFieldID(clazz, "mRenderHeight", "I");
+    env->SetIntField(deviceDescriptor, fieldID, renderHeight);
+
+    fieldID = env->GetFieldID(clazz, "mFov", "[F");
+    jfloatArray fov = static_cast<jfloatArray>(env->GetObjectField(deviceDescriptor, fieldID));
+    getFov(env, fov);
+    env->SetObjectField(deviceDescriptor, fieldID, fov);
+    env->DeleteLocalRef(fov);
+
+    fieldID = env->GetFieldID(clazz, "mDeviceType", "I");
+    env->SetIntField(deviceDescriptor, fieldID, deviceType);
+    fieldID = env->GetFieldID(clazz, "mDeviceSubType", "I");
+    env->SetIntField(deviceDescriptor, fieldID, deviceSubType);
+    fieldID = env->GetFieldID(clazz, "mDeviceCapabilityFlags", "I");
+    env->SetIntField(deviceDescriptor, fieldID, deviceCapabilityFlags);
+    fieldID = env->GetFieldID(clazz, "mControllerCapabilityFlags", "I");
+    env->SetIntField(deviceDescriptor, fieldID, controllerCapabilityFlags);
+
+    env->DeleteLocalRef(clazz);
+}
+
+void OvrContext::getFov(JNIEnv *env, jfloatArray fov) {
+    jfloat *array = env->GetFloatArrayElements(fov, NULL);
+    float fovX = vrapi_GetSystemPropertyFloat(&java, VRAPI_SYS_PROP_SUGGESTED_EYE_FOV_DEGREES_X);
+    float fovY = vrapi_GetSystemPropertyFloat(&java, VRAPI_SYS_PROP_SUGGESTED_EYE_FOV_DEGREES_Y);
+    LOGI("OvrContext::getFov: X=%f Y=%f", fovX, fovY);
+    for(int eye = 0; eye < 2; eye++) {
+        array[eye * 4 + 0] = fovX / 2; // left
+        array[eye * 4 + 1] = fovX / 2; // right
+        array[eye * 4 + 2] = fovY / 2; // top
+        array[eye * 4 + 3] = fovY / 2; // bottom
+    }
+    env->ReleaseFloatArrayElements(fov, array, 0);
+}
+
 extern "C"
 JNIEXPORT jlong JNICALL
-Java_com_polygraphene_alvr_VrContext_initializeNative(JNIEnv *env, jobject instance,
+Java_com_polygraphene_alvr_OvrContext_initializeNative(JNIEnv *env, jobject instance,
                                                       jobject activity, jobject assetManager, bool ARMode, int initialRefreshRate) {
     OvrContext *context = new OvrContext();
     context->initialize(env, activity, assetManager, ARMode, initialRefreshRate);
@@ -732,7 +810,7 @@ extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_OvrContext_fetchTrackingInfoNative(JNIEnv *env, jobject instance,
                                                              jlong handle,
-                                                             jlong udpManager,
+                                                             jobject udpReceiverThread,
                                                              jfloatArray position_,
                                                              jfloatArray orientation_) {
     if(position_ != NULL && orientation_ != NULL) {
@@ -747,9 +825,9 @@ Java_com_polygraphene_alvr_OvrContext_fetchTrackingInfoNative(JNIEnv *env, jobje
         memcpy(&orientation, orientation_c, sizeof(float) * 4);
         env->ReleaseFloatArrayElements(orientation_, orientation_c, 0);
 
-        ((OvrContext *) handle)->fetchTrackingInfo(env, (UdpManager *)udpManager, &position, &orientation);
+        ((OvrContext *) handle)->fetchTrackingInfo(env, udpReceiverThread, &position, &orientation);
     }else {
-        ((OvrContext *) handle)->fetchTrackingInfo(env, (UdpManager *) udpManager, NULL, NULL);
+        ((OvrContext *) handle)->fetchTrackingInfo(env, udpReceiverThread, NULL, NULL);
     }
 }
 
@@ -813,6 +891,14 @@ Java_com_polygraphene_alvr_OvrContext_getRefreshRatesNative(JNIEnv *env, jobject
 
 extern "C"
 JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_OvrContext_getDeviceDescriptorNative(JNIEnv *env, jobject instance,
+                                                                jlong handle,
+                                                                jobject deviceDescriptor) {
+    ((OvrContext *) handle)->getDeviceDescriptor(env, deviceDescriptor);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_OvrContext_setFrameGeometryNative(JNIEnv *env, jobject instance,
                                                             jlong handle, jint width,
                                                             jint height) {
@@ -821,7 +907,7 @@ Java_com_polygraphene_alvr_OvrContext_setFrameGeometryNative(JNIEnv *env, jobjec
 
 extern "C"
 JNIEXPORT bool JNICALL
-Java_com_polygraphene_alvr_VrContext_onKeyEventNative(JNIEnv *env, jobject instance, jlong handle,
+Java_com_polygraphene_alvr_OvrContext_onKeyEventNative(JNIEnv *env, jobject instance, jlong handle,
                                                       jint keyCode,
                                                       jint action) {
     return ((OvrContext *) handle)->onKeyEvent(keyCode, action);
