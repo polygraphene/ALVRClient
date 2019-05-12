@@ -157,7 +157,6 @@ typedef struct {
     GltfModel *loadingScene;
 } ovrRenderer;
 
-void ovrRenderer_Clear(ovrRenderer *renderer);
 void ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMultiview, int width, int height,
                         int SurfaceTextureID, int LoadingTexture, int CameraTexture, bool ARMode);
 void ovrRenderer_Destroy(ovrRenderer *renderer);

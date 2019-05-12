@@ -17,10 +17,12 @@ link_directories(src/main/jniLibs/${ANDROID_ABI})
 if (VRSDK STREQUAL "ovr")
     add_definitions(-DOVR_SDK)
     set(VRSOURCE "src/main/cpp/ovr_context.cpp")
+    set(VRLIBS "vrapi")
 elseif (VRSDK STREQUAL "gvr")
     add_definitions(-DGVR_SDK)
     set(VRSOURCE "src/main/cpp/gvr_render.cpp"
             "src/main/cpp/gvr_tracking.cpp")
+    set(VRLIBS "gvr" "gvr_audio")
 endif()
 
 add_library( # Sets the name of the library.
@@ -69,9 +71,7 @@ target_link_libraries( # Specifies the target library.
                        # included in the NDK.
                        ${log-lib}
 
-                       vrapi
-        gvr
-        gvr_audio
+                       ${VRLIBS}
                        GLESv3
                        EGL
                        android

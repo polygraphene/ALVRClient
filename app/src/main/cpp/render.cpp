@@ -519,6 +519,7 @@ void ovrFence_Insert(ovrFence *fence) {
 #endif
 }
 
+#ifdef OVR_SDK
 
 void ovrFramebuffer_Clear(ovrFramebuffer *frameBuffer) {
     frameBuffer->Width = 0;
@@ -720,6 +721,8 @@ void ovrFramebuffer_Advance(ovrFramebuffer *frameBuffer) {
     frameBuffer->TextureSwapChainIndex =
             (frameBuffer->TextureSwapChainIndex + 1) % frameBuffer->TextureSwapChainLength;
 }
+
+#endif
 
 //
 // ovrGeometry
@@ -1071,15 +1074,6 @@ void ovrProgram_Destroy(ovrProgram *program) {
 static int MAX_FENCES = 4;
 
 
-void ovrRenderer_Clear(ovrRenderer *renderer) {
-    for (int eye = 0; eye < VRAPI_FRAME_LAYER_EYE_MAX; eye++) {
-        ovrFramebuffer_Clear(&renderer->FrameBuffer[eye]);
-    }
-    renderer->NumBuffers = VRAPI_FRAME_LAYER_EYE_MAX;
-
-    renderer->FenceIndex = 0;
-}
-
 void
 ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMultiview, int width, int height
         , int SurfaceTextureID, int LoadingTexture, int CameraTexture, bool ARMode) {
@@ -1156,6 +1150,8 @@ void ovrRenderer_Destroy(ovrRenderer *renderer) {
     free(renderer->Fence);
 }
 
+#ifdef OVR_SDK
+
 ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava *java,
                                                    const ovrTracking2 *tracking, ovrMobile *ovr,
                                                    unsigned long long *completionFence,
@@ -1216,6 +1212,7 @@ ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava
     return layer;
 }
 
+#endif
 
 void renderEye(int eye, ovrMatrix4f mvpMatrix[2], Recti *viewport, ovrRenderer *renderer, const ovrTracking2 *tracking,
                bool loading, int enableTestMode, int AROverlayMode) {
