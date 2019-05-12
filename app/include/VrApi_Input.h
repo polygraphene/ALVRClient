@@ -6,7 +6,7 @@ Created     :   Feb 9, 2016
 Authors     :   Jonathan E. Wright
 Language    :   C99
 
-Copyright   :   Copyright 2015 Oculus VR, LLC. All Rights reserved.
+Copyright   :   Copyright (c) Facebook Technologies, LLC and its affiliates. All rights reserved.
 
 *************************************************************************************/
 #ifndef OVR_VrApi_Input_h
@@ -31,25 +31,48 @@ Copyright   :   Copyright 2015 Oculus VR, LLC. All Rights reserved.
 /// seconds). The ovrButton_Back flag always signals a short press and will only remain set for a single frame.
 typedef enum ovrButton_
 {
-	ovrButton_A         = 0x00000001,	// Set for trigger pulled on the Gear VR Controller
-	ovrButton_B         = 0x00000002,
-	ovrButton_RThumb    = 0x00000004,
-	ovrButton_RShoulder = 0x00000008,
+	ovrButton_A           = 0x00000001,	// Set for trigger pulled on the Gear VR and Go Controllers
+	ovrButton_B           = 0x00000002,
+	ovrButton_RThumb      = 0x00000004,
+	ovrButton_RShoulder   = 0x00000008,
 
-	ovrButton_X         = 0x00000100,
-	ovrButton_Y         = 0x00000200,
-	ovrButton_LThumb    = 0x00000400,
-	ovrButton_LShoulder = 0x00000800,
+	ovrButton_X           = 0x00000100,
+	ovrButton_Y           = 0x00000200,
+	ovrButton_LThumb      = 0x00000400,
+	ovrButton_LShoulder   = 0x00000800,
 
-	ovrButton_Up        = 0x00010000,
-	ovrButton_Down      = 0x00020000,
-	ovrButton_Left      = 0x00040000,
-	ovrButton_Right     = 0x00080000,
-	ovrButton_Enter     = 0x00100000,	//< Set for touchpad click on the Gear VR Controller
-	ovrButton_Back      = 0x00200000,	//< Back button on the headset or Gear VR Controller (only set when a short press comes up)
+	ovrButton_Up          = 0x00010000,
+	ovrButton_Down        = 0x00020000,
+	ovrButton_Left        = 0x00040000,
+	ovrButton_Right       = 0x00080000,
+	ovrButton_Enter       = 0x00100000,	//< Set for touchpad click on the Gear VR and Go Controllers, menu button on Left Quest Controller
+	ovrButton_Back        = 0x00200000,	//< Back button on the headset or Gear VR Controller (only set when a short press comes up)
+	ovrButton_GripTrigger = 0x04000000,	//< grip trigger engaged
+	ovrButton_Trigger     = 0x20000000,	//< Index Trigger engaged
+	ovrButton_Joystick    = 0x80000000,	//< Click of the Joystick
 
 	ovrButton_EnumSize  = 0x7fffffff
 } ovrButton;
+
+
+/// Describes touch input types.
+/// These values map to capacitive touch values and derived pose states
+typedef enum ovrTouch_
+{
+	ovrTouch_A             = 0x00000001,	//< The A button has a finger resting on it.
+	ovrTouch_B             = 0x00000002,	//< The B button has a finger resting on it.
+	ovrTouch_X             = 0x00000004,	//< The X button has a finger resting on it.
+	ovrTouch_Y             = 0x00000008,	//< The Y button has a finger resting on it.
+	ovrTouch_TrackPad      = 0x00000010,	//< The TrackPad has a finger resting on it.
+	ovrTouch_Joystick      = 0x00000020,	//< The Joystick has a finger resting on it.
+	ovrTouch_IndexTrigger  = 0x00000040,	//< The Index Trigger has a finger resting on it.
+	ovrTouch_ThumbUp       = 0x00000100,	//< None of A, B, X, Y, or Joystick has a finger/thumb in proximity to it
+	ovrTouch_IndexPointing = 0x00000200,	//< The finger is sufficiently far away from the trigger to not be considered in proximity to it.
+	ovrTouch_BaseState     = 0x00000300,	//< No buttons touched or in proximity.  finger pointing and thumb up.
+	ovrTouch_LThumb		   = 0x00000400,	//< The Left controller Joystick has a finger/thumb resting on it.
+	ovrTouch_RThumb        = 0x00000800,	//< The Right controller Joystick has a finger/thumb resting on it.
+	ovrTouch_EnumSize
+} ovrTouch;
 
 /// Specifies which controller is connected; multiple can be connected at once.
 typedef enum ovrControllerType_
@@ -92,6 +115,17 @@ typedef enum ovrControllerCapabilities_
 
 	ovrControllerCaps_ModelOculusGo					= 0x00000010,	//< Controller for Oculus Go devices
 
+	ovrControllerCaps_HasAnalogIndexTrigger			= 0x00000040,	//< Controller has an analog index trigger vs. a binary one
+	ovrControllerCaps_HasAnalogGripTrigger			= 0x00000080,	//< Controller has an analog grip trigger vs. a binary one
+	ovrControllerCaps_HasSimpleHapticVibration		= 0x00000200,	//< Controller supports simple haptic vibration
+	ovrControllerCaps_HasBufferedHapticVibration	= 0x00000400,	//< Controller supports buffered haptic vibration
+
+	ovrControllerCaps_ModelGearVR					= 0x00000800,	//< Controller is the Gear VR Controller
+
+	ovrControllerCaps_HasTrackpad					= 0x00001000,	//< Controller has a trackpad
+
+	ovrControllerCaps_HasJoystick					= 0x00002000,	//< Controller has a joystick.
+	ovrControllerCaps_ModelOculusTouch				= 0x00004000,	//< Oculus Touch Controller For Oculus Quest
 
 	ovrControllerCaps_EnumSize 					= 0x7fffffff
 } ovrControllerCapabilties;
@@ -117,7 +151,14 @@ typedef struct ovrInputTrackedRemoteCapabilities_
 	float						TrackpadSizeY;
 
 	/// added in API version 1.1.13.0
-		struct { uint32_t Reserved1; uint32_t Reserved2; };
+	/// Maximum submittable samples for the haptics buffer
+	uint32_t HapticSamplesMax;
+	/// length in milliseconds of a sample in the haptics buffer.
+	uint32_t HapticSampleDurationMS;
+	/// added in API version 1.1.15.0
+	uint32_t TouchCapabilities;
+	uint32_t Reserved4;
+	uint32_t Reserved5;
 } ovrInputTrackedRemoteCapabilities;
 
 /// Capabilities for the Head Mounted Tracking device (i.e. the headset).
@@ -165,6 +206,20 @@ typedef struct ovrInputGamepadCapabilities_
 	uint64_t			Reserved[20];
 } ovrInputGamepadCapabilities;
 
+/// The buffer data for playing haptics
+typedef struct ovrHapticBuffer_
+{
+	/// Start time of the buffer
+	double						BufferTime;
+
+	/// Number of samples in the buffer;
+	uint32_t					NumSamples;
+
+	// True if this is the end of the buffers being sent
+	bool						Terminated;
+
+	uint8_t *					HapticBuffer;
+} ovrHapticBuffer;
 
 /// This header starts all ovrInputState structures. It should only hold fields
 /// that are common to all input controllers.
@@ -198,14 +253,24 @@ typedef struct ovrInputStateTrackedRemote_
 	uint8_t				BatteryPercentRemaining;	
 	/// Increments every time the remote is recentered. If this changes, the application may need
 	/// to adjust its arm model accordingly.
-	uint8_t				RecenterCount;				
+	uint8_t				RecenterCount;	
 	/// Reserved for future use.
 	uint16_t			Reserved;
 
 	/// added in API version 1.1.13.0
-		struct { float Reserved2; float Reserved3; };
+	// Analog values from 0.0 - 1.0 of the pull of the triggers
+	float IndexTrigger;
+	float GripTrigger;
 
-	uint64_t			Reserved4;
+	/// added in API version 1.1.15.0
+	uint32_t Touches;
+	uint32_t Reserved5a;
+	// Analog values from -1.0 - 1.0
+	// The value is set to 0.0 on Joystick, if the magnitude of the vector is < 0.1f
+	ovrVector2f Joystick;
+	// JoystickNoDeadZone does change the raw values of the data.
+	ovrVector2f JoystickNoDeadZone;
+
 } ovrInputStateTrackedRemote;
 
 
@@ -241,10 +306,10 @@ typedef struct ovrInputStateGamepad_
 	// Analog value from 0.0 - 1.0 of the pull of the Right Trigger
 	float				RightTrigger;
 
-	/// X and Y coordinates of the Left JoyStick, -1.0 - 1.0
-	ovrVector2f			LeftJoyStick;
-	/// X and Y coordinates of the Right JoyStick, -1.0 - 1.0
-	ovrVector2f			RightJoyStick;
+	/// X and Y coordinates of the Left Joystick, -1.0 - 1.0
+	ovrVector2f			LeftJoystick;
+	/// X and Y coordinates of the Right Joystick, -1.0 - 1.0
+	ovrVector2f			RightJoystick;
 
 	// Reserved for future use.
 	uint64_t			Reserved[20];
@@ -279,6 +344,17 @@ OVR_VRAPI_EXPORT ovrResult vrapi_EnumerateInputDevices( ovrMobile * ovr, const u
 ///                 vrapi_GetInputDeviceCapabilities( ovr, &remoteCaps.Header );
 OVR_VRAPI_EXPORT ovrResult vrapi_GetInputDeviceCapabilities( ovrMobile * ovr, ovrInputCapabilityHeader * capsHeader );
 
+/// Sets the vibration level of a haptic device.
+/// there should only be one call to vrapi_SetHapticVibrationSimple or vrapi_SetHapticVibrationBuffer per frame
+///  additional calls of either will return ovrError_InvalidOperation and have undefined behavior
+/// Input: ovr, deviceID, intensity: 0.0 - 1.0
+OVR_VRAPI_EXPORT ovrResult vrapi_SetHapticVibrationSimple( ovrMobile * ovr, const ovrDeviceID deviceID, const float intensity );
+
+/// Fills the haptic vibration buffer of a haptic device
+/// there should only be one call to vrapi_SetHapticVibrationSimple or vrapi_SetHapticVibrationBuffer per frame
+///  additional calls of either will return ovrError_InvalidOperation and have undefined behavior
+/// Input: ovr, deviceID, pointer to a hapticBuffer with filled in data.
+OVR_VRAPI_EXPORT ovrResult vrapi_SetHapticVibrationBuffer( ovrMobile * ovr, const ovrDeviceID deviceID, const ovrHapticBuffer * hapticBuffer );
 
 /// Returns the current input state for controllers, without positional tracking info.
 ///
@@ -309,9 +385,9 @@ OVR_VRAPI_EXPORT ovrResult vrapi_GetInputTrackingState( ovrMobile * ovr, const o
 OVR_VRAPI_DEPRECATED( OVR_VRAPI_EXPORT void vrapi_RecenterInputPose( ovrMobile * ovr, const ovrDeviceID deviceID ) );
 
 /// Enable or disable emulation for the GearVR Controller. 
-/// Emulation is on by default.
-/// If emulationOn == true, then button and touch events on the GearVR Controller will be sent through the Android
-/// dispatchKeyEvent and dispatchTouchEvent path as if they were from the headset buttons and touchpad.
+/// Emulation is false by default.
+/// If emulationOn == true, then the back button and touch events on the GearVR Controller will be sent through the Android
+/// dispatchKeyEvent and dispatchTouchEvent path as if they were from the headset back button and touchpad.
 /// Applications that are intentionally enumerating the controller will likely want to turn emulation off in order
 /// to differentiate between controller and headset input events.
 OVR_VRAPI_EXPORT ovrResult vrapi_SetRemoteEmulation( ovrMobile * ovr, const bool emulationOn );

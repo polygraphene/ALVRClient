@@ -6,7 +6,7 @@ Created     :   June 25, 2014
 Authors     :   John Carmack, J.M.P. van Waveren
 Language    :   C99
 
-Copyright   :   Copyright 2014 Oculus VR, LLC. All Rights reserved.
+Copyright   :   Copyright (c) Facebook Technologies, LLC and its affiliates. All rights reserved.
 
 *************************************************************************************/
 #ifndef OVR_VrApi_h
@@ -16,7 +16,7 @@ Copyright   :   Copyright 2014 Oculus VR, LLC. All Rights reserved.
 #include "VrApi_Version.h"
 #include "VrApi_Types.h"
 
-/** \mainpage 
+/** \mainpage
 
 VrApi
 =====
@@ -97,10 +97,10 @@ const int suggestedEyeTextureHeight = vrapi_GetSystemPropertyInt( &java, VRAPI_S
 ovrTextureSwapChain * colorTextureSwapChain[VRAPI_FRAME_LAYER_EYE_MAX];
 for ( int eye = 0; eye < VRAPI_FRAME_LAYER_EYE_MAX; eye++ )
 {
-	colorTextureSwapChain[eye] = vrapi_CreateTextureSwapChain( VRAPI_TEXTURE_TYPE_2D, VRAPI_TEXTURE_FORMAT_8888,
+	colorTextureSwapChain[eye] = vrapi_CreateTextureSwapChain3( VRAPI_TEXTURE_TYPE_2D, GL_RGBA8,
 																suggestedEyeTextureWidth,
 																suggestedEyeTextureHeight,
-																1, true );
+																1, 3 );
 }
 
 // Android Activity/Surface life cycle loop.
@@ -152,17 +152,14 @@ while ( !exit )
 				layer.Textures[eye].TexCoordsFromTanAngles = ovrMatrix4f_TanAngleMatrixFromProjection( &tracking.Eye[eye].ProjectionMatrix );
 			}
 
-			// Insert 'fence' using eglCreateSyncKHR.
-
 			const ovrLayerHeader2 * layers[] =
 			{
 				&layer.Header
 			};
 
-			ovrSubmitFrameDescription2 frameDesc = {};
+			ovrSubmitFrameDescription2 frameDesc = { 0 };
 			frameDesc.FrameIndex = frameIndex;
 			frameDesc.DisplayTime = predictedDisplayTime;
-			frameDesc.CompletionFence = fence;
 			frameDesc.LayerCount = 1;
 			frameDesc.Layers = layers;
 
@@ -254,14 +251,10 @@ at any time from any thread.
 The VrApi allows for one frame of overlap which is essential on tiled mobile GPUs. Because
 there is one frame of overlap, the eye images have typically not completed rendering by the
 time they are submitted to vrapi_SubmitFrame(). To allow the time warp to check whether the
-eye images have completed rendering, the application can explicitly pass in a sync object
-(CompletionFence) for each eye image through vrapi_SubmitFrame(). Note that these sync
-objects must be EGLSyncKHR because the VrApi still supports OpenGL ES 2.0.
-
-If, however, the application does not explicitly pass in sync objects, then vrapi_SubmitFrame()
-*must* be called from the thread with the OpenGL ES context that was used for rendering,
-which allows vrapi_SubmitFrame() to add a sync object to the current context and check
-if rendering has completed.
+eye images have completed rendering, vrapi_SubmitFrame() adds a sync object to the current
+context. Therefore, vrapi_SubmitFrame() *must* be called from a thread with an OpenGL ES
+context whose completion ensures that frame rendering is complete. Generally this is the
+thread and context that was used for the rendering.
 
 Note that even if no OpenGL ES objects are explicitly passed through the VrApi, then
 vrapi_EnterVrMode() and vrapi_SubmitFrame() can still be called from different threads.
@@ -343,7 +336,7 @@ The ATW brings this down to 8-16 milliseconds.
 |   *   |   *   |   *   |  - eye image display periods (* = predicted time in middle of display period)
      \     / \ / \ /
     ^ \   / ^ |   +---- The asynchronous time warp projects the second eye image onto the display.
-    |  \ /  | +---- The asynchronous time warp projects the first eye image onto the display. 
+    |  \ /  | +---- The asynchronous time warp projects the first eye image onto the display.
     |   |   |
     |   |   +---- Call vrapi_SubmitFrame before this point.
     |   |         vrapi_SubmitFrame inserts a GPU fence and hands over eye images to the asynchronous time warp.
@@ -363,7 +356,7 @@ The ATW brings this down to 8-16 milliseconds.
 |   *   |   *   |   *   |   *   |  - display periods (* = predicted time in middle of display period)
      \             / \ / \ /
     ^ \           / ^ |   +---- The asynchronous time warp projects second eye image onto the display.
-    |  \         /  | +---- The asynchronous time warp projects first eye image onto the display. 
+    |  \         /  | +---- The asynchronous time warp projects first eye image onto the display.
     |   \       /   |
     |    \     /    +---- Submit frame before this point.
     |     \   /           Frame submission inserts a GPU fence and hands over eye textures
@@ -384,7 +377,7 @@ The ATW brings this down to 8-16 milliseconds.
 *       |       *       |       *       |  - eye image display periods (* = predicted time in middle of display period)
      \             / \ / \ / \ / \ /
     ^ \           / ^ |   |   |   +---- The asynchronous time warp re-projects the second eye image onto the display.
-    |  \         /  | |   |   +---- The asynchronous time warp re-projects the first eye image onto the display. 
+    |  \         /  | |   |   +---- The asynchronous time warp re-projects the first eye image onto the display.
     |   \       /   | |   +---- The asynchronous time warp projects the second eye image onto the display.
     |    \     /    | +---- The asynchronous time warp projects the first eye image onto the display.
     |     \   /     |
@@ -406,7 +399,7 @@ The ATW brings this down to 8-16 milliseconds.
 *       |       *       |       *       |       *       |  - eye image display periods (* = predicted time in middle of display period)
      \                             / \ / \ / \ / \ /
     ^ \                           / ^ |   |   |   +---- The asynchronous time warp re-projects the second eye image onto the display.
-    |  \                         /  | |   |   +---- The asynchronous time warp re-projects the first eye image onto the display. 
+    |  \                         /  | |   |   +---- The asynchronous time warp re-projects the first eye image onto the display.
     |   \                       /   | |   +---- The asynchronous time warp projects the second eye image onto the display.
     |    \                     /    | +---- The asynchronous time warp projects the first eye image onto the display.
     |     \                   /     |
@@ -415,7 +408,7 @@ The ATW brings this down to 8-16 milliseconds.
     |        +------+------+              The asynchronous time warp checks the fence and uses the new eye images if rendering has completed.
     |               |
     |               +---- Generate GPU commands and execute commands on GPU.
-    |                
+    |
     +---- vrapi_SubmitFrame releases the renderer thread.
 \endverbatim
 
@@ -481,6 +474,8 @@ OVR_VRAPI_EXPORT float vrapi_GetSystemPropertyFloat( const ovrJava * java, const
 /// Returns the number of elements written to values array.
 OVR_VRAPI_EXPORT int vrapi_GetSystemPropertyFloatArray( const ovrJava * java, const ovrSystemProperty propType,
 														float * values, int numArrayValues );
+OVR_VRAPI_EXPORT int vrapi_GetSystemPropertyInt64Array( const ovrJava * java, const ovrSystemProperty propType,
+														int64_t * values, int numArrayValues );
 
 /// The return memory is guaranteed to be valid until the next call to vrapi_GetSystemPropertyString.
 OVR_VRAPI_EXPORT const char * vrapi_GetSystemPropertyString( const ovrJava * java, const ovrSystemProperty propType );
@@ -589,7 +584,11 @@ OVR_VRAPI_EXPORT ovrTracking vrapi_GetPredictedTracking( ovrMobile * ovr, double
 /// images from being abrubtly warped across the screen.
 ///
 /// Can be called from any thread while in VR mode.
-OVR_VRAPI_EXPORT void vrapi_RecenterPose( ovrMobile * ovr );
+
+// vrapi_RecenterPose() is being deprecated because it is supported at the user
+// level via system interaction, and at the app level, the app is free to use
+// any means it likes to control the mapping of virtual space to physical space.
+OVR_VRAPI_DEPRECATED( OVR_VRAPI_EXPORT void vrapi_RecenterPose( ovrMobile * ovr ) );
 
 //-----------------------------------------------------------------
 // Tracking Transform
@@ -625,33 +624,120 @@ OVR_VRAPI_EXPORT void vrapi_RecenterPose( ovrMobile * ovr );
 /// the VRAPI_TRACKING_TRANSFORM_SYSTEM_CENTER_FLOOR_LEVEL transform.
 /// To determine the current tracking transform, applications can fetch the
 /// VRAPI_TRACKING_TRANSFORM_CURRENT transform.
-OVR_VRAPI_EXPORT ovrPosef  vrapi_GetTrackingTransform( ovrMobile * ovr, ovrTrackingTransform whichTransform );
+
+/// The TrackingTransform API has been deprecated because it was superceded by the
+/// TrackingSpace API. The key difference in the TrackingSpace API is that LOCAL
+/// and LOCAL_FLOOR spaces are mutable, so user/system recentering is transparently
+/// applied without app intervention.
+OVR_VRAPI_DEPRECATED( OVR_VRAPI_EXPORT ovrPosef  vrapi_GetTrackingTransform( ovrMobile * ovr, ovrTrackingTransform whichTransform ) );
 
 /// Sets the transform used convert between tracking coordinates and a canonical
 /// application-defined space.
 /// Only the yaw component of the orientation is used.
-OVR_VRAPI_EXPORT void vrapi_SetTrackingTransform( ovrMobile * ovr, ovrPosef pose );
+OVR_VRAPI_DEPRECATED( OVR_VRAPI_EXPORT void vrapi_SetTrackingTransform( ovrMobile * ovr, ovrPosef pose ) );
+
+
+/// Returns the current tracking space
+OVR_VRAPI_EXPORT ovrTrackingSpace vrapi_GetTrackingSpace( ovrMobile * ovr );
+
+/// Set the tracking space. There are currently two options:
+///   * VRAPI_TRACKING_SPACE_LOCAL (default)
+///         The local tracking space's origin is at the nominal head position
+///         with +y up, and -z forward. This space is volatile and will change
+///         when system recentering occurs.
+///   * VRAPI_TRACKING_SPACE_LOCAL_FLOOR
+///         The local floor tracking space is the same as the local tracking
+///         space, except its origin is translated down to the floor. The local
+///         floor space differs from the local space only in its y translation.
+///         This space is volatile and will change when system recentering occurs.
+OVR_VRAPI_EXPORT ovrResult vrapi_SetTrackingSpace( ovrMobile * ovr, ovrTrackingSpace whichSpace );
+
+/// Returns pose of the requested space relative to the current space.
+/// The returned value is not affected by the current tracking transform.
+OVR_VRAPI_EXPORT ovrPosef vrapi_LocateTrackingSpace( ovrMobile * ovr, ovrTrackingSpace target );
+
+//-----------------------------------------------------------------
+// Guardian System
+//
+//-----------------------------------------------------------------
+
+/// Get the geometry of the Guardian System as a list of points that define the outer boundary space.
+/// You can choose to get just the number of points by passing in a null value for points or
+/// by passing in a pointsCountInput size of 0.  Otherwise pointsCountInput will be used to fetch
+/// as many points as possible from the Guardian points data.  If the input size exceeds the
+/// number of points that are currently stored off we only copy up to the number of points that we
+/// have and pointsCountOutput will return the number of copied points
+OVR_VRAPI_EXPORT ovrResult vrapi_GetBoundaryGeometry( ovrMobile * ovr, const uint32_t pointsCountInput, uint32_t * pointsCountOutput, ovrVector3f * points );
+
+/// Gets the dimension of the Oriented Bounding box for the Guardian System.  This is the largest
+/// fit rectangle within the Guardian System boundary geometry. The pose value contains the forward facing
+/// direction as well as the translation for the oriented box.  The scale return value returns a
+/// scalar value for the width, height, and depth of the box.  These values are half the actual size
+/// as they are scalars and in meters."
+OVR_VRAPI_EXPORT ovrResult vrapi_GetBoundaryOrientedBoundingBox( ovrMobile * ovr, ovrPosef * pose, ovrVector3f * scale );
+
+/// Tests collision/proximity of a 3D point against the Guardian System Boundary and returns whether or not a
+/// given point is inside or outside of the boundary.  If a more detailed set of boundary
+/// trigger information is requested a ovrBoundaryTriggerResult may be passed in.  However null may
+/// also be passed in to just return whether a point is inside the boundary or not.
+OVR_VRAPI_EXPORT ovrResult vrapi_TestPointIsInBoundary( ovrMobile * ovr, const ovrVector3f point, bool * pointInsideBoundary, ovrBoundaryTriggerResult * result );
+
+/// Tests collision/proximity of position tracked devices (e.g. HMD and/or Controllers) against the
+/// Guardian System boundary. This function returns an ovrGuardianTriggerResult which contains information
+/// such as distance and closest point based on collision/proximity test
+OVR_VRAPI_EXPORT ovrResult vrapi_GetBoundaryTriggerState( ovrMobile * ovr, const ovrTrackedDeviceTypeId deviceId, ovrBoundaryTriggerResult * result );
+
+/// Used to force Guardian System mesh visibility to true.  Forcing to false will set the Guardian
+/// System back to normal operation.
+OVR_VRAPI_EXPORT ovrResult vrapi_RequestBoundaryVisible( ovrMobile * ovr, const bool visible );
+
+/// Used to access whether or not the Guardian System is visible or not
+OVR_VRAPI_EXPORT ovrResult vrapi_GetBoundaryVisible( ovrMobile * ovr, bool * visible );
 
 //-----------------------------------------------------------------
 // Texture Swap Chains
 //
 //-----------------------------------------------------------------
 
+/// Texture Swap Chain lifetime is explicitly controlled by the application via calls
+/// to vrapi_CreateTextureSwapChain* or vrapi_CreateAndroidSurfaceSwapChain and
+/// vrapi_DestroyTextureSwapChain. Swap Chains are associated with the VrApi instance,
+/// not the VrApi ovrMobile. Therefore, calls to vrapi_EnterVrMode and vrapi_LeaveVrMode
+/// will not destroy or cause the Swap Chain to become invalid.
+
 /// Create a texture swap chain that can be passed to vrapi_SubmitFrame.
 /// Must be called from a thread with a valid OpenGL ES context current.
 ///
-/// Specifying 0 levels allows the individual texture ids to be set with
-/// vrapi_SetTextureSwapChainHandle().
+/// 'bufferCount' used to be a bool that selected either a single texture index
+/// or a triple buffered index, but the new entry point vrapi_CreateTextureSwapChain2,
+/// allows up to 16 buffers to be allocated, which is useful for maintaining a
+/// deep video buffer queue to get better frame timing.
 ///
-/// Buffers used to be a bool that selected either a single texture index
-/// or a triple buffered index, but the new entry point allows up to 16 buffers
-/// to be allocated, which is useful for maintaining a deep video buffer queue
-/// to get better frame timing.
+/// 'format' used to be an ovrTextureFormat but has been expanded to accept
+/// platform specific format types. For GLES, this is the internal format.
+/// If an unsupported format is provided, swapchain creation will fail.
+///
+/// SwapChain creation failures result in a return value of 'nullptr'.
+OVR_VRAPI_EXPORT ovrTextureSwapChain * vrapi_CreateTextureSwapChain3( ovrTextureType type, int64_t format,
+																int width, int height, int levels, int bufferCount );
+
 OVR_VRAPI_EXPORT ovrTextureSwapChain * vrapi_CreateTextureSwapChain2( ovrTextureType type, ovrTextureFormat format,
 																int width, int height, int levels, int bufferCount );
 
 OVR_VRAPI_EXPORT ovrTextureSwapChain * vrapi_CreateTextureSwapChain( ovrTextureType type, ovrTextureFormat format,
                                                                 int width, int height, int levels, bool buffered );
+
+/// Create an Android SurfaceTexture based texture swap chain suitable for use with vrapi_SubmitFrame.
+/// Updating of the SurfaceTexture is handled through normal Android platform specific mechanisms
+/// from within the Compositor. A reference to the Android Surface object associated with the SurfaceTexture
+/// may be obtained by calling vrapi_GetTextureSwapChainAndroidSurface.
+///
+/// An optional width and height (ie width and height do not equal zero) may be provided in order to set
+/// the default size of the image buffers.
+/// Note that the image producer may override the buffer size, in which case the default values provided
+/// here will not be used (ie both video decompression or camera preview override the size automatically).
+OVR_VRAPI_EXPORT ovrTextureSwapChain * vrapi_CreateAndroidSurfaceSwapChain( int width, int height );
+
 
 /// Destroy the given texture swap chain.
 /// Must be called from a thread with the same OpenGL ES context current when vrapi_CreateTextureSwapChain was called.
@@ -663,11 +749,9 @@ OVR_VRAPI_EXPORT int vrapi_GetTextureSwapChainLength( ovrTextureSwapChain * chai
 /// Get the OpenGL name of the texture at the given index.
 OVR_VRAPI_EXPORT unsigned int vrapi_GetTextureSwapChainHandle( ovrTextureSwapChain * chain, int index );
 
-/// Set the OpenGL name of the texture at the given index. \note This is not portable to PC.
-/// This will silently fail with:
-/// W/TimeWarp: SetTextureSwapChainHandle: chain->Allocated
-/// Unless the SwapChain was created with 0 levels.
-OVR_VRAPI_EXPORT void vrapi_SetTextureSwapChainHandle( ovrTextureSwapChain * chain, int index, unsigned int handle );
+
+/// Get the Android Surface object associated with the swap chain.
+OVR_VRAPI_EXPORT jobject vrapi_GetTextureSwapChainAndroidSurface( ovrTextureSwapChain * chain );
 
 //-----------------------------------------------------------------
 // Frame Submission
@@ -690,20 +774,15 @@ OVR_VRAPI_EXPORT void vrapi_SetTextureSwapChainHandle( ovrTextureSwapChain * cha
 /// The VrApi allows for one frame of overlap which is essential on tiled mobile GPUs.
 /// Because there is one frame of overlap, the eye images have typically not completed
 /// rendering by the time they are submitted to vrapi_SubmitFrame(). To allow the time
-/// warp to check whether the eye images have completed rendering, the application can
-/// explicitly pass in a sync object (CompletionFence) for each eye image through
-/// vrapi_SubmitFrame(). \note These sync objects must be EGLSyncKHR because the
-/// VrApi still supports OpenGL ES 2.0.
-/// 
-/// If, however, the application does not explicitly pass in sync objects, then
-/// vrapi_SubmitFrame() *must* be called from the thread with the OpenGL ES context that
-/// was used for rendering, which allows vrapi_SubmitFrame() to add a sync object to
-/// the current context and check if rendering has completed.
+/// warp to check whether the eye images have completed rendering, vrapi_SubmitFrame()
+/// adds a sync object to the current context. Therefore, vrapi_SubmitFrame() *must*
+/// be called from a thread with an OpenGL ES context whose completion ensures that
+/// frame rendering is complete. Generally this is the thread and context that was used
+/// for the rendering.
 OVR_VRAPI_EXPORT void vrapi_SubmitFrame( ovrMobile * ovr, const ovrFrameParms * parms );
 
 /// vrapi_SubmitFrame2 takes a frameDescription describing per-frame information such as:
-/// a flexible list of layers which should be drawn this frame, a single fence to signal
-/// frame completion, and a frame index.
+/// a flexible list of layers which should be drawn this frame and a frame index.
 OVR_VRAPI_EXPORT ovrResult vrapi_SubmitFrame2( ovrMobile * ovr, const ovrSubmitFrameDescription2 * frameDescription );
 
 //-----------------------------------------------------------------
@@ -723,7 +802,7 @@ OVR_VRAPI_EXPORT ovrResult vrapi_SetPerfThread( ovrMobile * ovr, const ovrPerfTh
 
 /// If VRAPI_EXTRA_LATENCY_MODE_ON specified, adds an extra frame of latency for full GPU utilization.
 /// Default is VRAPI_EXTRA_LATENCY_MODE_OFF.
-/// 
+///
 /// The latency mode specified will be applied on the next call to vrapi_SubmitFrame(2).
 OVR_VRAPI_EXPORT ovrResult vrapi_SetExtraLatencyMode( ovrMobile * ovr, const ovrExtraLatencyMode mode );
 
@@ -734,7 +813,7 @@ OVR_VRAPI_EXPORT ovrResult vrapi_SetExtraLatencyMode( ovrMobile * ovr, const ovr
 /// Set the Display Refresh Rate.
 /// Returns ovrSuccess or an ovrError code.
 /// Returns 'ovrError_InvalidParameter' if requested refresh rate is not supported by the device.
-/// Returns 'ovrError_InvalidOperation' if setting the display refresh rate was not successful.
+/// Returns 'ovrError_InvalidOperation' if setting the display refresh rate was not successful (such as when the device is in low power mode).
 OVR_VRAPI_EXPORT ovrResult vrapi_SetDisplayRefreshRate( ovrMobile * ovr, const float refreshRate );
 
 

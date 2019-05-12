@@ -6,7 +6,7 @@ Created     :   August 15, 2014
 Authors     :   Gloria Kennickell, Jonathan E. Wright
 Language    :   C99
 
-Copyright   :   Copyright 2014 Oculus VR, LLC. All Rights reserved.
+Copyright   :   Copyright (c) Facebook Technologies, LLC and its affiliates. All rights reserved.
 
 *************************************************************************************/
 #ifndef OVR_VrApi_SystemUtils_h
@@ -19,7 +19,7 @@ Copyright   :   Copyright 2014 Oculus VR, LLC. All Rights reserved.
 extern "C" {
 #endif
 
-typedef enum
+typedef enum ovrSystemUIType_
 {
 	// enum 0 used to be VRAPI_SYS_UI_GLOBAL_MENU.
 
