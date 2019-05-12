@@ -40,6 +40,13 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
 
     private boolean mResumed = false;
 
+    /**
+     * In most case, we can assume Activity.onPause is called after GLThread has left onSurfaceCreated().
+     * But, when startup on DaydreamView, onPause is called immediately after onResume, and also onSurfaceCreated() is called after onPause().
+     * To avoid wrong lifecycle management, we should wait until GLThread leaves onSurfaceCreate() when onPause() is called.
+     */
+    private boolean mSurfacePrepared = false;
+
     private UdpReceiverThread mReceiverThread;
     private DecoderThread mDecoderThread;
 
@@ -116,13 +123,18 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         mViewportList = mApi.createBufferViewportList();
         mTmpViewport = mApi.createBufferViewport();
         nativeHandle = createNative(mActivity.getAssets());
+        mSurfacePrepared = false;
     }
 
     @Override
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
         Log.v(TAG, "onSurfaceCreated");
 
-        initializeGlObjects();
+        synchronized (mWaiter) {
+            initializeGlObjects();
+            mSurfacePrepared = true;
+            mWaiter.notifyAll();
+        }
     }
 
     @Override
@@ -135,10 +147,8 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     }
 
     public void setThreads(UdpReceiverThread receiverThread, DecoderThread decoderThread) {
-        synchronized (mWaiter) {
-            mReceiverThread = receiverThread;
-            mDecoderThread = decoderThread;
-        }
+        mReceiverThread = receiverThread;
+        mDecoderThread = decoderThread;
     }
 
     public void onPause() {
@@ -162,6 +172,17 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         mSwapChain = null;
         destroyNative(nativeHandle);
         nativeHandle = 0;
+    }
+
+    public void waitForSurfacePrepared() {
+        synchronized (mWaiter) {
+            while(!mSurfacePrepared) {
+                try {
+                    mWaiter.wait();
+                } catch (InterruptedException e) {
+                }
+            }
+        }
     }
 
     public EGLContext getEGLContext() {

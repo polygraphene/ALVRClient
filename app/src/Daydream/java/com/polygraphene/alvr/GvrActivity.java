@@ -106,9 +106,12 @@ public class GvrActivity extends BaseActivity {
 
     @Override
     protected void onPause() {
-        Log.v(TAG, "onPause");
+        Log.v(TAG, "onPause: enter. waitForSurfacePrepared.");
 
         super.onPause();
+
+        mRenderer.waitForSurfacePrepared();
+
         mGvrLayout.onPause();
 
         // Stop worker threads.
