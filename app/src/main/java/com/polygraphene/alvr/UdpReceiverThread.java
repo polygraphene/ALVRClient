@@ -269,12 +269,12 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
     }
 
     @Override
-    public void onSinkPrepared() {
+    public void setSinkPrepared(boolean prepared) {
         synchronized (mWaiter) {
             if (mNativeHandle == 0) {
                 return;
             }
-            onSinkPreparedNative(mNativeHandle);
+            setSinkPreparedNative(mNativeHandle, prepared);
         }
     }
 
@@ -284,6 +284,6 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
     private native void recycleNalNative(long nativeHandle, NAL nal);
     private native void flushNALListNative(long nativeHandle);
     private native void notifyWaitingThreadNative(long nativeHandle);
-    private native void onSinkPreparedNative(long nativeHandle);
+    private native void setSinkPreparedNative(long nativeHandle, boolean prepared);
     private native void clearStoppedAndPreparedNative(long nativeHandle);
 }

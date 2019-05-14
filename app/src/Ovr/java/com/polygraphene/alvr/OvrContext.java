@@ -12,8 +12,8 @@ public class OvrContext {
 
     private long handle;
 
-    public void initialize(Activity activity, AssetManager assetManager, boolean ARMode, int initialRefreshRate) {
-        handle = initializeNative(activity, assetManager, ARMode, initialRefreshRate);
+    public void initialize(Activity activity, AssetManager assetManager, VrThread vrThread, boolean ARMode, int initialRefreshRate) {
+        handle = initializeNative(activity, assetManager, vrThread, ARMode, initialRefreshRate);
     }
 
     public void destroy() {
@@ -92,7 +92,7 @@ public class OvrContext {
         sendTrackingNative(handle, udpManager, frameIndex, headOrientation, headPosition);
     }
 
-    private native long initializeNative(Activity activity, AssetManager assetManager, boolean ARMode, int initialRefreshRate);
+    private native long initializeNative(Activity activity, AssetManager assetManager, VrThread vrThread, boolean ARMode, int initialRefreshRate);
     private native void destroyNative(long handle);
 
     private native void onResumeNative(long handle);

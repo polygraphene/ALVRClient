@@ -33,7 +33,7 @@ void OvrContext::onVrModeChange() {
     }
 }
 
-void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager, bool ARMode, int initialRefreshRate) {
+void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager, jobject vrThread, bool ARMode, int initialRefreshRate) {
     LOG("Initializing EGL.");
 
     setAssetManager(env, assetManager);
@@ -42,6 +42,8 @@ void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager,
     java.Env = env;
     env->GetJavaVM(&java.Vm);
     java.ActivityObject = env->NewGlobalRef(activity);
+
+    mVrThread = env->NewGlobalRef(vrThread);
 
     eglInit();
 
@@ -126,7 +128,7 @@ void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager,
 }
 
 
-void OvrContext::destroy() {
+void OvrContext::destroy(JNIEnv *env) {
     LOG("Destroying EGL.");
 
     ovrRenderer_Destroy(&Renderer);
@@ -140,6 +142,8 @@ void OvrContext::destroy() {
     eglDestroy();
 
     vrapi_Shutdown();
+
+    env->DeleteGlobalRef(mVrThread);
 }
 
 
@@ -433,8 +437,8 @@ void OvrContext::render(uint64_t renderedFrameIndex) {
         } else {
             // No matching tracking info. Too old frame.
             LOG("Too old frame has arrived. Instead, we use most old tracking data in trackingFrameMap."
-                "FrameIndex=%lu WantedFrameIndex=%lu trackingFrameMap=(%lu - %lu)",
-                renderedFrameIndex, WantedFrameIndex, oldestFrame, mostRecentFrame);
+                "FrameIndex=%lu trackingFrameMap=(%lu - %lu)",
+                renderedFrameIndex, oldestFrame, mostRecentFrame);
             if (trackingFrameMap.size() > 0) {
                 frame = trackingFrameMap.cbegin()->second;
             } else {
@@ -620,6 +624,12 @@ void OvrContext::enterVrMode() {
     int GpuLevel = 3;
     vrapi_SetClockLevels(Ovr, CpuLevel, GpuLevel);
     vrapi_SetPerfThread(Ovr, VRAPI_PERF_THREAD_TYPE_MAIN, gettid());
+
+    // Calling back VrThread to notify Vr state change.
+    jclass clazz = env->GetObjectClass(mVrThread);
+    jmethodID id = env->GetMethodID(clazz, "onVrModeChanged", "(Z)V");
+    env->CallVoidMethod(mVrThread, id, static_cast<jboolean>(true));
+    env->DeleteLocalRef(clazz);
 }
 
 void OvrContext::leaveVrMode() {
@@ -629,6 +639,12 @@ void OvrContext::leaveVrMode() {
 
     LOGI("Leaved VR mode.");
     Ovr = NULL;
+
+    // Calling back VrThread to notify Vr state change.
+    jclass clazz = env->GetObjectClass(mVrThread);
+    jmethodID id = env->GetMethodID(clazz, "onVrModeChanged", "(Z)V");
+    env->CallVoidMethod(mVrThread, id, static_cast<jboolean>(false));
+    env->DeleteLocalRef(clazz);
 }
 
 // Fill device descriptor.
@@ -707,16 +723,16 @@ void OvrContext::getFov(JNIEnv *env, jfloatArray fov) {
 extern "C"
 JNIEXPORT jlong JNICALL
 Java_com_polygraphene_alvr_OvrContext_initializeNative(JNIEnv *env, jobject instance,
-                                                      jobject activity, jobject assetManager, bool ARMode, int initialRefreshRate) {
+                                                      jobject activity, jobject assetManager, jobject vrThread, bool ARMode, int initialRefreshRate) {
     OvrContext *context = new OvrContext();
-    context->initialize(env, activity, assetManager, ARMode, initialRefreshRate);
+    context->initialize(env, activity, assetManager, vrThread, ARMode, initialRefreshRate);
     return (jlong) context;
 }
 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_OvrContext_destroyNative(JNIEnv *env, jobject instance, jlong handle) {
-    ((OvrContext *) handle)->destroy();
+    ((OvrContext *) handle)->destroy(env);
 }
 
 

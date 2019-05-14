@@ -92,7 +92,7 @@ public:
     void runLoop(JNIEnv *env, jobject instance, jstring serverAddress, int serverPort);
     void interrupt();
     void notifyWaitingThread(JNIEnv *env);
-    void onSinkPrepared();
+    void setSinkPrepared(bool prepared);
 
     bool isConnected();
 

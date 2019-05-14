@@ -60,7 +60,7 @@ public class DummyNALParser implements NALParser {
     }
 
     @Override
-    public void onSinkPrepared() {
+    public void setSinkPrepared(boolean prepared) {
 
     }
 }

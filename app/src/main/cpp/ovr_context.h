@@ -14,8 +14,8 @@
 
 class OvrContext {
 public:
-    void initialize(JNIEnv *env, jobject activity, jobject assetManager, bool ARMode, int initialRefreshRate);
-    void destroy();
+    void initialize(JNIEnv *env, jobject activity, jobject assetManager, jobject vrThread, bool ARMode, int initialRefreshRate);
+    void destroy(JNIEnv *env);
 
     void onChangeSettings(int EnableTestMode, int Suspend);
     void onSurfaceCreated(jobject surface);
@@ -55,6 +55,8 @@ private:
     ovrMobile *Ovr;
     ovrJava java;
     JNIEnv *env;
+
+    jobject mVrThread = nullptr;
 
     bool UseMultiview = true;
     GLuint SurfaceTextureID = 0;

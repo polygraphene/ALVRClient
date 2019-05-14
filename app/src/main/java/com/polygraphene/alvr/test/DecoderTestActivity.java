@@ -23,6 +23,18 @@ public class DecoderTestActivity extends AppCompatActivity {
     private DecoderThread decoderThread;
     private TextView textView;
 
+    private DecoderThread.DecoderCallback mDecoderCallback = new DecoderThread.DecoderCallback() {
+        @Override
+        public void onPrepared() {
+
+        }
+
+        @Override
+        public void onDestroy() {
+
+        }
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -42,7 +54,7 @@ public class DecoderTestActivity extends AppCompatActivity {
                     return;
                 }
 
-                decoderThread = new DecoderThread(dummyNALParser, holder.getSurface(), DecoderTestActivity.this);
+                decoderThread = new DecoderThread(dummyNALParser, holder.getSurface(), DecoderTestActivity.this, mDecoderCallback);
                 decoderThread.start();
                 surfaceView.postDelayed(new Runnable() {
                     @Override
@@ -69,7 +81,7 @@ public class DecoderTestActivity extends AppCompatActivity {
                                 e.printStackTrace();
                             }
 
-                            decoderThread = new DecoderThread(dummyNALParser, holder.getSurface(), DecoderTestActivity.this);
+                            decoderThread = new DecoderThread(dummyNALParser, holder.getSurface(), DecoderTestActivity.this, mDecoderCallback);
                             decoderThread.start();
                             Log.v("DecoderTestActivity", "Next loop:"+ mLoop + ". started");
                         }

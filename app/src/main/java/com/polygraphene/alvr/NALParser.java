@@ -11,5 +11,5 @@ public interface NALParser {
     void flushNALList();
     void notifyWaitingThread();
     void clearStoppedAndPrepared();
-    void onSinkPrepared();
+    void setSinkPrepared(boolean prepared);
 }

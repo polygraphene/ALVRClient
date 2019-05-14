@@ -516,14 +516,14 @@ void UdpManager::notifyWaitingThread(JNIEnv *env) {
     }
 }
 
-void UdpManager::onSinkPrepared() {
+void UdpManager::setSinkPrepared(bool prepared) {
     if (m_stopped) {
         return;
     }
-    mSinkPrepared = true;
-    LOGSOCKETI("onSinkPrepared: Decoder has been prepared.");
-    if (isConnected()) {
-        LOGSOCKETI("onSinkPrepared: Send stream start packet.");
+    mSinkPrepared = prepared;
+    LOGSOCKETI("setSinkPrepared: Decoder has been prepared.");
+    if (prepared && isConnected()) {
+        LOGSOCKETI("setSinkPrepared: Send stream start packet.");
         sendStreamStartPacket();
     }
 }
@@ -824,8 +824,8 @@ Java_com_polygraphene_alvr_UdpReceiverThread_notifyWaitingThreadNative(JNIEnv *e
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_onSinkPreparedNative(JNIEnv *env, jobject instance, jlong nativeHandle) {
-    reinterpret_cast<UdpManager *>(nativeHandle)->onSinkPrepared();
+Java_com_polygraphene_alvr_UdpReceiverThread_setSinkPreparedNative(JNIEnv *env, jobject instance, jlong nativeHandle, jboolean prepared) {
+    reinterpret_cast<UdpManager *>(nativeHandle)->setSinkPrepared(static_cast<bool>(prepared));
 }
 
 extern "C"

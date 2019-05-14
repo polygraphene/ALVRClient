@@ -39,6 +39,14 @@ public class DecoderThread extends ThreadBase {
 
     private OutputFrameQueue mQueue;
 
+    public boolean mPrepared = false;
+
+    public interface DecoderCallback {
+        public void onPrepared();
+        public void onDestroy();
+    }
+    private final DecoderCallback mDecoderCallback;
+
     private static final int NAL_TYPE_SPS = 7;
     private static final int NAL_TYPE_PPS = 8;
     private static final int NAL_TYPE_IDR = 5;
@@ -72,11 +80,12 @@ public class DecoderThread extends ThreadBase {
     private final List<Integer> mAvailableInputs = new LinkedList<>();
 
     public DecoderThread(NALParser nalParser,
-                  Surface surface, Context context) {
+                  Surface surface, Context context, DecoderCallback callback) {
         mNalParser = nalParser;
         mSurface = surface;
         mContext = context;
         mQueue = new OutputFrameQueue();
+        mDecoderCallback = callback;
     }
 
     public void start() {
@@ -101,6 +110,8 @@ public class DecoderThread extends ThreadBase {
             Log.e(TAG, "DecoderThread stopped by Exception.");
         } finally {
             Log.i(TAG, "Stopping decoder.");
+
+            mDecoderCallback.onDestroy();
             if (mDecoder != null) {
                 try {
                     mDecoder.stop();
@@ -139,7 +150,7 @@ public class DecoderThread extends ThreadBase {
 
         Log.v(TAG, "Codec created. Type=" + mFormat + " Name=" + mDecoder.getCodecInfo().getName());
 
-        mNalParser.onSinkPrepared();
+        mDecoderCallback.onPrepared();
 
         mWaitNextIDR = true;
 

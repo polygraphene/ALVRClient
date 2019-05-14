@@ -1,8 +1,6 @@
 package com.polygraphene.alvr;
 
 import android.app.Activity;
-import android.content.Context;
-import android.content.SharedPreferences;
 import android.graphics.SurfaceTexture;
 import android.opengl.EGL14;
 import android.opengl.EGLContext;
@@ -31,6 +29,9 @@ class VrThread extends Thread {
     private UdpReceiverThread mReceiverThread;
 
     private EGLContext mEGLContext;
+
+    private boolean mVrMode = false;
+    private boolean mDecoderPrepared = false;
 
     public VrThread(Activity activity) {
         this.mActivity = activity;
@@ -92,7 +93,7 @@ class VrThread extends Thread {
                 // To avoid deadlock caused by it, we need to flush last output.
                 mSurfaceTexture.updateTexImage();
 
-                mDecoderThread = new DecoderThread(mReceiverThread, mSurface, mActivity);
+                mDecoderThread = new DecoderThread(mReceiverThread, mSurface, mActivity, mDecoderCallback);
 
                 try {
                     mDecoderThread.start();
@@ -186,7 +187,7 @@ class VrThread extends Thread {
             notifyAll();
         }
 
-        mOvrContext.initialize(mActivity, mActivity.getAssets(), Constants.IS_ARCORE_BUILD, 60);
+        mOvrContext.initialize(mActivity, mActivity.getAssets(), this, Constants.IS_ARCORE_BUILD, 60);
 
         mSurfaceTexture = new SurfaceTexture(mOvrContext.getSurfaceTextureID());
         mSurfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
@@ -267,6 +268,13 @@ class VrThread extends Thread {
         }
     }
 
+    // Called on VrThread.
+    public void onVrModeChanged(boolean enter) {
+        mVrMode = enter;
+        Log.i(TAG, "onVrModeChanged. mVrMode=" + mVrMode + " mDecoderPrepared=" + mDecoderPrepared);
+        mReceiverThread.setSinkPrepared(mVrMode && mDecoderPrepared);
+    }
+
     private UdpReceiverThread.Callback mUdpReceiverCallback = new UdpReceiverThread.Callback() {
         @Override
         public void onConnected(final int width, final int height, final int codec, final int frameQueueSize, final int refreshRate) {
@@ -304,6 +312,22 @@ class VrThread extends Thread {
             if(mOvrContext.isVrMode()) {
                 mOvrContext.fetchTrackingInfo(mReceiverThread, position, orientation);
             }
+        }
+    };
+
+    private DecoderThread.DecoderCallback mDecoderCallback = new DecoderThread.DecoderCallback() {
+        @Override
+        public void onPrepared() {
+            mDecoderPrepared = true;
+            Log.i(TAG, "DecoderCallback.onPrepared. mVrMode=" + mVrMode + " mDecoderPrepared=" + mDecoderPrepared);
+            mReceiverThread.setSinkPrepared(mVrMode && mDecoderPrepared);
+        }
+
+        @Override
+        public void onDestroy() {
+            mDecoderPrepared = false;
+            Log.i(TAG, "DecoderCallback.onDestroy. mVrMode=" + mVrMode + " mDecoderPrepared=" + mDecoderPrepared);
+            mReceiverThread.setSinkPrepared(mVrMode && mDecoderPrepared);
         }
     };
 }
