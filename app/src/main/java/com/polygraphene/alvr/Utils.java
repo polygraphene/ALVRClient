@@ -20,6 +20,12 @@ public class Utils {
         }
     }
 
+    public static void log(String s) {
+        if(sEnableLog) {
+            Log.v("FrameTracking", s);
+        }
+    }
+
     public static String getVersionName(Context context){
         try {
             PackageInfo pInfo = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);

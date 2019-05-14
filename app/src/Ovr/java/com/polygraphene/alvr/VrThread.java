@@ -87,7 +87,11 @@ class VrThread extends Thread {
                     mReceiverThread.recoverConnectionState(connectionState.serverAddr, connectionState.serverPort);
                 }
 
-                Log.v("GvrRenderer", "resume");
+                // Sometimes previous decoder output remains not updated (when previous call of waitFrame() didn't call updateTexImage())
+                // and onFrameAvailable won't be called after next output.
+                // To avoid deadlock caused by it, we need to flush last output.
+                mSurfaceTexture.updateTexImage();
+
                 mDecoderThread = new DecoderThread(mReceiverThread, mSurface, mActivity);
 
                 try {
@@ -188,6 +192,7 @@ class VrThread extends Thread {
         mSurfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
             @Override
             public void onFrameAvailable(SurfaceTexture surfaceTexture) {
+                Utils.log("VrThread: waitFrame: onFrameAvailable is called.");
                 synchronized (mWaiter) {
                     mFrameAvailable = true;
                     mWaiter.notifyAll();
@@ -196,7 +201,6 @@ class VrThread extends Thread {
         });
         mSurface = new Surface(mSurfaceTexture);
 
-        Log.v("GvrRenderer", "Vrthread");
         mLoadingTexture.initializeMessageCanvas(mOvrContext.getLoadingTexture());
         mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\nLoading...");
 
