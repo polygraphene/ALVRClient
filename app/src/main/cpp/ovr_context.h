@@ -70,7 +70,6 @@ private:
     int m_currentRefreshRate = DEFAULT_REFRESH_RATE;
 
     uint64_t FrameIndex = 0;
-    uint64_t WantedFrameIndex = 0;
 
     // For ARCore
     bool m_ARMode = false;

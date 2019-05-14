@@ -413,26 +413,17 @@ void OvrContext::onPause() {
 }
 
 void OvrContext::render(uint64_t renderedFrameIndex) {
-    double currentTime = GetTimeInSeconds();
-
     LatencyCollector::Instance().rendered1(renderedFrameIndex);
-    FrameLog(renderedFrameIndex,
-             "Got frame for render. wanted FrameIndex=%lu waiting=%.3f ms delay=%lu",
-             WantedFrameIndex,
-             (GetTimeInSeconds() - currentTime) * 1000,
-             WantedFrameIndex - renderedFrameIndex);
-    if (WantedFrameIndex > renderedFrameIndex) {
-        return;
-    }
+    FrameLog(renderedFrameIndex, "Got frame for render.");
 
-    uint64_t mostOldFrame = 0;
+    uint64_t oldestFrame = 0;
     uint64_t mostRecentFrame = 0;
     std::shared_ptr<TrackingFrame> frame;
     {
         MutexLock lock(trackingFrameMutex);
 
         if (trackingFrameMap.size() > 0) {
-            mostOldFrame = trackingFrameMap.cbegin()->second->frameIndex;
+            oldestFrame = trackingFrameMap.cbegin()->second->frameIndex;
             mostRecentFrame = trackingFrameMap.crbegin()->second->frameIndex;
         }
 
@@ -443,7 +434,7 @@ void OvrContext::render(uint64_t renderedFrameIndex) {
             // No matching tracking info. Too old frame.
             LOG("Too old frame has arrived. Instead, we use most old tracking data in trackingFrameMap."
                 "FrameIndex=%lu WantedFrameIndex=%lu trackingFrameMap=(%lu - %lu)",
-                renderedFrameIndex, WantedFrameIndex, mostOldFrame, mostRecentFrame);
+                renderedFrameIndex, WantedFrameIndex, oldestFrame, mostRecentFrame);
             if (trackingFrameMap.size() > 0) {
                 frame = trackingFrameMap.cbegin()->second;
             } else {
@@ -482,8 +473,6 @@ void OvrContext::render(uint64_t renderedFrameIndex) {
     frameDesc.DisplayTime = DisplayTime;
     frameDesc.LayerCount = 1;
     frameDesc.Layers = layers2;
-
-    WantedFrameIndex = renderedFrameIndex + 1;
 
     ovrResult res = vrapi_SubmitFrame2(Ovr, &frameDesc);
 
