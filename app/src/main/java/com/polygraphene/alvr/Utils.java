@@ -6,7 +6,7 @@ import android.content.pm.PackageManager;
 import android.util.Log;
 
 public class Utils {
-    public static boolean sEnableLog = false;
+    public static boolean sEnableLog = true;
 
     static {
         setFrameLogEnabled(sEnableLog);

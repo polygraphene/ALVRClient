@@ -1,6 +1,7 @@
 #include <vector>
 #include <algorithm>
 #include <stdlib.h>
+#include <inttypes.h>
 #include "fec.h"
 #include "packet_types.h"
 #include "utils.h"
@@ -8,7 +9,7 @@
 bool FECQueue::reed_solomon_initialized = false;
 
 FECQueue::FECQueue() {
-    m_currentFrame.frameIndex = UINT64_MAX;
+    m_currentFrame.videoFrameIndex = UINT64_MAX;
     m_recovered = true;
     m_fecFailure = false;
 
@@ -26,20 +27,20 @@ FECQueue::~FECQueue() {
 
 // Add packet to queue. packet must point to buffer whose size=ALVR_MAX_PACKET_SIZE.
 void FECQueue::addVideoPacket(const VideoFrame *packet, int packetSize, bool &fecFailure) {
-    if (m_recovered && m_currentFrame.frameIndex == packet->frameIndex) {
+    if (m_recovered && m_currentFrame.videoFrameIndex == packet->videoFrameIndex) {
         return;
     }
-    if (m_currentFrame.frameIndex != packet->frameIndex) {
+    if (m_currentFrame.videoFrameIndex != packet->videoFrameIndex) {
         // New frame
         if (!m_recovered) {
-            FrameLog(m_currentFrame.frameIndex,
+            FrameLog(m_currentFrame.trackingFrameIndex,
                      "Previous frame cannot be recovered. shards=%u:%u frameByteSize=%d fecPercentage=%d m_totalShards=%u m_shardPackets=%u m_blockSize=%u",
                      m_totalDataShards,
                      m_totalParityShards,
                      m_currentFrame.frameByteSize, m_currentFrame.fecPercentage, m_totalShards,
                      m_shardPackets, m_blockSize);
             for (int packet = 0; packet < m_shardPackets; packet++) {
-                FrameLog(m_currentFrame.frameIndex,
+                FrameLog(m_currentFrame.trackingFrameIndex,
                          "packetIndex=%d, shards=%u:%u",
                          packet, m_receivedDataShards[packet], m_receivedParityShards[packet]);
             }
@@ -111,14 +112,15 @@ void FECQueue::addVideoPacket(const VideoFrame *packet, int packetSize, bool &fe
         }
         if(m_firstPacketOfNextFrame != 0 && m_firstPacketOfNextFrame != startPacket) {
             // Whole frame packet loss
-            FrameLog(m_currentFrame.frameIndex,
-                     "Previous frame was completely lost. shards=%u:%u frameByteSize=%d fecPercentage=%d m_totalShards=%u m_shardPackets=%u m_blockSize=%u",
+            FrameLog(m_currentFrame.trackingFrameIndex,
+                     "Previous frame was completely lost. shards=%u:%u frameByteSize=%d fecPercentage=%d m_totalShards=%u "
+                     "m_shardPackets=%u m_blockSize=%u m_firstPacketOfNextFrame=%u startPacket=%u currentPacket=%u",
                      m_totalDataShards,
                      m_totalParityShards,
                      m_currentFrame.frameByteSize, m_currentFrame.fecPercentage, m_totalShards,
-                     m_shardPackets, m_blockSize);
+                     m_shardPackets, m_blockSize, m_firstPacketOfNextFrame, startPacket, m_currentFrame.packetCounter);
             for (int packet = 0; packet < m_shardPackets; packet++) {
-                FrameLog(m_currentFrame.frameIndex,
+                FrameLog(m_currentFrame.trackingFrameIndex,
                          "packetIndex=%d, shards=%u:%u",
                          packet, m_receivedDataShards[packet], m_receivedParityShards[packet]);
             }
@@ -126,7 +128,7 @@ void FECQueue::addVideoPacket(const VideoFrame *packet, int packetSize, bool &fe
         }
         m_firstPacketOfNextFrame = nextStartPacket;
 
-        FrameLog(m_currentFrame.frameIndex,
+        FrameLog(m_currentFrame.trackingFrameIndex,
                  "Start new frame. frameByteSize=%d fecPercentage=%d m_totalDataShards=%u m_totalParityShards=%u m_totalShards=%u m_shardPackets=%u m_blockSize=%u",
                  m_currentFrame.frameByteSize, m_currentFrame.fecPercentage, m_totalDataShards,
                  m_totalParityShards, m_totalShards, m_shardPackets, m_blockSize);
@@ -183,7 +185,7 @@ bool FECQueue::reconstruct() {
             continue;
         }
 
-        FrameLog(m_currentFrame.frameIndex,
+        FrameLog(m_currentFrame.trackingFrameIndex,
                  "Recovering. packetIndex=%d receivedDataShards=%d/%d receivedParityShards=%d/%d",
                  packet, m_receivedDataShards[packet], m_totalDataShards,
                  m_receivedParityShards[packet], m_totalParityShards);
@@ -211,7 +213,7 @@ bool FECQueue::reconstruct() {
     }
     if (ret) {
         m_recovered = true;
-        FrameLog(m_currentFrame.frameIndex, "Frame was successfully recovered by FEC.");
+        FrameLog(m_currentFrame.trackingFrameIndex, "Frame was successfully recovered by FEC.");
     }
     return ret;
 }

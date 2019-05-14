@@ -55,7 +55,12 @@ public class DummyNALParser implements NALParser {
     }
 
     @Override
-    public void clearStopped() {
+    public void clearStoppedAndPrepared() {
         // Ignore
+    }
+
+    @Override
+    public void onSinkPrepared() {
+
     }
 }

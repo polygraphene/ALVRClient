@@ -9,8 +9,8 @@
 #include "nal.h"
 #include "packet_types.h"
 
-static const int MAXIMUM_NAL_BUFFER = 10;
-static const int MAXIMUM_NAL_OBJECT = 20;
+static const int MAXIMUM_NAL_BUFFER = 100;
+static const int MAXIMUM_NAL_OBJECT = 200;
 
 static const int NAL_TYPE_SPS = 7;
 
@@ -85,12 +85,12 @@ bool NALParser::processPacket(VideoFrame *packet, int packetSize, bool &fecFailu
                 return false;
             }
             LOGI("Got frame=%d %d, Codec=%d", NALType, end, m_codec);
-            push(&frameBuffer[0], end, packet->frameIndex);
-            push(&frameBuffer[end], frameByteSize - end, packet->frameIndex);
+            push(&frameBuffer[0], end, packet->trackingFrameIndex);
+            push(&frameBuffer[end], frameByteSize - end, packet->trackingFrameIndex);
 
             m_queue.clearFecFailure();
         } else {
-            push(&frameBuffer[0], frameByteSize, packet->frameIndex);
+            push(&frameBuffer[0], frameByteSize, packet->trackingFrameIndex);
         }
         return true;
     }

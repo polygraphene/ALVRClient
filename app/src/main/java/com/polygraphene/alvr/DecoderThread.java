@@ -139,6 +139,8 @@ public class DecoderThread extends ThreadBase {
 
         Log.v(TAG, "Codec created. Type=" + mFormat + " Name=" + mDecoder.getCodecInfo().getName());
 
+        mNalParser.onSinkPrepared();
+
         mWaitNextIDR = true;
 
         while (!isStopped()) {
@@ -334,7 +336,7 @@ public class DecoderThread extends ThreadBase {
                 mFormat = VIDEO_FORMAT_H265;
             }
             mQueue.reset();
-            mNalParser.clearStopped();
+            mNalParser.clearStoppedAndPrepared();
             start();
         } else {
             mWaitNextIDR = true;

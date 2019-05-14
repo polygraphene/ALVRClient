@@ -92,16 +92,23 @@ public:
     void runLoop(JNIEnv *env, jobject instance, jstring serverAddress, int serverPort);
     void interrupt();
     void notifyWaitingThread(JNIEnv *env);
+    void onSinkPrepared();
 
     bool isConnected();
 
     jstring getServerAddress(JNIEnv *env);
     int getServerPort();
+
+    void clearPrepared();
+
 private:
 // Connection has lost when elapsed 3 seconds from last packet.
     static const uint64_t CONNECTION_TIMEOUT = 3 * 1000 * 1000;
 
     bool m_stopped = false;
+
+    // Turned true when decoder thread is prepared.
+    bool mSinkPrepared = false;
 
     Socket m_socket;
     time_t m_prevSentSync = 0;
@@ -133,6 +140,8 @@ private:
     int m_notifyPipe[2] = {-1, -1};
     Mutex pipeMutex;
     std::list<SendBuffer> m_sendQueue;
+
+    void sendStreamStartPacket();
 
     void sendPacketLossReport(ALVR_LOST_FRAME_TYPE frameType, uint32_t fromPacketCounter,
                               uint32_t toPacketCounter);

@@ -89,6 +89,7 @@ void Socket::setBroadcastAddrList(JNIEnv *env, int port, jobjectArray broadcastA
 }
 
 int Socket::send(const void *buf, size_t len) {
+    LOGSOCKET("Sending %zu bytes", len);
     return (int)sendto(m_sock, buf, len, 0, (sockaddr *) &m_serverAddr,
                   sizeof(m_serverAddr));
 }
@@ -102,9 +103,12 @@ void Socket::recv() {
         int packetSize = static_cast<int>(recvfrom(m_sock, packet, MAX_PACKET_SIZE, 0, (sockaddr *) &addr,
                                                    &socklen));
         if (packetSize <= 0) {
+            LOGSOCKET("Error on recvfrom. ret=%d", packetSize);
             return;
         }
+        LOGSOCKET("recvfrom Ok. calling parse(). ret=%d", packetSize);
         parse(packet, packetSize, addr);
+        LOGSOCKET("parse() end. ret=%d", packetSize);
     }
 }
 
@@ -512,6 +516,22 @@ void UdpManager::notifyWaitingThread(JNIEnv *env) {
     }
 }
 
+void UdpManager::onSinkPrepared() {
+    if (m_stopped) {
+        return;
+    }
+    mSinkPrepared = true;
+    LOGSOCKETI("onSinkPrepared: Decoder has been prepared.");
+    if (isConnected()) {
+        LOGSOCKETI("onSinkPrepared: Send stream start packet.");
+        sendStreamStartPacket();
+    }
+}
+
+void UdpManager::clearPrepared() {
+    mSinkPrepared = false;
+}
+
 bool UdpManager::isConnected() {
     return m_socket.isConnected();
 }
@@ -542,11 +562,10 @@ void UdpManager::onConnect(const ConnectionMessage &connectionMessage) {
             , m_connectionMessage.frameQueueSize, m_connectionMessage.refreshRate);
     m_env->DeleteLocalRef(clazz);
 
-    // Start stream.
-    StreamControlMessage message = {};
-    message.type = ALVR_PACKET_TYPE_STREAM_CONTROL_MESSAGE;
-    message.mode = 1;
-    m_socket.send(&message, sizeof(message));
+    if (mSinkPrepared) {
+        LOGSOCKETI("onConnect: Send stream start packet.");
+        sendStreamStartPacket();
+    }
 }
 
 void UdpManager::onBroadcastRequest() {
@@ -561,16 +580,16 @@ void UdpManager::onPacketRecv(const char *packet, size_t packetSize) {
     if (type == ALVR_PACKET_TYPE_VIDEO_FRAME) {
         VideoFrame *header = (VideoFrame *) packet;
 
-        if (m_lastFrameIndex != header->frameIndex) {
-            LatencyCollector::Instance().receivedFirst(header->frameIndex);
+        if (m_lastFrameIndex != header->trackingFrameIndex) {
+            LatencyCollector::Instance().receivedFirst(header->trackingFrameIndex);
             if ((int64_t) header->sentTime - m_timeDiff > getTimestampUs()) {
-                LatencyCollector::Instance().estimatedSent(header->frameIndex, 0);
+                LatencyCollector::Instance().estimatedSent(header->trackingFrameIndex, 0);
             } else {
-                LatencyCollector::Instance().estimatedSent(header->frameIndex,
+                LatencyCollector::Instance().estimatedSent(header->trackingFrameIndex,
                                                            (int64_t) header->sentTime -
                                                            m_timeDiff - getTimestampUs());
             }
-            m_lastFrameIndex = header->frameIndex;
+            m_lastFrameIndex = header->trackingFrameIndex;
         }
 
         processVideoSequence(header->packetCounter);
@@ -579,7 +598,7 @@ void UdpManager::onPacketRecv(const char *packet, size_t packetSize) {
         bool fecFailure = false;
         bool ret2 = m_nalParser->processPacket(header, packetSize, fecFailure);
         if (ret2) {
-            LatencyCollector::Instance().receivedLast(header->frameIndex);
+            LatencyCollector::Instance().receivedLast(header->trackingFrameIndex);
         }
         if (fecFailure) {
             LatencyCollector::Instance().fecFailure();
@@ -689,6 +708,15 @@ void UdpManager::loadFov(JNIEnv *env, jfloatArray fov_) {
     env->ReleaseFloatArrayElements(fov_, fov, 0);
 }
 
+void UdpManager::sendStreamStartPacket() {
+    LOGSOCKETI("Sending stream start packet.");
+    // Start stream.
+    StreamControlMessage message = {};
+    message.type = ALVR_PACKET_TYPE_STREAM_CONTROL_MESSAGE;
+    message.mode = 1;
+    m_socket.send(&message, sizeof(message));
+}
+
 extern "C"
 JNIEXPORT jlong JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(
@@ -796,6 +824,13 @@ Java_com_polygraphene_alvr_UdpReceiverThread_notifyWaitingThreadNative(JNIEnv *e
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_clearStoppedNative(JNIEnv *env, jobject instance, jlong nativeHandle) {
+Java_com_polygraphene_alvr_UdpReceiverThread_onSinkPreparedNative(JNIEnv *env, jobject instance, jlong nativeHandle) {
+    reinterpret_cast<UdpManager *>(nativeHandle)->onSinkPrepared();
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_UdpReceiverThread_clearStoppedAndPreparedNative(JNIEnv *env, jobject instance, jlong nativeHandle) {
+    reinterpret_cast<UdpManager *>(nativeHandle)->clearPrepared();
     reinterpret_cast<UdpManager *>(nativeHandle)->getNalParser().clearStopped();
 }

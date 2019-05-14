@@ -215,7 +215,10 @@ struct ChangeSettings {
 struct VideoFrame {
 	uint32_t type; // ALVR_PACKET_TYPE_VIDEO_FRAME
 	uint32_t packetCounter;
-	uint64_t frameIndex;
+	uint64_t trackingFrameIndex;
+	// FEC decoder needs some value for identify video frame number to detect new frame.
+	// trackingFrameIndex becomes sometimes same value as previous video frame (in case of low tracking rate).
+	uint64_t videoFrameIndex;
 	uint64_t sentTime;
 	uint32_t frameByteSize;
 	uint32_t fecIndex;

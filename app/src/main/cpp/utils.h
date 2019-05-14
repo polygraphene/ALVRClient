@@ -14,13 +14,22 @@
 // Logging
 //
 
-#define LOG(...) __android_log_print(ANDROID_LOG_DEBUG, "ALVR Native", __VA_ARGS__)
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "ALVR Native", __VA_ARGS__)
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "ALVR Native", __VA_ARGS__)
+// Defined in utils.cpp. 0 means no log output.
+extern int gGeneralLogLevel;
+extern int gSoundLogLevel;
+extern int gSocketLogLevel;
 
-#define LOGSOUND(...) __android_log_print(ANDROID_LOG_DEBUG, "ALVR Sound", __VA_ARGS__)
-#define LOGSOUNDI(...) __android_log_print(ANDROID_LOG_INFO, "ALVR Sound", __VA_ARGS__)
-#define LOGSOUNDE(...) __android_log_print(ANDROID_LOG_ERROR, "ALVR Sound", __VA_ARGS__)
+#define LOG(...) if(gGeneralLogLevel <= ANDROID_LOG_VERBOSE){__android_log_print(ANDROID_LOG_VERBOSE, "ALVR Native", __VA_ARGS__);}
+#define LOGI(...) if(gGeneralLogLevel <= ANDROID_LOG_INFO){__android_log_print(ANDROID_LOG_INFO, "ALVR Native", __VA_ARGS__);}
+#define LOGE(...) if(gGeneralLogLevel <= ANDROID_LOG_ERROR){__android_log_print(ANDROID_LOG_ERROR, "ALVR Native", __VA_ARGS__);}
+
+#define LOGSOUND(...) if(gSoundLogLevel <= ANDROID_LOG_VERBOSE){__android_log_print(ANDROID_LOG_VERBOSE, "ALVR Sound", __VA_ARGS__);}
+#define LOGSOUNDI(...) if(gSoundLogLevel <= ANDROID_LOG_INFO){__android_log_print(ANDROID_LOG_INFO, "ALVR Sound", __VA_ARGS__);}
+#define LOGSOUNDE(...) if(gSoundLogLevel <= ANDROID_LOG_ERROR){__android_log_print(ANDROID_LOG_ERROR, "ALVR Sound", __VA_ARGS__);}
+
+#define LOGSOCKET(...) if(gSocketLogLevel <= ANDROID_LOG_VERBOSE){__android_log_print(ANDROID_LOG_VERBOSE, "ALVR Socket", __VA_ARGS__);}
+#define LOGSOCKETI(...) if(gSocketLogLevel <= ANDROID_LOG_INFO){__android_log_print(ANDROID_LOG_INFO, "ALVR Socket", __VA_ARGS__);}
+#define LOGSOCKETE(...) if(gSocketLogLevel <= ANDROID_LOG_ERROR){__android_log_print(ANDROID_LOG_ERROR, "ALVR Socket", __VA_ARGS__);}
 
 static const int64_t USECS_IN_SEC = 1000 * 1000;
 
