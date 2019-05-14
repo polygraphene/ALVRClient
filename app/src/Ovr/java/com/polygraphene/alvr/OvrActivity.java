@@ -101,7 +101,6 @@ public class OvrActivity extends BaseActivity {
                 return true;
             }
 
-            mVrThread.onKeyEvent(event.getKeyCode(), event.getAction());
             return true;
         }else{
             return super.dispatchKeyEvent(event);

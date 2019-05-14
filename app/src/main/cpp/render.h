@@ -29,23 +29,6 @@ void eglDestroy();
 void EglInitExtensions(bool *multi_view);
 
 //
-// ovrFence
-//
-
-typedef struct {
-#if defined( EGL_SYNC )
-    EGLDisplay Display;
-    EGLSyncKHR Sync;
-#else
-    GLsync		Sync;
-#endif
-} ovrFence;
-
-void ovrFence_Create(ovrFence *fence);
-void ovrFence_Destroy(ovrFence *fence);
-void ovrFence_Insert(ovrFence *fence);
-
-//
 // ovrFramebuffer
 //
 
@@ -63,7 +46,7 @@ typedef struct {
 
 void ovrFramebuffer_Clear(ovrFramebuffer *frameBuffer);
 bool ovrFramebuffer_Create(ovrFramebuffer *frameBuffer, const bool useMultiview,
-                                  const ovrTextureFormat colorFormat, const int width,
+                                  const GLenum colorFormat, const int width,
                                   const int height, const int multisamples);
 void ovrFramebuffer_Destroy(ovrFramebuffer *frameBuffer);
 void ovrFramebuffer_SetCurrent(ovrFramebuffer *frameBuffer);
@@ -142,8 +125,6 @@ void ovrProgram_Destroy(ovrProgram *program);
 typedef struct {
     ovrFramebuffer FrameBuffer[VRAPI_FRAME_LAYER_EYE_MAX];
     int NumBuffers;
-    ovrFence *Fence;            // Per-frame completion fence
-    int FenceIndex;
     bool UseMultiview;
     bool SceneCreated;
     ovrProgram Program;
@@ -164,7 +145,6 @@ void ovrRenderer_CreateScene(ovrRenderer *renderer);
 // Set up an OVR frame, render it, and submit it.
 ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava *java,
                                                    const ovrTracking2 *tracking, ovrMobile *ovr,
-                                                   unsigned long long *completionFence,
                                                    bool loading, int enableTestMode,
                                             int AROverlayMode);
 

@@ -62,16 +62,6 @@ GLsizei numViews);
 
 #endif
 
-#if defined EGL_SYNC
-// EGL_KHR_reusable_sync
-PFNEGLCREATESYNCKHRPROC eglCreateSyncKHR;
-PFNEGLDESTROYSYNCKHRPROC eglDestroySyncKHR;
-PFNEGLCLIENTWAITSYNCKHRPROC eglClientWaitSyncKHR;
-PFNEGLSIGNALSYNCKHRPROC eglSignalSyncKHR;
-PFNEGLGETSYNCATTRIBKHRPROC eglGetSyncAttribKHR;
-#endif
-
-
 /*
 ================================================================================
 
@@ -88,14 +78,6 @@ typedef struct {
 OpenGLExtensions_t glExtensions;
 
 void EglInitExtensions(bool *multi_view) {
-#if defined EGL_SYNC
-    eglCreateSyncKHR = (PFNEGLCREATESYNCKHRPROC) eglGetProcAddress("eglCreateSyncKHR");
-    eglDestroySyncKHR = (PFNEGLDESTROYSYNCKHRPROC) eglGetProcAddress("eglDestroySyncKHR");
-    eglClientWaitSyncKHR = (PFNEGLCLIENTWAITSYNCKHRPROC) eglGetProcAddress("eglClientWaitSyncKHR");
-    eglSignalSyncKHR = (PFNEGLSIGNALSYNCKHRPROC) eglGetProcAddress("eglSignalSyncKHR");
-    eglGetSyncAttribKHR = (PFNEGLGETSYNCATTRIBKHRPROC) eglGetProcAddress("eglGetSyncAttribKHR");
-#endif
-
     const char *allExtensions = (const char *) glGetString(GL_EXTENSIONS);
     if (allExtensions != NULL) {
         glExtensions.multi_view = strstr(allExtensions, "GL_OVR_multiview2") &&
@@ -463,62 +445,6 @@ void eglDestroy()
     }
 }
 
-
-
-void ovrFence_Create(ovrFence *fence) {
-#if defined( EGL_SYNC )
-    fence->Display = 0;
-    fence->Sync = EGL_NO_SYNC_KHR;
-#else
-    fence->Sync = 0;
-#endif
-}
-
-void ovrFence_Destroy(ovrFence *fence) {
-#if defined( EGL_SYNC )
-    if (fence->Sync != EGL_NO_SYNC_KHR) {
-        if (eglDestroySyncKHR(fence->Display, fence->Sync) == EGL_FALSE) {
-            LOGE("eglDestroySyncKHR() : EGL_FALSE");
-            return;
-        }
-        fence->Display = 0;
-        fence->Sync = EGL_NO_SYNC_KHR;
-    }
-#else
-    if ( fence->Sync != 0 )
-    {
-        glDeleteSync( fence->Sync );
-        fence->Sync = 0;
-    }
-#endif
-}
-
-void ovrFence_Insert(ovrFence *fence) {
-    ovrFence_Destroy(fence);
-
-#if defined( EGL_SYNC )
-    fence->Display = eglGetCurrentDisplay();
-    fence->Sync = eglCreateSyncKHR(fence->Display, EGL_SYNC_FENCE_KHR, NULL);
-    if (fence->Sync == EGL_NO_SYNC_KHR) {
-        LOGE("eglCreateSyncKHR() : EGL_NO_SYNC_KHR");
-        return;
-    }
-    // Force flushing the commands.
-    // Note that some drivers will already flush when calling eglCreateSyncKHR.
-    if (eglClientWaitSyncKHR(fence->Display, fence->Sync, EGL_SYNC_FLUSH_COMMANDS_BIT_KHR, 0) ==
-        EGL_FALSE) {
-        LOGE("eglClientWaitSyncKHR() : EGL_FALSE");
-        return;
-    }
-#else
-    // Create and insert a new sync object.
-    fence->Sync = glFenceSync( GL_SYNC_GPU_COMMANDS_COMPLETE, 0 );
-    // Force flushing the commands.
-    // Note that some drivers will already flush when calling glFenceSync.
-    glClientWaitSync( fence->Sync, GL_SYNC_FLUSH_COMMANDS_BIT, 0 );
-#endif
-}
-
 #ifdef OVR_SDK
 
 void ovrFramebuffer_Clear(ovrFramebuffer *frameBuffer) {
@@ -534,7 +460,7 @@ void ovrFramebuffer_Clear(ovrFramebuffer *frameBuffer) {
 }
 
 bool ovrFramebuffer_Create(ovrFramebuffer *frameBuffer, const bool useMultiview,
-                                  const ovrTextureFormat colorFormat, const int width,
+                                  const GLenum colorFormat, const int width,
                                   const int height, const int multisamples) {
     PFNGLRENDERBUFFERSTORAGEMULTISAMPLEEXTPROC glRenderbufferStorageMultisampleEXT =
             (PFNGLRENDERBUFFERSTORAGEMULTISAMPLEEXTPROC) eglGetProcAddress(
@@ -556,9 +482,9 @@ bool ovrFramebuffer_Create(ovrFramebuffer *frameBuffer, const bool useMultiview,
     frameBuffer->UseMultiview = (useMultiview && (glFramebufferTextureMultiviewOVR != NULL)) ? true
                                                                                              : false;
 
-    frameBuffer->ColorTextureSwapChain = vrapi_CreateTextureSwapChain(
+    frameBuffer->ColorTextureSwapChain = vrapi_CreateTextureSwapChain3(
             frameBuffer->UseMultiview ? VRAPI_TEXTURE_TYPE_2D_ARRAY : VRAPI_TEXTURE_TYPE_2D,
-            colorFormat, width, height, 1, true);
+            colorFormat, width, height, 1, 3);
     frameBuffer->TextureSwapChainLength = vrapi_GetTextureSwapChainLength(
             frameBuffer->ColorTextureSwapChain);
     frameBuffer->DepthBuffers = (GLuint *) malloc(
@@ -1071,9 +997,6 @@ void ovrProgram_Destroy(ovrProgram *program) {
 // ovrRenderer
 //
 
-static int MAX_FENCES = 4;
-
-
 void
 ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMultiview, int width, int height
         , int SurfaceTextureID, int LoadingTexture, int CameraTexture, bool ARMode) {
@@ -1084,17 +1007,13 @@ ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMul
     // Create the frame buffers.
     for (int eye = 0; eye < renderer->NumBuffers; eye++) {
         ovrFramebuffer_Create(&renderer->FrameBuffer[eye], useMultiview,
-                              VRAPI_TEXTURE_FORMAT_8888,
+                              GL_RGBA8,
                               width, height,
                               NUM_MULTI_SAMPLES);
 
     }
 #endif
 
-    renderer->Fence = (ovrFence *) malloc(MAX_FENCES * sizeof(ovrFence));
-    for (int i = 0; i < MAX_FENCES; i++) {
-        ovrFence_Create(&renderer->Fence[i]);
-    }
     renderer->SurfaceTextureID = SurfaceTextureID;
     renderer->LoadingTexture = LoadingTexture;
     renderer->CameraTexture = CameraTexture;
@@ -1141,20 +1060,12 @@ void ovrRenderer_Destroy(ovrRenderer *renderer) {
         ovrFramebuffer_Destroy(&renderer->FrameBuffer[eye]);
     }
 #endif
-
-#if !defined(GVR_SDK)
-    for (int i = 0; i < MAX_FENCES; i++) {
-        ovrFence_Destroy(&renderer->Fence[i]);
-    }
-#endif
-    free(renderer->Fence);
 }
 
 #ifdef OVR_SDK
 
 ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava *java,
                                                    const ovrTracking2 *tracking, ovrMobile *ovr,
-                                                   unsigned long long *completionFence,
                                                    bool loading, int enableTestMode,
                                             int AROverlayMode) {
     const ovrTracking2& updatedTracking = *tracking;
@@ -1201,13 +1112,6 @@ ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava
     }
 
     ovrFramebuffer_SetNone();
-
-    // Use a single fence to indicate the frame is ready to be displayed.
-    ovrFence *fence = &renderer->Fence[renderer->FenceIndex];
-    ovrFence_Insert(fence);
-    renderer->FenceIndex = (renderer->FenceIndex + 1) % MAX_FENCES;
-
-    *completionFence = (size_t) fence->Sync;
 
     return layer;
 }

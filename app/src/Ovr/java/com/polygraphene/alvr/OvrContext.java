@@ -56,10 +56,6 @@ public class OvrContext {
         onChangeSettingsNative(handle, EnableTestMode, suspend);
     }
 
-    public boolean onKeyEvent(int keyCode, int action) {
-        return onKeyEventNative(handle, keyCode, action);
-    }
-
     public int getLoadingTexture() {
         return getLoadingTextureNative(handle);
     }
@@ -110,7 +106,6 @@ public class OvrContext {
     private native void fetchTrackingInfoNative(long handle, UdpReceiverThread udpReceiverThread, float[] position, float[] orientation);
 
     private native void onChangeSettingsNative(long handle, int EnableTestMode, int suspend);
-    private native boolean onKeyEventNative(long handle, int keyCode, int action);
 
     private native int getLoadingTextureNative(long handle);
     private native int getSurfaceTextureIDNative(long handle);

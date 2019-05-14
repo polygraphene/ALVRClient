@@ -138,15 +138,6 @@ class VrThread extends Thread {
         Log.v(TAG, "VrThread.onPause: All worker threads has stopped.");
     }
 
-    public void onKeyEvent(final int keyCode, final int action) {
-        post(new Runnable() {
-            @Override
-            public void run() {
-                mOvrContext.onKeyEvent(keyCode, action);
-            }
-        });
-    }
-
     // Called from onDestroy
     @Override
     public void interrupt() {

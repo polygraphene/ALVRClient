@@ -23,7 +23,6 @@ public:
     void onSurfaceChanged(jobject surface);
     void onResume();
     void onPause();
-    bool onKeyEvent(int keyCode, int action);
 
     void render(uint64_t renderedFrameIndex);
     void renderLoading();
@@ -90,19 +89,8 @@ private:
     };
     typedef std::map<uint64_t, std::shared_ptr<TrackingFrame> > TRACKING_FRAME_MAP;
 
-    typedef enum
-    {
-        BACK_BUTTON_STATE_NONE,
-        BACK_BUTTON_STATE_PENDING_SHORT_PRESS,
-        BACK_BUTTON_STATE_SKIP_UP
-    } ovrBackButtonState;
-
     TRACKING_FRAME_MAP trackingFrameMap;
     Mutex trackingFrameMutex;
-
-    ovrBackButtonState BackButtonState;
-    bool BackButtonDown;
-    double BackButtonDownStartTime;
 
     ovrRenderer Renderer;
 

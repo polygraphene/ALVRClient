@@ -118,10 +118,6 @@ void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager,
                        SurfaceTextureID, loadingTexture, CameraTexture, m_ARMode);
     ovrRenderer_CreateScene(&Renderer);
 
-    BackButtonState = BACK_BUTTON_STATE_NONE;
-    BackButtonDown = false;
-    BackButtonDownStartTime = 0.0;
-
     position_offset_y = 0.0;
 
     jclass clazz = env->FindClass("com/polygraphene/alvr/UdpReceiverThread");
@@ -150,10 +146,6 @@ void OvrContext::destroy() {
 void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
     ovrInputCapabilityHeader curCaps;
     ovrResult result;
-
-    if (BackButtonDown) {
-        packet->flags |= TrackingInfo::FLAG_CONTROLLER_BACK;
-    }
 
     for (uint32_t deviceIndex = 0;
          vrapi_EnumerateInputDevices(Ovr, deviceIndex, &curCaps) >= 0; deviceIndex++) {
@@ -420,32 +412,6 @@ void OvrContext::onPause() {
     onVrModeChange();
 }
 
-bool OvrContext::onKeyEvent(int keyCode, int action) {
-    LOG("HandleKeyEvent: keyCode=%d action=%d", keyCode, action);
-    // Handle back button.
-    if (keyCode == AKEYCODE_BACK) {
-        if (action == AKEY_EVENT_ACTION_DOWN) {
-            if (!BackButtonDown) {
-                BackButtonDownStartTime = GetTimeInSeconds();
-            }
-            BackButtonDown = true;
-        } else if (action == AKEY_EVENT_ACTION_UP) {
-            if (BackButtonState == BACK_BUTTON_STATE_NONE) {
-                if ((GetTimeInSeconds() - BackButtonDownStartTime) <
-                    vrapi_GetSystemPropertyFloat(&java,
-                                                 VRAPI_SYS_PROP_BACK_BUTTON_SHORTPRESS_TIME)) {
-                    BackButtonState = BACK_BUTTON_STATE_PENDING_SHORT_PRESS;
-                }
-            } else if (BackButtonState == BACK_BUTTON_STATE_SKIP_UP) {
-                BackButtonState = BACK_BUTTON_STATE_NONE;
-            }
-            BackButtonDown = false;
-        }
-        return true;
-    }
-    return false;
-}
-
 void OvrContext::render(uint64_t renderedFrameIndex) {
     double currentTime = GetTimeInSeconds();
 
@@ -491,12 +457,10 @@ void OvrContext::render(uint64_t renderedFrameIndex) {
              getTimestampUs() - frame->fetchTime,
              frame->frameIndex, FrameIndex);
 
-    unsigned long long completionFence = 0;
-
 // Render eye images and setup the primary layer using ovrTracking2.
     const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java,
                                                                    &frame->tracking,
-                                                                   Ovr, &completionFence, false,
+                                                                   Ovr, false,
                                                                    enableTestMode, g_AROverlayMode);
 
     LatencyCollector::Instance().rendered2(renderedFrameIndex);
@@ -515,7 +479,6 @@ void OvrContext::render(uint64_t renderedFrameIndex) {
     frameDesc.Flags = 0;
     frameDesc.SwapInterval = SwapInterval;
     frameDesc.FrameIndex = renderedFrameIndex;
-    frameDesc.CompletionFence = completionFence;
     frameDesc.DisplayTime = DisplayTime;
     frameDesc.LayerCount = 1;
     frameDesc.Layers = layers2;
@@ -551,11 +514,9 @@ void OvrContext::renderLoading() {
     double displayTime = vrapi_GetPredictedDisplayTime(Ovr, FrameIndex);
     ovrTracking2 tracking = vrapi_GetPredictedTracking2(Ovr, displayTime);
 
-    unsigned long long completionFence = 0;
-
     const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java,
                                                                    &tracking,
-                                                                   Ovr, &completionFence, true,
+                                                                   Ovr, true,
                                                                    enableTestMode, g_AROverlayMode);
 
     const ovrLayerHeader2 *layers[] =
@@ -903,14 +864,6 @@ Java_com_polygraphene_alvr_OvrContext_setFrameGeometryNative(JNIEnv *env, jobjec
                                                             jlong handle, jint width,
                                                             jint height) {
     ((OvrContext *) handle)->setFrameGeometry(width, height);
-}
-
-extern "C"
-JNIEXPORT bool JNICALL
-Java_com_polygraphene_alvr_OvrContext_onKeyEventNative(JNIEnv *env, jobject instance, jlong handle,
-                                                      jint keyCode,
-                                                      jint action) {
-    return ((OvrContext *) handle)->onKeyEvent(keyCode, action);
 }
 
 extern "C"
