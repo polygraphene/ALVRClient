@@ -8,13 +8,10 @@ import android.support.test.runner.AndroidJUnit4;
 import android.view.SurfaceView;
 
 import com.polygraphene.alvr.test.DecoderTestActivity;
-import com.polygraphene.alvr.test.DummyNALParser;
 
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-
-import java.io.FileInputStream;
 
 @RunWith(AndroidJUnit4.class)
 public class ExampleInstrumentedTest {

@@ -218,8 +218,7 @@ UdpManager::~UdpManager() {
     m_sendQueue.clear();
 }
 
-void
-UdpManager::initialize(JNIEnv *env, jint port, jstring deviceName_, jobjectArray broadcastAddrList_,
+void UdpManager::initialize(JNIEnv *env, jobject instance, jint port, jstring deviceName_, jobjectArray broadcastAddrList_,
                        jintArray refreshRates_, jint renderWidth, jint renderHeight, jfloatArray fov,
                        jint deviceType, jint deviceSubType, jint deviceCapabilityFlags, jint controllerCapabilityFlags) {
     //
@@ -234,7 +233,11 @@ UdpManager::initialize(JNIEnv *env, jint port, jstring deviceName_, jobjectArray
     m_prevSoundSequence = 0;
     m_timeDiff = 0;
 
-    m_nalParser = std::make_shared<NALParser>(env);
+    initializeJNICallbacks(env, instance);
+
+    m_nalParser = std::make_shared<NALParser>(env, [this](JNIEnv *env, jobject nal){
+        env->CallVoidMethod(m_instance, mPushNALMethodID, nal);
+    });
 
     //
     // Fill hello message
@@ -509,13 +512,6 @@ void UdpManager::interrupt() {
     write(m_notifyPipe[1], "", 1);
 }
 
-void UdpManager::notifyWaitingThread(JNIEnv *env) {
-    // Notify NAL waiting thread
-    if (m_nalParser) {
-        m_nalParser->notifyWaitingThread(env);
-    }
-}
-
 void UdpManager::setSinkPrepared(bool prepared) {
     if (m_stopped) {
         return;
@@ -526,10 +522,6 @@ void UdpManager::setSinkPrepared(bool prepared) {
         LOGSOCKETI("setSinkPrepared: Send stream start packet.");
         sendStreamStartPacket();
     }
-}
-
-void UdpManager::clearPrepared() {
-    mSinkPrepared = false;
 }
 
 bool UdpManager::isConnected() {
@@ -555,12 +547,9 @@ void UdpManager::onConnect(const ConnectionMessage &connectionMessage) {
     LatencyCollector::Instance().resetAll();
     m_nalParser->setCodec(m_connectionMessage.codec);
 
-    jclass clazz = m_env->GetObjectClass(m_instance);
-    jmethodID method = m_env->GetMethodID(clazz, "onConnected", "(IIIII)V");
-    m_env->CallVoidMethod(m_instance, method, m_connectionMessage.videoWidth
+    m_env->CallVoidMethod(m_instance, mOnConnectMethodID, m_connectionMessage.videoWidth
             , m_connectionMessage.videoHeight, m_connectionMessage.codec
             , m_connectionMessage.frameQueueSize, m_connectionMessage.refreshRate);
-    m_env->DeleteLocalRef(clazz);
 
     if (mSinkPrepared) {
         LOGSOCKETI("onConnect: Send stream start packet.");
@@ -628,10 +617,7 @@ void UdpManager::onPacketRecv(const char *packet, size_t packetSize) {
         }
         ChangeSettings *settings = (ChangeSettings *) packet;
 
-        jclass clazz = m_env->GetObjectClass(m_instance);
-        jmethodID method = m_env->GetMethodID(clazz, "onChangeSettings", "(III)V");
-        m_env->CallVoidMethod(m_instance, method, settings->enableTestMode, settings->suspend, settings->frameQueueSize);
-        m_env->DeleteLocalRef(clazz);
+        m_env->CallVoidMethod(m_instance, mOnChangeSettingsMethodID, settings->enableTestMode, settings->suspend, settings->frameQueueSize);
     } else if (type == ALVR_PACKET_TYPE_AUDIO_FRAME_START) {
         // Change settings
         if (packetSize < sizeof(AudioFrameStart)) {
@@ -673,10 +659,7 @@ void UdpManager::checkConnection() {
             LOGE("Connection timeout.");
             m_socket.disconnect();
 
-            jclass clazz = m_env->GetObjectClass(m_instance);
-            jmethodID method = m_env->GetMethodID(clazz, "onDisconnected", "()V");
-            m_env->CallVoidMethod(m_instance, method);
-            m_env->DeleteLocalRef(clazz);
+            m_env->CallVoidMethod(m_instance, mOnDisconnectedMethodID);
 
             if (m_soundPlayer) {
                 m_soundPlayer->Stop();
@@ -717,6 +700,17 @@ void UdpManager::sendStreamStartPacket() {
     m_socket.send(&message, sizeof(message));
 }
 
+void UdpManager::initializeJNICallbacks(JNIEnv *env, jobject instance) {
+    jclass clazz = env->GetObjectClass(instance);
+
+    mOnConnectMethodID = env->GetMethodID(clazz, "onConnected", "(IIIII)V");
+    mOnChangeSettingsMethodID = env->GetMethodID(clazz, "onChangeSettings", "(III)V");
+    mOnDisconnectedMethodID = env->GetMethodID(clazz, "onDisconnected", "()V");
+    mPushNALMethodID = env->GetMethodID(clazz, "pushNAL", "(Lcom/polygraphene/alvr/NAL;)V");
+
+    env->DeleteLocalRef(clazz);
+}
+
 extern "C"
 JNIEXPORT jlong JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(
@@ -726,9 +720,9 @@ Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(
         jint deviceType, jint deviceSubType, jint deviceCapabilityFlags, jint controllerCapabilityFlags) {
     auto udpManager = new UdpManager();
     try {
-        udpManager->initialize(env, port, deviceName_,
-                broadcastAddrList_, refreshRates_, renderWidth, renderHeight, fov,
-                deviceType, deviceSubType, deviceCapabilityFlags, controllerCapabilityFlags);
+        udpManager->initialize(env, instance, port, deviceName_,
+                               broadcastAddrList_, refreshRates_, renderWidth, renderHeight, fov,
+                               deviceType, deviceSubType, deviceCapabilityFlags, controllerCapabilityFlags);
     } catch (Exception &e) {
         LOGE("Exception on initializing UdpManager. e=%ls", e.what());
         delete udpManager;
@@ -786,24 +780,6 @@ Java_com_polygraphene_alvr_UdpReceiverThread_sendNative(JNIEnv *env, jobject ins
 //
 
 extern "C"
-JNIEXPORT jint JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_getNalListSizeNative(JNIEnv *env, jobject instance, jlong nativeHandle) {
-    return reinterpret_cast<UdpManager *>(nativeHandle)->getNalParser().getQueueSize(env);
-}
-
-extern "C"
-JNIEXPORT jobject JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_waitNalNative(JNIEnv *env, jobject instance, jlong nativeHandle) {
-    return reinterpret_cast<UdpManager *>(nativeHandle)->getNalParser().wait(env);
-}
-
-extern "C"
-JNIEXPORT jobject JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_getNalNative(JNIEnv *env, jobject instance, jlong nativeHandle) {
-    return reinterpret_cast<UdpManager *>(nativeHandle)->getNalParser().get(env);
-}
-
-extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_recycleNalNative(JNIEnv *env, jobject instance, jlong nativeHandle,
                                                         jobject nal) {
@@ -812,25 +788,6 @@ Java_com_polygraphene_alvr_UdpReceiverThread_recycleNalNative(JNIEnv *env, jobje
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_flushNALListNative(JNIEnv *env, jobject instance, jlong nativeHandle) {
-    reinterpret_cast<UdpManager *>(nativeHandle)->getNalParser().flush(env);
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_notifyWaitingThreadNative(JNIEnv *env, jobject instance, jlong nativeHandle) {
-    reinterpret_cast<UdpManager *>(nativeHandle)->notifyWaitingThread(env);
-}
-
-extern "C"
-JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_setSinkPreparedNative(JNIEnv *env, jobject instance, jlong nativeHandle, jboolean prepared) {
     reinterpret_cast<UdpManager *>(nativeHandle)->setSinkPrepared(static_cast<bool>(prepared));
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_clearStoppedAndPreparedNative(JNIEnv *env, jobject instance, jlong nativeHandle) {
-    reinterpret_cast<UdpManager *>(nativeHandle)->clearPrepared();
-    reinterpret_cast<UdpManager *>(nativeHandle)->getNalParser().clearStopped();
 }

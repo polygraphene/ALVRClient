@@ -5,6 +5,7 @@ import android.support.annotation.NonNull;
 import android.util.Log;
 
 import java.util.LinkedList;
+import java.util.Queue;
 
 public class OutputFrameQueue {
     private static final String TAG = "OutputFrameQueue";
@@ -16,13 +17,18 @@ public class OutputFrameQueue {
         public long frameIndex;
     }
 
-    private LinkedList<Element> mQueue = new LinkedList<>();
+    private Queue<Element> mQueue = new LinkedList<>();
+    private Queue<Element> mUnusedList = new LinkedList<>();
     private MediaCodec mCodec;
     private FrameMap mFrameMap = new FrameMap();
-    private boolean mFrameAvailable;
-    private int mQueueSize = 1;
+    private final int mQueueSize = 1;
+    private Element mRendering = null;
+    private Element mAvailable = null;
 
     OutputFrameQueue() {
+        for(int i = 0; i < mQueueSize; i++) {
+            mUnusedList.add(new Element());
+        }
     }
 
     public void setCodec(MediaCodec codec) {
@@ -42,82 +48,81 @@ public class OutputFrameQueue {
             return;
         }
 
-        Element elem = new Element();
+        Element elem = mUnusedList.poll();
+        if(elem == null){
+            Log.e(TAG, "FrameQueue is full. Discard old frame.");
+
+            elem = mQueue.poll();
+            mCodec.releaseOutputBuffer(elem.index, false);
+        }
         elem.index = index;
         elem.frameIndex = foundFrameIndex;
         mQueue.add(elem);
 
         LatencyCollector.DecoderOutput(foundFrameIndex);
-
-        // Start threshold is half of mQueueSize
-        if (mQueue.size() >= (mQueueSize + 1) / 2 && !mFrameAvailable) {
-            mFrameAvailable = true;
-            Log.e(TAG, "Start playing.");
-        }
-        if (mQueue.size() > mQueueSize) {
-            Log.e(TAG, "FrameQueue is full. Discard all frame.");
-            while (mQueue.size() >= 2) {
-                Element removeElement = mQueue.removeFirst();
-                mCodec.releaseOutputBuffer(removeElement.index, false);
-            }
-        }
         Utils.frameLog(foundFrameIndex, "Current queue state=" + mQueue.size() + "/" + mQueueSize + " pushed index=" + index);
         notifyAll();
     }
 
-    synchronized public long render(int waitMs) {
-        if (mStopped) {
+    synchronized public long render(boolean render) {
+        if(mStopped) {
             return -1;
         }
-        if(waitMs < 0) {
-            while (mQueue.size() == 0 && !mStopped) {
-                try {
-                    wait();
-                } catch (InterruptedException e) {
-                }
-            }
-        }else{
-            if (mQueue.size() == 0) {
-                try {
-                    wait(waitMs);
-                } catch (InterruptedException e) {
-                }
-            }
-        }
-        if (mStopped || mQueue.size() == 0) {
+        if (mRendering != null || mAvailable != null) {
+            // It will conflict with current rendering frame.
+            // Defer processing until current frame is rendered.
             return -1;
         }
-        Element element = mQueue.removeFirst();
-        Utils.frameLog(element.frameIndex, "Got frame from queue");
-        mCodec.releaseOutputBuffer(element.index, true);
-        return element.frameIndex;
+        Element elem = mQueue.poll();
+        if(elem == null) {
+            return -1;
+        }
+
+        mRendering = elem;
+        mCodec.releaseOutputBuffer(elem.index, render);
+        return elem.frameIndex;
     }
 
-    public long render() {
-        // Wait infinite.
-        return render(-1);
+    synchronized public void onFrameAvailable() {
+        if(mStopped) {
+            return;
+        }
+        if(mRendering == null) {
+            return;
+        }
+        if(mAvailable != null) {
+            return;
+        }
+        mAvailable = mRendering;
+        mRendering = null;
     }
 
-    synchronized public boolean isFrameAvailable() {
-        return mFrameAvailable;
+    synchronized public long clearAvailable() {
+        if(mStopped) {
+            return -1;
+        }
+        if(mAvailable == null){
+            return -1;
+        }
+        long frameIndex = mAvailable.frameIndex;
+        mUnusedList.add(mAvailable);
+        mAvailable = null;
+
+        // Render deferred frame.
+        render(true);
+
+        return frameIndex;
     }
 
     synchronized public void stop() {
         mStopped = true;
         mQueue.clear();
-        mFrameAvailable = false;
         notifyAll();
     }
 
     synchronized public void reset() {
         mStopped = false;
         mQueue.clear();
-        mFrameAvailable = false;
         notifyAll();
-    }
-
-    synchronized public void setQueueSize(int queueSize) {
-        Log.e(TAG, "Queue size was changed. Size=" + queueSize);
-        mQueueSize = queueSize;
     }
 }

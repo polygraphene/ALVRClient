@@ -45,6 +45,12 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
 
     private Callback mCallback;
 
+    public interface NALCallback {
+        void pushNAL(NAL nal);
+    }
+
+    private NALCallback mNALCallback;
+
     private long mNativeHandle = 0;
     private final Object mWaiter = new Object();
 
@@ -67,11 +73,13 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
         mPreviousServerPort = serverPort;
     }
 
-    public boolean start(EGLContext mEGLContext, Activity activity, DeviceDescriptor deviceDescriptor, int cameraTexture) {
+    public boolean start(EGLContext mEGLContext, Activity activity, DeviceDescriptor deviceDescriptor, int cameraTexture, NALCallback nalCallback) {
         mTrackingThread = new TrackingThread();
         mTrackingThread.setCallback(this);
 
         mDeviceDescriptor = deviceDescriptor;
+
+        mNALCallback = nalCallback;
 
         super.startBase();
 
@@ -220,6 +228,16 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
         }
     }
 
+    @SuppressWarnings("unused")
+    public void pushNAL(NAL nal) {
+        synchronized (mWaiter) {
+            if (mNativeHandle == 0) {
+                return;
+            }
+            mNALCallback.pushNAL(nal);
+        }
+    }
+
     private native long initializeSocket(int port, String deviceName, String[] broadcastAddrList,
                                         int[] refreshRates, int renderWidth, int renderHeight, float[] fov,
                                         int deviceType, int deviceSubType, int deviceCapabilityFlags, int controllerCapabilityFlags);
@@ -239,33 +257,8 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
     //
 
     @Override
-    public int getNalListSize() {
-        return getNalListSizeNative(mNativeHandle);
-    }
-    @Override
-    public NAL waitNal() {
-        return waitNalNative(mNativeHandle);
-    }
-    @Override
-    public NAL getNal() {
-        return getNalNative(mNativeHandle);
-    }
-    @Override
     public void recycleNal(NAL nal) {
         recycleNalNative(mNativeHandle, nal);
-    }
-    @Override
-    public void flushNALList() {
-        flushNALListNative(mNativeHandle);
-    }
-    @Override
-    public void notifyWaitingThread() {
-        notifyWaitingThreadNative(mNativeHandle);
-    }
-
-    @Override
-    public void clearStoppedAndPrepared() {
-        clearStoppedAndPreparedNative(mNativeHandle);
     }
 
     @Override
@@ -278,12 +271,6 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
         }
     }
 
-    private native int getNalListSizeNative(long nativeHandle);
-    private native NAL waitNalNative(long nativeHandle);
-    private native NAL getNalNative(long nativeHandle);
     private native void recycleNalNative(long nativeHandle, NAL nal);
-    private native void flushNALListNative(long nativeHandle);
-    private native void notifyWaitingThreadNative(long nativeHandle);
     private native void setSinkPreparedNative(long nativeHandle, boolean prepared);
-    private native void clearStoppedAndPreparedNative(long nativeHandle);
 }

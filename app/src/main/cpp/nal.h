@@ -9,29 +9,20 @@
 
 class NALParser {
 public:
-    NALParser(JNIEnv *env);
+    NALParser(JNIEnv *env, std::function<void(JNIEnv *env, jobject nal)> nalCallback);
     ~NALParser();
 
     void setCodec(int codec);
 
     bool processPacket(VideoFrame *packet, int packetSize, bool &fecFailure);
 
-    jobject wait(JNIEnv *env);
-    jobject get(JNIEnv *env);
     void recycle(JNIEnv *env, jobject nal);
-    int getQueueSize(JNIEnv *env);
-    void flush(JNIEnv *env);
-    void notifyWaitingThread(JNIEnv *env);
-    void clearStopped();
 
     bool fecFailure();
 private:
-    void clearNalList(JNIEnv *env);
     void push(const char *buffer, int length, uint64_t frameIndex);
     void pushNal(jobject nal);
     int findVPSSPS(const char *frameBuffer, int frameByteSize);
-
-    bool m_stopped = false;
 
     FECQueue m_queue;
 
@@ -39,7 +30,9 @@ private:
 
     JNIEnv *m_env;
 
-// Parsed NAL queue
+    std::function<void(JNIEnv *env, jobject nal)> mNalCallback;
+
+    // Parsed NAL queue
     std::list<jobject> m_nalList;
     std::list<jobject> m_nalRecycleList;
     Mutex m_nalMutex;

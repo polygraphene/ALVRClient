@@ -1,5 +1,6 @@
 package com.polygraphene.alvr;
 
+import android.media.MediaCodec;
 import android.opengl.GLSurfaceView;
 import android.os.Bundle;
 import android.util.Log;
@@ -90,7 +91,7 @@ public class GvrActivity extends BaseActivity {
         try {
             mDecoderThread.start();
 
-            if (!mReceiverThread.start(mRenderer.getEGLContext(), this, mRenderer.getDeviceDescriptor(), 0)) {
+            if (!mReceiverThread.start(mRenderer.getEGLContext(), this, mRenderer.getDeviceDescriptor(), 0, mDecoderThread)) {
                 Log.e(TAG, "FATAL: Initialization of ReceiverThread failed.");
                 return;
             }
@@ -170,7 +171,6 @@ public class GvrActivity extends BaseActivity {
 
         @Override
         public void onChangeSettings(int enableTestMode, int suspend, int frameQueueSize) {
-            mDecoderThread.setFrameQueueSize(frameQueueSize);
         }
 
         @Override
@@ -197,6 +197,11 @@ public class GvrActivity extends BaseActivity {
         @Override
         public void onDestroy() {
             mReceiverThread.setSinkPrepared(false);
+        }
+
+        @Override
+        public void onFrameDecoded(int index, MediaCodec.BufferInfo info) {
+            mRenderer.onFrameDecoded(index, info, mSurfaceView);
         }
     };
 }

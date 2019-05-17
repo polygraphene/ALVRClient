@@ -4,6 +4,7 @@ import android.content.res.AssetManager;
 import android.graphics.Point;
 import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
+import android.media.MediaCodec;
 import android.opengl.EGL14;
 import android.opengl.EGLContext;
 import android.opengl.GLSurfaceView;
@@ -20,6 +21,8 @@ import com.google.vr.ndk.base.GvrApi;
 import com.google.vr.ndk.base.SwapChain;
 
 import java.util.Arrays;
+import java.util.LinkedList;
+import java.util.Queue;
 import java.util.concurrent.TimeUnit;
 
 import javax.microedition.khronos.egl.EGLConfig;
@@ -104,7 +107,6 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
 
     private Runnable mSurfaceCreatedListener;
 
-    private long mRenderingFrameIndex = -1;
     private long mRenderedFrameIndex = -1;
 
     // Native pointer to GvrRenderer
@@ -149,7 +151,6 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
 
     public void onResume() {
         mResumed = true;
-        mRenderingFrameIndex = -1;
         mRenderedFrameIndex = -1;
     }
 
@@ -211,6 +212,24 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         }
     }
 
+    Runnable onFrameDecodedRunnable = new Runnable() {
+        @Override
+        public void run() {
+            mDecoderThread.releaseBuffer(true);
+        }
+    };
+
+    public void onFrameDecoded(int index, MediaCodec.BufferInfo info, GLSurfaceView surfaceView) {
+        surfaceView.queueEvent(onFrameDecodedRunnable);
+    }
+
+    Runnable onFrameAvailableRunnable = new Runnable() {
+        @Override
+        public void run() {
+            mDecoderThread.onFrameAvailable();
+        }
+    };
+
     @Override
     public void onDrawFrame(GL10 gl) {
         // Take a frame from the queue and direct all our GL commands to it. This will app rendering
@@ -257,25 +276,29 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         }
 
         long frameIndex = -1;
-        int counter = 0;
         if(isConnected()) {
-            while(isConnected() && counter < 5) {
-                frameIndex = waitFrame(5);
-                counter++;
-                if (frameIndex >= 0) {
-                    float[] matrix = mFrameMap.get(frameIndex);
-                    if (matrix != null) {
-                        System.arraycopy(matrix, 0, mHeadFromWorld, 0, matrix.length);
-                    }
-                    renderNative(nativeHandle, mLeftMvp, mRightMvp, mLeftViewport, mRightViewport, false, frameIndex);
-                    break;
+            frameIndex = mDecoderThread.clearAvailable();
+            if(frameIndex != -1) {
+                mRenderedFrameIndex = frameIndex;
+                mSurfaceTexture.updateTexImage();
+
+                float[] matrix = mFrameMap.get(frameIndex);
+                if (matrix != null) {
+                    System.arraycopy(matrix, 0, mHeadFromWorld, 0, matrix.length);
                 }
-                // Send tracking info to the server.
-                sendTracking();
+                renderNative(nativeHandle, mLeftMvp, mRightMvp, mLeftViewport, mRightViewport, false, frameIndex);
+            } else if(mRenderedFrameIndex != -1) {
+                float[] matrix = mFrameMap.get(mRenderedFrameIndex);
+                if (matrix != null) {
+                    System.arraycopy(matrix, 0, mHeadFromWorld, 0, matrix.length);
+                }
+                renderNative(nativeHandle, mLeftMvp, mRightMvp, mLeftViewport, mRightViewport, false, mRenderedFrameIndex);
+            } else {
+                mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\nConnected.");
+                renderNative(nativeHandle, mLeftMvp, mRightMvp, mLeftViewport, mRightViewport, true, 0);
             }
         } else {
-            mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\nLoading...");
-
+            mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\nLoading...\nPress connect on server.");
             renderNative(nativeHandle, mLeftMvp, mRightMvp, mLeftViewport, mRightViewport, true, 0);
         }
 
@@ -324,21 +347,7 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
                 if (Utils.sEnableLog) {
                     Log.v(TAG, "onFrameAvailable");
                 }
-                synchronized (mWaiter) {
-                    mFrameAvailable = true;
-                    mWaiter.notifyAll();
-
-                    if(isConnected()) {
-                        mSurfaceView.queueEvent(new Runnable() {
-                            @Override
-                            public void run() {
-                                mRenderedFrameIndex = mRenderingFrameIndex;
-                                mRenderingFrameIndex = -1;
-                                mSurfaceTexture.updateTexImage();
-                            }
-                        });
-                    }
-                }
+                mSurfaceView.queueEvent(onFrameAvailableRunnable);
             }
         });
         mSurface = new Surface(mSurfaceTexture);
@@ -397,40 +406,6 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
                 = mDeviceDescriptor.mRefreshRates[2]
                 = mDeviceDescriptor.mRefreshRates[3] = 0;
     }
-
-    private long waitFrame(int waitMs) {
-        synchronized (mWaiter) {
-            mFrameAvailable = false;
-            if(mRenderingFrameIndex != -1) {
-                // Rendering
-                return mRenderedFrameIndex;
-            }
-
-            long frameIndex = mDecoderThread.render(waitMs);
-            if (frameIndex < 0) {
-                return mRenderedFrameIndex;
-            }
-
-            mRenderingFrameIndex = frameIndex;
-            /*
-            while (!mFrameAvailable) {
-                if(!isConnected()) {
-                    Log.v(TAG, "Discard frame because mReceiverThread == null.");
-                    return -1;
-                }
-                try {
-                    mWaiter.wait();
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-
-            mSurfaceTexture.updateTexImage();
-            */
-            return mRenderedFrameIndex;
-        }
-    }
-
 
     private void sendTracking() {
         synchronized (mWaiter) {

@@ -17,12 +17,13 @@ static const int NAL_TYPE_SPS = 7;
 static const int H265_NAL_TYPE_VPS = 32;
 
 
-NALParser::NALParser(JNIEnv *env) {
+NALParser::NALParser(JNIEnv *env, std::function<void(JNIEnv *env, jobject nal)> nalCallback) {
     LOGE("NALParser initialized %p", this);
     pthread_cond_init(&m_cond_nonzero, NULL);
 
     m_env = env;
-    m_stopped = false;
+
+    mNalCallback = nalCallback;
 
     jclass NAL_clazz = env->FindClass("com/polygraphene/alvr/NAL");
     jmethodID NAL_ctor = env->GetMethodID(NAL_clazz, "<init>", "()V");
@@ -42,14 +43,10 @@ NALParser::NALParser(JNIEnv *env) {
 }
 
 NALParser::~NALParser() {
-    notifyWaitingThread(m_env);
-    clearNalList(m_env);
-
     for (auto nal : m_nalRecycleList) {
         m_env->DeleteGlobalRef(nal);
     }
     m_nalRecycleList.clear();
-    m_stopped = true;
     pthread_cond_destroy(&m_cond_nonzero);
 }
 
@@ -97,82 +94,9 @@ bool NALParser::processPacket(VideoFrame *packet, int packetSize, bool &fecFailu
     return false;
 }
 
-jobject NALParser::wait(JNIEnv *env) {
-    jobject nal;
-
-    while (true) {
-        MutexLock lock(m_nalMutex);
-        if (m_stopped) {
-            return NULL;
-        }
-        if (m_nalList.size() != 0) {
-            nal = m_nalList.front();
-            jobject tmp = nal;
-            nal = env->NewLocalRef(nal);
-            env->DeleteGlobalRef(tmp);
-            m_nalList.pop_front();
-            break;
-        }
-        m_nalMutex.CondWait(&m_cond_nonzero);
-    }
-
-    return nal;
-}
-
-jobject NALParser::get(JNIEnv *env) {
-    jobject nal;
-    {
-        MutexLock lock(m_nalMutex);
-        if (m_nalList.size() == 0) {
-            return NULL;
-        }
-        nal = m_nalList.front();
-        jobject tmp = nal;
-        nal = env->NewLocalRef(nal);
-        env->DeleteGlobalRef(tmp);
-        m_nalList.pop_front();
-    }
-
-    return nal;
-}
-
 void NALParser::recycle(JNIEnv *env, jobject nal) {
-
     MutexLock lock(m_nalMutex);
     m_nalRecycleList.push_front(env->NewGlobalRef(nal));
-
-}
-
-int NALParser::getQueueSize(JNIEnv *env) {
-    MutexLock lock(m_nalMutex);
-    return m_nalList.size();
-}
-
-
-void NALParser::flush(JNIEnv *env) {
-    MutexLock lock(m_nalMutex);
-    clearNalList(env);
-}
-
-void NALParser::notifyWaitingThread(JNIEnv *env) {
-    MutexLock lock(m_nalMutex);
-    clearNalList(env);
-
-    m_stopped = true;
-
-    pthread_cond_broadcast(&m_cond_nonzero);
-}
-
-void NALParser::clearStopped() {
-    m_stopped = false;
-}
-
-void NALParser::clearNalList(JNIEnv *env) {
-    for (auto it = m_nalList.begin();
-         it != m_nalList.end(); ++it) {
-        m_nalRecycleList.push_back(*it);
-    }
-    m_nalList.clear();
 }
 
 void NALParser::push(const char *buffer, int length, uint64_t frameIndex) {
@@ -215,18 +139,7 @@ void NALParser::push(const char *buffer, int length, uint64_t frameIndex) {
 }
 
 void NALParser::pushNal(jobject nal) {
-    MutexLock lock(m_nalMutex);
-
-    if (m_nalList.size() < MAXIMUM_NAL_BUFFER) {
-        m_nalList.push_back(nal);
-
-        pthread_cond_broadcast(&m_cond_nonzero);
-    } else {
-        // Discard buffer
-        LOG("NAL Queue is too large. Discard. Size=%lu Limit=%d", m_nalList.size(),
-            MAXIMUM_NAL_BUFFER);
-        m_nalRecycleList.push_front(nal);
-    }
+    mNalCallback(m_env, nal);
 }
 
 bool NALParser::fecFailure() {

@@ -1,5 +1,6 @@
 package com.polygraphene.alvr.test;
 
+import android.media.MediaCodec;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -14,6 +15,8 @@ import com.polygraphene.alvr.R;
 
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.LinkedList;
+import java.util.List;
 
 public class DecoderTestActivity extends AppCompatActivity {
 
@@ -33,7 +36,13 @@ public class DecoderTestActivity extends AppCompatActivity {
         public void onDestroy() {
 
         }
+
+        @Override
+        public void onFrameDecoded(int index, MediaCodec.BufferInfo info) {
+
+        }
     };
+    private LinkedList<NAL> mNalList = new LinkedList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,12 +55,10 @@ public class DecoderTestActivity extends AppCompatActivity {
         surfaceView.getHolder().addCallback(new SurfaceHolder.Callback() {
             @Override
             public void surfaceCreated(final SurfaceHolder holder) {
-                NALParser dummyNALParser;
                 try {
-                    dummyNALParser = getNALParser();
-                }catch (Exception e){
-                    textView.setText("codectest.h265 Not found");
-                    return;
+                    readNALList();
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
 
                 decoderThread = new DecoderThread(dummyNALParser, holder.getSurface(), DecoderTestActivity.this, mDecoderCallback);
@@ -59,7 +66,7 @@ public class DecoderTestActivity extends AppCompatActivity {
                 surfaceView.postDelayed(new Runnable() {
                     @Override
                     public void run() {
-                        long ret = decoderThread.render(50);
+                        long ret = decoderThread.clearAvailable();
 
                         if(ret >= 0) {
                             mFrameIndex++;
@@ -73,13 +80,6 @@ public class DecoderTestActivity extends AppCompatActivity {
                             Log.v("DecoderTestActivity", "Next loop:"+ mLoop + ". stop and wait");
                             decoderThread.stopAndWait();
                             Log.v("DecoderTestActivity", "Next loop:"+ mLoop + ". stop ok");
-
-                            NALParser dummyNALParser = null;
-                            try {
-                                dummyNALParser = getNALParser();
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            }
 
                             decoderThread = new DecoderThread(dummyNALParser, holder.getSurface(), DecoderTestActivity.this, mDecoderCallback);
                             decoderThread.start();
@@ -102,8 +102,8 @@ public class DecoderTestActivity extends AppCompatActivity {
         });
     }
 
-    NALParser getNALParser() throws Exception {
-        DummyNALParser dummyNALParser = new DummyNALParser();
+    void readNALList() throws Exception {
+        mNalList.clear();
 
         FileInputStream fis = null;
         try {
@@ -124,7 +124,7 @@ public class DecoderTestActivity extends AppCompatActivity {
             }
             Log.v(TAG, "NAL Buffer: " + s);
 
-            dummyNALParser.mNalList.add(nal);
+            mNalList.add(nal);
 
             int[] frameSizes = new int[]{1393, 193438, 56245, 36483, 32754, 37696, 38229, 44998, 30080, 32862,
                     31067, 35536, 37509, 37098, 34429, 36402, 27596, 28715};
@@ -138,7 +138,7 @@ public class DecoderTestActivity extends AppCompatActivity {
                 nal.buf = buffer;
                 nal.length = nal.buf.length;
 
-                dummyNALParser.mNalList.add(nal);
+                mNalList.add(nal);
             }
         } finally {
             try {
@@ -147,6 +147,17 @@ public class DecoderTestActivity extends AppCompatActivity {
                 e.printStackTrace();
             }
         }
-        return dummyNALParser;
     }
+
+    private NALParser dummyNALParser = new NALParser() {
+        @Override
+        public void recycleNal(NAL nal) {
+
+        }
+
+        @Override
+        public void setSinkPrepared(boolean prepared) {
+
+        }
+    };
 }

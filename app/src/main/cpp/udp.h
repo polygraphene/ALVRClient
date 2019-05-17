@@ -79,7 +79,7 @@ class UdpManager {
 public:
     UdpManager();
     ~UdpManager();
-    void initialize(JNIEnv *env, jint port, jstring deviceName_, jobjectArray broadcastAddrList_,
+    void initialize(JNIEnv *env, jobject instance, jint port, jstring deviceName_, jobjectArray broadcastAddrList_,
                     jintArray refreshRates_, jint renderWidth, jint renderHeight, jfloatArray fov,
                     jint deviceType, jint deviceSubType, jint deviceCapabilityFlags, jint controllerCapabilityFlags);
 
@@ -91,16 +91,12 @@ public:
 
     void runLoop(JNIEnv *env, jobject instance, jstring serverAddress, int serverPort);
     void interrupt();
-    void notifyWaitingThread(JNIEnv *env);
     void setSinkPrepared(bool prepared);
 
     bool isConnected();
 
     jstring getServerAddress(JNIEnv *env);
     int getServerPort();
-
-    void clearPrepared();
-
 private:
 // Connection has lost when elapsed 3 seconds from last packet.
     static const uint64_t CONNECTION_TIMEOUT = 3 * 1000 * 1000;
@@ -128,6 +124,10 @@ private:
 
     JNIEnv *m_env;
     jobject m_instance;
+    jmethodID mOnConnectMethodID;
+    jmethodID mOnChangeSettingsMethodID;
+    jmethodID mOnDisconnectedMethodID;
+    jmethodID mPushNALMethodID;
 
     //
     // Send buffer
@@ -140,6 +140,8 @@ private:
     int m_notifyPipe[2] = {-1, -1};
     Mutex pipeMutex;
     std::list<SendBuffer> m_sendQueue;
+
+    void initializeJNICallbacks(JNIEnv *env, jobject instance);
 
     void sendStreamStartPacket();
 
