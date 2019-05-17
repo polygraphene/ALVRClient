@@ -26,6 +26,12 @@ public class Utils {
         }
     }
 
+    public static void log(String tag, String s) {
+        if(sEnableLog) {
+            Log.v(tag, s);
+        }
+    }
+
     public static String getVersionName(Context context){
         try {
             PackageInfo pInfo = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
