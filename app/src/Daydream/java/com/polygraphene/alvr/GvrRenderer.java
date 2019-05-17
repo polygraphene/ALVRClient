@@ -149,6 +149,8 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
 
     public void onResume() {
         mResumed = true;
+        mRenderingFrameIndex = -1;
+        mRenderedFrameIndex = -1;
     }
 
     public void setThreads(UdpReceiverThread receiverThread, DecoderThread decoderThread) {
@@ -326,14 +328,16 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
                     mFrameAvailable = true;
                     mWaiter.notifyAll();
 
-                    mSurfaceView.queueEvent(new Runnable() {
-                        @Override
-                        public void run() {
-                            mRenderedFrameIndex = mRenderingFrameIndex;
-                            mRenderingFrameIndex = -1;
-                            mSurfaceTexture.updateTexImage();
-                        }
-                    });
+                    if(isConnected()) {
+                        mSurfaceView.queueEvent(new Runnable() {
+                            @Override
+                            public void run() {
+                                mRenderedFrameIndex = mRenderingFrameIndex;
+                                mRenderingFrameIndex = -1;
+                                mSurfaceTexture.updateTexImage();
+                            }
+                        });
+                    }
                 }
             }
         });

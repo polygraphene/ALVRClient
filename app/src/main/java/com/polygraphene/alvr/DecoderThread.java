@@ -339,6 +339,7 @@ public class DecoderThread extends ThreadBase {
 
     private void notifyCodecChange(int codec) {
         if (codec != mCodec) {
+            Utils.log(TAG, "notifyCodecChange: Codec was changed. New Codec=" + codec);
             stopAndWait();
             mCodec = codec;
             if (mCodec == CODEC_H264) {
@@ -350,7 +351,8 @@ public class DecoderThread extends ThreadBase {
             mNalParser.clearStoppedAndPrepared();
             start();
         } else {
-            mWaitNextIDR = true;
+            Utils.log(TAG, "notifyCodecChange: Codec was not changed. Codec=" + codec);
+            //mWaitNextIDR = true;
         }
     }
 
