@@ -1,7 +1,6 @@
 package com.polygraphene.alvr;
 
 import android.opengl.GLSurfaceView;
-import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
@@ -86,7 +85,7 @@ public class GvrActivity extends BaseActivity {
             mReceiverThread.recoverConnectionState(connectionState.serverAddr, connectionState.serverPort);
         }
 
-        mDecoderThread = new DecoderThread(mReceiverThread, mRenderer.getSurface(), this);
+        mDecoderThread = new DecoderThread(mReceiverThread, mRenderer.getSurface(), this, mDecoderCallback);
 
         try {
             mDecoderThread.start();
@@ -186,6 +185,18 @@ public class GvrActivity extends BaseActivity {
 
         @Override
         public void onTracking(float[] position, float[] orientation) {
+        }
+    };
+
+    private DecoderThread.DecoderCallback mDecoderCallback = new DecoderThread.DecoderCallback() {
+        @Override
+        public void onPrepared() {
+            mReceiverThread.setSinkPrepared(true);
+        }
+
+        @Override
+        public void onDestroy() {
+            mReceiverThread.setSinkPrepared(false);
         }
     };
 }
