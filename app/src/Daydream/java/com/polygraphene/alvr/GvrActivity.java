@@ -36,7 +36,7 @@ public class GvrActivity extends BaseActivity {
         setContentView(mGvrLayout);
 
         // Bind a standard Android Renderer.
-        mRenderer = new GvrRenderer(this, mGvrLayout.getGvrApi());
+        mRenderer = new GvrRenderer(this, mGvrLayout.getGvrApi(), mSurfaceView);
         mRenderer.setOnSurfaceCreatedListener(new Runnable() {
             @Override
             public void run() {

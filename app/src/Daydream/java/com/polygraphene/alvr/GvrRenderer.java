@@ -36,6 +36,7 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
 
     private final GvrActivity mActivity;
     private final GvrApi mApi;
+    private final GLSurfaceView mSurfaceView;
     private GvrTracking mGvrTracking;
 
     private boolean mResumed = false;
@@ -103,12 +104,16 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
 
     private Runnable mSurfaceCreatedListener;
 
+    private long mRenderingFrameIndex = -1;
+    private long mRenderedFrameIndex = -1;
+
     // Native pointer to GvrRenderer
     private long nativeHandle;
 
-    public GvrRenderer(GvrActivity activity, GvrApi api) {
+    public GvrRenderer(GvrActivity activity, GvrApi api, GLSurfaceView surfaceView) {
         this.mActivity = activity;
         this.mApi = api;
+        this.mSurfaceView = surfaceView;
 
         mGvrTracking = new GvrTracking(mApi.getNativeGvrContext());
     }
@@ -250,9 +255,11 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         }
 
         long frameIndex = -1;
+        int counter = 0;
         if(isConnected()) {
-            while(isConnected()) {
+            while(isConnected() && counter < 5) {
                 frameIndex = waitFrame(5);
+                counter++;
                 if (frameIndex >= 0) {
                     float[] matrix = mFrameMap.get(frameIndex);
                     if (matrix != null) {
@@ -318,6 +325,15 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
                 synchronized (mWaiter) {
                     mFrameAvailable = true;
                     mWaiter.notifyAll();
+
+                    mSurfaceView.queueEvent(new Runnable() {
+                        @Override
+                        public void run() {
+                            mRenderedFrameIndex = mRenderingFrameIndex;
+                            mRenderingFrameIndex = -1;
+                            mSurfaceTexture.updateTexImage();
+                        }
+                    });
                 }
             }
         });
@@ -381,12 +397,18 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     private long waitFrame(int waitMs) {
         synchronized (mWaiter) {
             mFrameAvailable = false;
+            if(mRenderingFrameIndex != -1) {
+                // Rendering
+                return mRenderedFrameIndex;
+            }
 
             long frameIndex = mDecoderThread.render(waitMs);
             if (frameIndex < 0) {
-                return frameIndex;
+                return mRenderedFrameIndex;
             }
 
+            mRenderingFrameIndex = frameIndex;
+            /*
             while (!mFrameAvailable) {
                 if(!isConnected()) {
                     Log.v(TAG, "Discard frame because mReceiverThread == null.");
@@ -400,7 +422,8 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
             }
 
             mSurfaceTexture.updateTexImage();
-            return frameIndex;
+            */
+            return mRenderedFrameIndex;
         }
     }
 
