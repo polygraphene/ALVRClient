@@ -5,12 +5,8 @@ import android.content.res.AssetManager;
 import android.graphics.Point;
 import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
-<<<<<<< HEAD
-import android.media.MediaCodec;
-=======
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
->>>>>>> Show WiFi name and battery level in Daydream home scene
 import android.opengl.EGL14;
 import android.opengl.EGLContext;
 import android.opengl.GLSurfaceView;
@@ -194,13 +190,12 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         mViewportList = null;
         mTmpViewport.shutdown();
         mTmpViewport = null;
-        if(mSwapChain != null) {
+        if (mSwapChain != null) {
             mSwapChain.shutdown();
         }
         mSwapChain = null;
         destroyNative(nativeHandle);
         nativeHandle = 0;
-
         mRendererCallback.onSurfaceDestroyed();
     }
 
@@ -268,7 +263,7 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
             float t = (float) Math.tan(Math.toRadians(mEyeFov.top)) * near;
             Matrix.frustumM(mEyePerspective, 0, l, r, b, t, near, 30f);
 
-            if(eye == 0) {
+            if (eye == 0) {
                 System.arraycopy(mEyePerspective, 0, mTmpLeftEyePerspective, 0, 16);
             }
             mApi.getEyeFromHeadMatrix(eye, mEyeFromHead);
@@ -324,7 +319,7 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         frame.unbind();
         frame.submit(mViewportList, mHeadFromWorld);
 
-        if(frameIndex >= 0) {
+        if (frameIndex >= 0) {
             LatencyCollector.Submit(frameIndex);
         }
     }
@@ -394,17 +389,17 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         mDeviceDescriptor.mDeviceCapabilityFlags = 0;
         mDeviceDescriptor.mControllerCapabilityFlags = DeviceDescriptor.ALVR_CONTROLLER_CAPABILITY_FLAG_ONE_CONTROLLER;
 
-        if(mApi.getViewerType() == 0) {
+        if (mApi.getViewerType() == 0) {
             // GVR_VIEWER_TYPE_CARDBOARD
             mDeviceDescriptor.mDeviceType = DeviceDescriptor.ALVR_DEVICE_TYPE_CARDBOARD;
             mDeviceDescriptor.mDeviceSubType = DeviceDescriptor.ALVR_DEVICE_SUBTYPE_CARDBOARD_GENERIC;
-        }else{
+        } else {
             // GVR_VIEWER_TYPE_DAYDREAM
             mDeviceDescriptor.mDeviceType = DeviceDescriptor.ALVR_DEVICE_TYPE_DAYDREAM;
             mDeviceDescriptor.mDeviceSubType = DeviceDescriptor.ALVR_DEVICE_SUBTYPE_DAYDREAM_GENERIC;
         }
 
-        if(mApi.getViewerVendor().equals("Lenovo") && mApi.getViewerModel().equals("Mirage Solo")) {
+        if (mApi.getViewerVendor().equals("Lenovo") && mApi.getViewerModel().equals("Mirage Solo")) {
             Log.v(TAG, "Lenovo Mirage Solo is detected. Assume refresh rate is 75Hz.");
             mDeviceDescriptor.mRefreshRates[0] = 75;
             mDeviceDescriptor.mDeviceSubType = DeviceDescriptor.ALVR_DEVICE_SUBTYPE_DAYDREAM_MIRAGE_SOLO;
@@ -485,7 +480,7 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
 
         currentFrameIndex++;
         mFrameMap.append(currentFrameIndex, Arrays.copyOf(headFromWorld, headFromWorld.length));
-        if(mFrameMap.size() > 100){
+        if (mFrameMap.size() > 100) {
             mFrameMap.removeAt(0);
         }
 
@@ -496,9 +491,9 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
 
     private String matToString(float[] m) {
         StringBuilder sb = new StringBuilder();
-        for(int i = 0; i < 4; i++) {
+        for (int i = 0; i < 4; i++) {
             sb.append("[");
-            for(int j = 0; j < 4; j++) {
+            for (int j = 0; j < 4; j++) {
                 sb.append(String.format("%+.5f ", m[j * 4 + i]));
             }
             sb.append("]\n");
@@ -507,9 +502,14 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     }
 
     private native long createNative(AssetManager assetManager);
+
     private native void glInitNative(long nativeHandle, int targetWidth, int TargetHeight);
+
     private native int getLoadingTexture(long nativeHandle);
+
     private native int getSurfaceTexture(long nativeHandle);
+
     private native void renderNative(long nativeHandle, float[] leftMvp, float[] rightMvp, int[] leftViewport, int[] rightViewport, boolean loading, long frameIndex);
+
     private native void destroyNative(long nativeHandle);
 }
