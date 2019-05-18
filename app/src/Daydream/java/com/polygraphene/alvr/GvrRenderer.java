@@ -1,14 +1,21 @@
 package com.polygraphene.alvr;
 
+import android.content.Context;
 import android.content.res.AssetManager;
 import android.graphics.Point;
 import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
+<<<<<<< HEAD
 import android.media.MediaCodec;
+=======
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
+>>>>>>> Show WiFi name and battery level in Daydream home scene
 import android.opengl.EGL14;
 import android.opengl.EGLContext;
 import android.opengl.GLSurfaceView;
 import android.opengl.Matrix;
+import android.os.BatteryManager;
 import android.util.Log;
 import android.util.LongSparseArray;
 import android.view.Surface;
@@ -26,11 +33,14 @@ import java.util.concurrent.TimeUnit;
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
+import static android.content.Context.BATTERY_SERVICE;
+
 /**
  * Main render loop. This is a mix of Java and native code.
  */
 public class GvrRenderer implements GLSurfaceView.Renderer {
     private static final String TAG = "GvrRenderer";
+
     static {
         System.loadLibrary("native-lib");
     }
@@ -291,7 +301,22 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
                 renderNative(nativeHandle, mLeftMvp, mRightMvp, mLeftViewport, mRightViewport, true, 0);
             }
         } else {
-            mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\nLoading...\nPress connect on server.");
+            // get wifi name
+            WifiManager wifiMgr = (WifiManager) mActivity.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            WifiInfo wifiInfo = wifiMgr.getConnectionInfo();
+            String wifiName = wifiInfo.getSSID();
+
+            // get battery percentage
+            BatteryManager bm = (BatteryManager) mActivity.getApplicationContext().getSystemService(BATTERY_SERVICE);
+            int batLevel = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
+
+            String msg = Utils.getVersionName(mActivity) + "\n" +
+                    "Wi-Fi: " + wifiName + "\n" +
+                    "Battery: " + batLevel + "%\n" +
+                    "Loading...\n" +
+                    "Press connect on server.";
+            Log.v(TAG, msg);
+            mLoadingTexture.drawMessage(msg);
             renderNative(nativeHandle, mLeftMvp, mRightMvp, mLeftViewport, mRightViewport, true, 0);
         }
 
