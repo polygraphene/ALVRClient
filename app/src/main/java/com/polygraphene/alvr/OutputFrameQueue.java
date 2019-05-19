@@ -21,7 +21,7 @@ public class OutputFrameQueue {
     private Queue<Element> mUnusedList = new LinkedList<>();
     private MediaCodec mCodec;
     private FrameMap mFrameMap = new FrameMap();
-    private final int mQueueSize = 1;
+    private final int mQueueSize = 3;
     private Element mRendering = null;
     private Element mAvailable = null;
 
@@ -40,6 +40,11 @@ public class OutputFrameQueue {
     }
 
     synchronized public void pushOutputBuffer(int index, @NonNull MediaCodec.BufferInfo info) {
+        if(mStopped) {
+            Log.e(TAG, "Ignore output buffer because queue has been already stopped. index=" + index);
+            mCodec.releaseOutputBuffer(index, false);
+            return;
+        }
         long foundFrameIndex = mFrameMap.find(info.presentationTimeUs);
 
         if (foundFrameIndex < 0) {
@@ -71,12 +76,15 @@ public class OutputFrameQueue {
         if (mRendering != null || mAvailable != null) {
             // It will conflict with current rendering frame.
             // Defer processing until current frame is rendered.
+            Utils.log(TAG, "Conflict with current rendering frame. Defer processing.");
             return -1;
         }
         Element elem = mQueue.poll();
         if(elem == null) {
             return -1;
         }
+
+        Utils.frameLog(elem.frameIndex, "Calling releaseOutputBuffer(). index=" + elem.index);
 
         mRendering = elem;
         mCodec.releaseOutputBuffer(elem.index, render);
@@ -93,8 +101,16 @@ public class OutputFrameQueue {
         if(mAvailable != null) {
             return;
         }
+        Utils.frameLog(mRendering.frameIndex, "onFrameAvailable().");
         mAvailable = mRendering;
         mRendering = null;
+    }
+
+    synchronized public boolean peekAvailable() {
+        if (mStopped) {
+            return false;
+        }
+        return mAvailable != null;
     }
 
     synchronized public long clearAvailable() {
@@ -104,6 +120,7 @@ public class OutputFrameQueue {
         if(mAvailable == null){
             return -1;
         }
+        Utils.frameLog(mAvailable.frameIndex, "clearAvailable().");
         long frameIndex = mAvailable.frameIndex;
         mUnusedList.add(mAvailable);
         mAvailable = null;
@@ -115,12 +132,14 @@ public class OutputFrameQueue {
     }
 
     synchronized public void stop() {
+        Log.i(TAG, "Stopping.");
         mStopped = true;
         mQueue.clear();
         notifyAll();
     }
 
     synchronized public void reset() {
+        Log.i(TAG, "Resetting.");
         mStopped = false;
         mQueue.clear();
         notifyAll();

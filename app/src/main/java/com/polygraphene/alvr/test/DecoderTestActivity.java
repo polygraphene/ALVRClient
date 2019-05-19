@@ -38,7 +38,7 @@ public class DecoderTestActivity extends AppCompatActivity {
         }
 
         @Override
-        public void onFrameDecoded(int index, MediaCodec.BufferInfo info) {
+        public void onFrameDecoded() {
 
         }
     };

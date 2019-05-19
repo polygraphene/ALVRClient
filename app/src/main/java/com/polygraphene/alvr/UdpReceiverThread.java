@@ -104,8 +104,8 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
         synchronized (mWaiter) {
             mTrackingThread.stopAndWait();
             interruptNative(mNativeHandle);
-            super.stopAndWait();
         }
+        super.stopAndWait();
     }
 
     @Override

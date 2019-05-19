@@ -517,7 +517,7 @@ void UdpManager::setSinkPrepared(bool prepared) {
         return;
     }
     mSinkPrepared = prepared;
-    LOGSOCKETI("setSinkPrepared: Decoder has been prepared.");
+    LOGSOCKETI("setSinkPrepared: Decoder prepared=%d", mSinkPrepared);
     if (prepared && isConnected()) {
         LOGSOCKETI("setSinkPrepared: Send stream start packet.");
         sendStreamStartPacket();

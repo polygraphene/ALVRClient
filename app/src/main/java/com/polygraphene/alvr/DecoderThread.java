@@ -53,7 +53,7 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
     public interface DecoderCallback {
         void onPrepared();
         void onDestroy();
-        void onFrameDecoded(int index, MediaCodec.BufferInfo info);
+        void onFrameDecoded();
     }
 
     private final DecoderCallback mDecoderCallback;
@@ -116,6 +116,7 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
     public boolean handleMessage(Message msg) {
         switch (msg.what) {
             case MESSAGE_PUSH_NAL:
+                Utils.log(TAG, "MESSAGE_PUSH_NAL");
                 NAL nal = (NAL) msg.obj;
 
                 if (mNalQueue.size() < NAL_QUEUE_MAX) {
@@ -127,15 +128,18 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
                 pushNALInternal();
                 return true;
             case MESSAGE_INPUT_BUFFER_AVAILABLE:
+                Utils.log(TAG, "MESSAGE_INPUT_BUFFER_AVAILABLE");
                 int index = msg.arg1;
                 mAvailableInputs.add(index);
                 pushNALInternal();
                 return true;
             case MESSAGE_OUTPUT_FRAME:
+                Utils.log(TAG, "MESSAGE_OUTPUT_FRAME");
                 int index2 = msg.arg1;
                 MediaCodec.BufferInfo info = (MediaCodec.BufferInfo) msg.obj;
 
-                mDecoderCallback.onFrameDecoded(index2, info);
+                mQueue.pushOutputBuffer(index2, info);
+                mDecoderCallback.onFrameDecoded();
                 return true;
         }
         return false;
@@ -170,7 +174,7 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
         mNalQueue.clear();
 
         Looper.prepare();
-        mHandler = new Handler();
+        mHandler = new Handler(this);
 
         MediaFormat format = MediaFormat.createVideoFormat(mFormat, DummyWidth, DummyHeight);
         format.setString("KEY_MIME", mFormat);
@@ -250,6 +254,7 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
     class Callback extends MediaCodec.Callback {
         @Override
         public void onInputBufferAvailable(@NonNull MediaCodec codec, final int index) {
+            Utils.log(TAG, "mHandler.sendMessage MESSAGE_INPUT_BUFFER_AVAILABLE");
             Message message = mHandler.obtainMessage(MESSAGE_INPUT_BUFFER_AVAILABLE);
             message.arg1 = index;
             mHandler.sendMessage(message);
@@ -257,6 +262,7 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
 
         @Override
         public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index, @NonNull MediaCodec.BufferInfo info) {
+            Utils.log(TAG, "mHandler.sendMessage MESSAGE_OUTPUT_FRAME");
             Message message = mHandler.obtainMessage(MESSAGE_OUTPUT_FRAME);
             message.arg1 = index;
             message.obj = info;
@@ -275,6 +281,7 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
     }
 
     public void onConnect(int codec, int frameQueueSize) {
+        Utils.logi(TAG, "onConnect()");
         if (mQueue != null) {
             mQueue.reset();
         }
@@ -287,7 +294,7 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
 
     private void notifyCodecChange(int codec) {
         if (codec != mCodec) {
-            Utils.log(TAG, "notifyCodecChange: Codec was changed. New Codec=" + codec);
+            Utils.logi(TAG, "notifyCodecChange: Codec was changed. New Codec=" + codec);
             stopAndWait();
             mCodec = codec;
             if (mCodec == CODEC_H264) {
@@ -298,7 +305,7 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
             mQueue.reset();
             start();
         } else {
-            Utils.log(TAG, "notifyCodecChange: Codec was not changed. Codec=" + codec);
+            Utils.logi(TAG, "notifyCodecChange: Codec was not changed. Codec=" + codec);
             //mWaitNextIDR = true;
         }
     }
@@ -392,6 +399,10 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
 
     public void onFrameAvailable() {
         mQueue.onFrameAvailable();
+    }
+
+    public boolean peekAvailable() {
+        return mQueue.peekAvailable();
     }
 
     public long clearAvailable() {

@@ -3,6 +3,7 @@ package com.polygraphene.alvr;
 import android.media.MediaCodec;
 import android.opengl.GLSurfaceView;
 import android.os.Bundle;
+import android.support.annotation.MainThread;
 import android.util.Log;
 import android.view.View;
 
@@ -21,6 +22,9 @@ public class GvrActivity extends BaseActivity {
     private DecoderThread mDecoderThread;
     private UdpReceiverThread mReceiverThread;
 
+    private boolean mResumed = false;
+    private boolean mSurfaceCreated = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -38,12 +42,7 @@ public class GvrActivity extends BaseActivity {
 
         // Bind a standard Android Renderer.
         mRenderer = new GvrRenderer(this, mGvrLayout.getGvrApi(), mSurfaceView);
-        mRenderer.setOnSurfaceCreatedListener(new Runnable() {
-            @Override
-            public void run() {
-                startWorkerThreads();
-            }
-        });
+        mRenderer.setRendererCallback(mRendererCallback);
         mSurfaceView.setRenderer(mRenderer);
     }
 
@@ -52,10 +51,16 @@ public class GvrActivity extends BaseActivity {
     protected void onResume() {
         Log.v(TAG, "onResume: enter");
 
+        mResumed = true;
+
         super.onResume();
         mGvrLayout.onResume();
         mSurfaceView.onResume();
         mRenderer.onResume();
+
+        if (mSurfaceCreated) {
+            startWorkerThreads();
+        }
 
         // Go fullscreen. Depending on the lifecycle of your app, you may need to do this in a different
         // place.
@@ -70,28 +75,25 @@ public class GvrActivity extends BaseActivity {
                     | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
     }
 
-    /**
-     * Called when surface is created to start worker threads.
-     */
-    private void startWorkerThreads(){
-        Log.v(TAG, "startWorkerThreads");
-
+    @MainThread
+    private void startWorkerThreads() {
+        Log.v(TAG, "startWorkerThreads: enter.");
         mReceiverThread = new UdpReceiverThread(mUdpReceiverCallback);
 
         ConnectionStateHolder.ConnectionState connectionState = new ConnectionStateHolder.ConnectionState();
-        ConnectionStateHolder.loadConnectionState(this, connectionState);
+        ConnectionStateHolder.loadConnectionState(GvrActivity.this, connectionState);
 
         if(connectionState.serverAddr != null && connectionState.serverPort != 0) {
             Log.v(TAG, "Load connection state: " + connectionState.serverAddr + " " + connectionState.serverPort);
             mReceiverThread.recoverConnectionState(connectionState.serverAddr, connectionState.serverPort);
         }
 
-        mDecoderThread = new DecoderThread(mReceiverThread, mRenderer.getSurface(), this, mDecoderCallback);
+        mDecoderThread = new DecoderThread(mReceiverThread, mRenderer.getSurface(), GvrActivity.this, mDecoderCallback);
 
         try {
             mDecoderThread.start();
 
-            if (!mReceiverThread.start(mRenderer.getEGLContext(), this, mRenderer.getDeviceDescriptor(), 0, mDecoderThread)) {
+            if (!mReceiverThread.start(mRenderer.getEGLContext(), GvrActivity.this, mRenderer.getDeviceDescriptor(), 0, mDecoderThread)) {
                 Log.e(TAG, "FATAL: Initialization of ReceiverThread failed.");
                 return;
             }
@@ -110,7 +112,7 @@ public class GvrActivity extends BaseActivity {
 
         super.onPause();
 
-        mRenderer.waitForSurfacePrepared();
+        mResumed = false;
 
         mGvrLayout.onPause();
 
@@ -153,6 +155,29 @@ public class GvrActivity extends BaseActivity {
         Log.v(TAG, "onStop: exit");
     }
 
+    private GvrRenderer.RendererCallback mRendererCallback = new GvrRenderer.RendererCallback() {
+        @Override
+        public void onSurfaceCreated() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    mSurfaceCreated = true;
+                    Log.v(TAG, "startWorkerThreads");
+                    if (!mResumed) {
+                        return;
+                    }
+
+                    startWorkerThreads();
+                }
+            });
+        }
+
+        @Override
+        public void onSurfaceDestroyed() {
+            mSurfaceCreated = false;
+        }
+    };
+
     private UdpReceiverThread.Callback mUdpReceiverCallback = new UdpReceiverThread.Callback() {
         @Override
         public void onConnected(final int width, final int height, final int codec, final int frameQueueSize, final int refreshRate) {
@@ -164,7 +189,9 @@ public class GvrActivity extends BaseActivity {
                     // TODO: Can we change refresh rate on Daydream?
 
                     //mRenderer.setFrameGeometry(width, height);
-                    mDecoderThread.onConnect(codec, frameQueueSize);
+                    if(mDecoderThread != null) {
+                        mDecoderThread.onConnect(codec, frameQueueSize);
+                    }
                 }
             });
         }
@@ -180,7 +207,9 @@ public class GvrActivity extends BaseActivity {
 
         @Override
         public void onDisconnect() {
-            mDecoderThread.onDisconnect();
+            if(mDecoderThread != null) {
+                mDecoderThread.onDisconnect();
+            }
         }
 
         @Override
@@ -200,8 +229,8 @@ public class GvrActivity extends BaseActivity {
         }
 
         @Override
-        public void onFrameDecoded(int index, MediaCodec.BufferInfo info) {
-            mRenderer.onFrameDecoded(index, info, mSurfaceView);
+        public void onFrameDecoded() {
+            mRenderer.onFrameDecoded(mSurfaceView);
         }
     };
 }

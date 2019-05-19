@@ -6,7 +6,7 @@ import android.content.pm.PackageManager;
 import android.util.Log;
 
 public class Utils {
-    public static boolean sEnableLog = true;
+    public static boolean sEnableLog = false;
 
     static {
         setFrameLogEnabled(sEnableLog);
@@ -30,6 +30,10 @@ public class Utils {
         if(sEnableLog) {
             Log.v(tag, s);
         }
+    }
+
+    public static void logi(String tag, String s) {
+        Log.i(tag, s);
     }
 
     public static String getVersionName(Context context){

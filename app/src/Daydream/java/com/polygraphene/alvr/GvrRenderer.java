@@ -21,8 +21,6 @@ import com.google.vr.ndk.base.GvrApi;
 import com.google.vr.ndk.base.SwapChain;
 
 import java.util.Arrays;
-import java.util.LinkedList;
-import java.util.Queue;
 import java.util.concurrent.TimeUnit;
 
 import javax.microedition.khronos.egl.EGLConfig;
@@ -42,20 +40,8 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     private final GLSurfaceView mSurfaceView;
     private GvrTracking mGvrTracking;
 
-    private boolean mResumed = false;
-
-    /**
-     * In most case, we can assume Activity.onPause is called after GLThread has left onSurfaceCreated().
-     * But, when startup on DaydreamView, onPause is called immediately after onResume, and also onSurfaceCreated() is called after onPause().
-     * To avoid wrong lifecycle management, we should wait until GLThread leaves onSurfaceCreate() when onPause() is called.
-     */
-    private boolean mSurfacePrepared = false;
-
     private UdpReceiverThread mReceiverThread;
     private DecoderThread mDecoderThread;
-
-    private final Object mWaiter = new Object();
-    private boolean mFrameAvailable = false;
 
     // Manages a queue of frames that our app renders to.
     private SwapChain mSwapChain;
@@ -68,7 +54,6 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
 
     // HMD device information which is sent to server.
     private DeviceDescriptor mDeviceDescriptor = new DeviceDescriptor();
-
 
     // Variables for onDrawFrame().
     private final float[] mHeadFromWorld = new float[16];
@@ -105,7 +90,11 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     private SurfaceTexture mSurfaceTexture;
     private Surface mSurface;
 
-    private Runnable mSurfaceCreatedListener;
+    public interface RendererCallback {
+        void onSurfaceCreated();
+        void onSurfaceDestroyed();
+    }
+    private RendererCallback mRendererCallback;
 
     private long mRenderedFrameIndex = -1;
 
@@ -120,28 +109,31 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         mGvrTracking = new GvrTracking(mApi.getNativeGvrContext());
     }
 
-    public void setOnSurfaceCreatedListener(Runnable runnable) {
-        mSurfaceCreatedListener = runnable;
+    public void setRendererCallback(RendererCallback callback) {
+        mRendererCallback = callback;
     }
 
     public void start() {
         Log.v(TAG, "start");
-        // Initialize native objects. It's important to call .shutdown to release resources.
-        mViewportList = mApi.createBufferViewportList();
-        mTmpViewport = mApi.createBufferViewport();
-        nativeHandle = createNative(mActivity.getAssets());
-        mSurfacePrepared = false;
+        mSurfaceView.queueEvent(new Runnable() {
+            @Override
+            public void run() {
+                // Initialize native objects. It's important to call .shutdown to release resources.
+                mViewportList = mApi.createBufferViewportList();
+                mTmpViewport = mApi.createBufferViewport();
+                nativeHandle = createNative(mActivity.getAssets());
+            }
+        });
     }
 
     @Override
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
+        // Called from GLThread
         Log.v(TAG, "onSurfaceCreated");
 
-        synchronized (mWaiter) {
-            initializeGlObjects();
-            mSurfacePrepared = true;
-            mWaiter.notifyAll();
-        }
+        initializeGlObjects();
+
+        mRendererCallback.onSurfaceCreated();
     }
 
     @Override
@@ -150,22 +142,32 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     }
 
     public void onResume() {
-        mResumed = true;
-        mRenderedFrameIndex = -1;
+        mSurfaceView.queueEvent(new Runnable() {
+            @Override
+            public void run() {
+                mRenderedFrameIndex = -1;
+            }
+        });
     }
 
-    public void setThreads(UdpReceiverThread receiverThread, DecoderThread decoderThread) {
-        mReceiverThread = receiverThread;
-        mDecoderThread = decoderThread;
+    public void setThreads(final UdpReceiverThread receiverThread, final DecoderThread decoderThread) {
+        mSurfaceView.queueEvent(new Runnable() {
+            @Override
+            public void run() {
+                mReceiverThread = receiverThread;
+                mDecoderThread = decoderThread;
+            }
+        });
     }
 
     public void onPause() {
-        synchronized (mWaiter) {
-            mResumed = false;
-            mReceiverThread = null;
-            mDecoderThread = null;
-            mWaiter.notifyAll();
-        }
+        mSurfaceView.queueEvent(new Runnable() {
+            @Override
+            public void run() {
+                mReceiverThread = null;
+                mDecoderThread = null;
+            }
+        });
     }
 
     public void shutdown() {
@@ -180,17 +182,8 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         mSwapChain = null;
         destroyNative(nativeHandle);
         nativeHandle = 0;
-    }
 
-    public void waitForSurfacePrepared() {
-        synchronized (mWaiter) {
-            while(!mSurfacePrepared) {
-                try {
-                    mWaiter.wait();
-                } catch (InterruptedException e) {
-                }
-            }
-        }
+        mRendererCallback.onSurfaceDestroyed();
     }
 
     public EGLContext getEGLContext() {
@@ -206,27 +199,29 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     }
 
     private boolean isConnected() {
-        synchronized (mWaiter) {
-            return mReceiverThread != null && mReceiverThread.isConnected() &&
-                    mDecoderThread != null && !mDecoderThread.isStopped();
-        }
+        return mReceiverThread != null && mReceiverThread.isConnected() &&
+                mDecoderThread != null && !mDecoderThread.isStopped();
     }
 
-    Runnable onFrameDecodedRunnable = new Runnable() {
+    private Runnable onFrameDecodedRunnable = new Runnable() {
         @Override
         public void run() {
-            mDecoderThread.releaseBuffer(true);
+            if (isConnected()) {
+                mDecoderThread.releaseBuffer(true);
+            }
         }
     };
 
-    public void onFrameDecoded(int index, MediaCodec.BufferInfo info, GLSurfaceView surfaceView) {
+    void onFrameDecoded(GLSurfaceView surfaceView) {
         surfaceView.queueEvent(onFrameDecodedRunnable);
     }
 
-    Runnable onFrameAvailableRunnable = new Runnable() {
+    private Runnable onFrameAvailableRunnable = new Runnable() {
         @Override
         public void run() {
-            mDecoderThread.onFrameAvailable();
+            if (isConnected()) {
+                mDecoderThread.onFrameAvailable();
+            }
         }
     };
 
@@ -276,11 +271,11 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         }
 
         long frameIndex = -1;
-        if(isConnected()) {
-            frameIndex = mDecoderThread.clearAvailable();
-            if(frameIndex != -1) {
-                mRenderedFrameIndex = frameIndex;
+        if (isConnected()) {
+            if (mDecoderThread.peekAvailable()) {
                 mSurfaceTexture.updateTexImage();
+                frameIndex = mDecoderThread.clearAvailable();
+                mRenderedFrameIndex = frameIndex;
 
                 float[] matrix = mFrameMap.get(frameIndex);
                 if (matrix != null) {
@@ -312,10 +307,6 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     }
 
     private void initializeGlObjects() {
-        if(!mResumed) {
-            Log.i(TAG, "initializeGlObjects is called on mResumed == false. Activity is already paused? Ignore.");
-            return;
-        }
         Log.v(TAG, "initializeGlObjects");
 
         mApi.initializeGl();
@@ -353,8 +344,6 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         mSurface = new Surface(mSurfaceTexture);
 
         buildDeviceDescriptor();
-
-        mSurfaceCreatedListener.run();
     }
 
     private void buildDeviceDescriptor() {
@@ -408,11 +397,9 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     }
 
     private void sendTracking() {
-        synchronized (mWaiter) {
-            if(isConnected()) {
-                mApi.getHeadSpaceFromStartSpaceTransform(mHeadFromWorld2, System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(50));
-                sendTrackingLocked(mHeadFromWorld2);
-            }
+        if (isConnected()) {
+            mApi.getHeadSpaceFromStartSpaceTransform(mHeadFromWorld2, System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(50));
+            sendTrackingLocked(mHeadFromWorld2);
         }
     }
 
