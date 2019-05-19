@@ -235,9 +235,7 @@ void UdpManager::initialize(JNIEnv *env, jobject instance, jint port, jstring de
 
     initializeJNICallbacks(env, instance);
 
-    m_nalParser = std::make_shared<NALParser>(env, [this](JNIEnv *env, jobject nal){
-        env->CallVoidMethod(m_instance, mPushNALMethodID, nal);
-    });
+    m_nalParser = std::make_shared<NALParser>(env, instance);
 
     //
     // Fill hello message
@@ -706,7 +704,6 @@ void UdpManager::initializeJNICallbacks(JNIEnv *env, jobject instance) {
     mOnConnectMethodID = env->GetMethodID(clazz, "onConnected", "(IIIII)V");
     mOnChangeSettingsMethodID = env->GetMethodID(clazz, "onChangeSettings", "(III)V");
     mOnDisconnectedMethodID = env->GetMethodID(clazz, "onDisconnected", "()V");
-    mPushNALMethodID = env->GetMethodID(clazz, "pushNAL", "(Lcom/polygraphene/alvr/NAL;)V");
 
     env->DeleteLocalRef(clazz);
 }
@@ -774,16 +771,6 @@ Java_com_polygraphene_alvr_UdpReceiverThread_sendNative(JNIEnv *env, jobject ins
                                                         jlong nativeHandle, jlong nativeBuffer,
                                                         jint bufferLength) {
     return reinterpret_cast<UdpManager *>(nativeHandle)->send(reinterpret_cast<char*>(nativeBuffer), bufferLength);
-}
-//
-// Native implementation of NALParser interface
-//
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_UdpReceiverThread_recycleNalNative(JNIEnv *env, jobject instance, jlong nativeHandle,
-                                                        jobject nal) {
-    reinterpret_cast<UdpManager *>(nativeHandle)->getNalParser().recycle(env, nal);
 }
 
 extern "C"

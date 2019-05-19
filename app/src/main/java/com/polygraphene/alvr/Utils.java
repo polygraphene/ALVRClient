@@ -36,6 +36,11 @@ public class Utils {
         Log.i(tag, s);
     }
 
+    public static void loge(String tag, String s) {
+        Log.e(tag, s);
+    }
+
+
     public static String getVersionName(Context context){
         try {
             PackageInfo pInfo = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);

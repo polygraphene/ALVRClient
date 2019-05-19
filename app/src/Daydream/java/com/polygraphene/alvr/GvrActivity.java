@@ -49,7 +49,7 @@ public class GvrActivity extends BaseActivity {
     // Notify components when there are lifecycle changes.
     @Override
     protected void onResume() {
-        Log.v(TAG, "onResume: enter");
+        Utils.logi(TAG, "onResume: enter.");
 
         mResumed = true;
 
@@ -73,28 +73,30 @@ public class GvrActivity extends BaseActivity {
                     | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                     | View.SYSTEM_UI_FLAG_FULLSCREEN
                     | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+
+        Utils.logi(TAG, "onResume: leave.");
     }
 
     @MainThread
     private void startWorkerThreads() {
-        Log.v(TAG, "startWorkerThreads: enter.");
+        Utils.logi(TAG, "startWorkerThreads: enter.");
         mReceiverThread = new UdpReceiverThread(mUdpReceiverCallback);
 
         ConnectionStateHolder.ConnectionState connectionState = new ConnectionStateHolder.ConnectionState();
         ConnectionStateHolder.loadConnectionState(GvrActivity.this, connectionState);
 
         if(connectionState.serverAddr != null && connectionState.serverPort != 0) {
-            Log.v(TAG, "Load connection state: " + connectionState.serverAddr + " " + connectionState.serverPort);
+            Utils.logi(TAG, "Load connection state: " + connectionState.serverAddr + " " + connectionState.serverPort);
             mReceiverThread.recoverConnectionState(connectionState.serverAddr, connectionState.serverPort);
         }
 
-        mDecoderThread = new DecoderThread(mReceiverThread, mRenderer.getSurface(), GvrActivity.this, mDecoderCallback);
+        mDecoderThread = new DecoderThread(mRenderer.getSurface(), GvrActivity.this, mDecoderCallback);
 
         try {
             mDecoderThread.start();
 
             if (!mReceiverThread.start(mRenderer.getEGLContext(), GvrActivity.this, mRenderer.getDeviceDescriptor(), 0, mDecoderThread)) {
-                Log.e(TAG, "FATAL: Initialization of ReceiverThread failed.");
+                Utils.loge(TAG, "FATAL: Initialization of ReceiverThread failed.");
                 return;
             }
         } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
@@ -103,12 +105,12 @@ public class GvrActivity extends BaseActivity {
 
         mRenderer.setThreads(mReceiverThread, mDecoderThread);
 
-        Log.v(TAG, "startWorkerThreads: Done.");
+        Utils.logi(TAG, "startWorkerThreads: Done.");
     }
 
     @Override
     protected void onPause() {
-        Log.v(TAG, "onPause: enter. waitForSurfacePrepared.");
+        Utils.logi(TAG, "onPause: enter.");
 
         super.onPause();
 
@@ -117,15 +119,15 @@ public class GvrActivity extends BaseActivity {
         mGvrLayout.onPause();
 
         // Stop worker threads.
-        Log.v(TAG, "VrThread.onPause: Stopping worker threads.");
+        Utils.logi(TAG, "onPause: Stopping worker threads.");
         // DecoderThread must be stopped before ReceiverThread and setting mResumed=false.
         if (mDecoderThread != null) {
-            Log.v(TAG, "VrThread.onPause: Stopping DecoderThread.");
+            Utils.logi(TAG, "onPause: Stopping DecoderThread.");
             mDecoderThread.stopAndWait();
             mDecoderThread = null;
         }
         if (mReceiverThread != null) {
-            Log.v(TAG, "VrThread.onPause: Stopping ReceiverThread.");
+            Utils.logi(TAG, "onPause: Stopping ReceiverThread.");
             mReceiverThread.stopAndWait();
             mReceiverThread = null;
         }
@@ -134,25 +136,26 @@ public class GvrActivity extends BaseActivity {
         // Because SurfaceView.onPause() wait for the exit of Renderer.onDraw() call.
         mRenderer.onPause();
 
-        Log.v(TAG, "Call mSurfaceView.onPause");
+        Utils.logi(TAG, "Call mSurfaceView.onPause");
         mSurfaceView.onPause();
 
-        Log.v(TAG, "onPause: exit");
+        Utils.logi(TAG, "onPause: leave.");
     }
 
     @Override
     protected void onStart() {
-        Log.v(TAG, "onStart");
+        Utils.logi(TAG, "onStart: enter.");
         super.onStart();
         mRenderer.start();
+        Utils.logi(TAG, "onStart: leave.");
     }
 
     @Override
     protected void onStop() {
-        Log.v(TAG, "onStop");
+        Log.v(TAG, "onStop: enter.");
         super.onStop();
         mRenderer.shutdown();
-        Log.v(TAG, "onStop: exit");
+        Log.v(TAG, "onStop: leave.");
     }
 
     private GvrRenderer.RendererCallback mRendererCallback = new GvrRenderer.RendererCallback() {
@@ -162,8 +165,8 @@ public class GvrActivity extends BaseActivity {
                 @Override
                 public void run() {
                     mSurfaceCreated = true;
-                    Log.v(TAG, "startWorkerThreads");
                     if (!mResumed) {
+                        Log.i(TAG, "Cancel to start worker thread because Activity is not resumed.");
                         return;
                     }
 
@@ -230,7 +233,7 @@ public class GvrActivity extends BaseActivity {
 
         @Override
         public void onFrameDecoded() {
-            mRenderer.onFrameDecoded(mSurfaceView);
+            mRenderer.onFrameDecoded();
         }
     };
 }

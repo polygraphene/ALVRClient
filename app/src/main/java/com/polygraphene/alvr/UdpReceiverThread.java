@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 
-class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.TrackingCallback {
+class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCallback {
     private static final String TAG = "UdpReceiverThread";
 
     static {
@@ -46,6 +46,7 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
     private Callback mCallback;
 
     public interface NALCallback {
+        NAL obtainNAL(int length);
         void pushNAL(NAL nal);
     }
 
@@ -71,6 +72,15 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
     public void recoverConnectionState(String serverAddress, int serverPort) {
         mPreviousServerAddress = serverAddress;
         mPreviousServerPort = serverPort;
+    }
+
+    public void setSinkPrepared(boolean prepared) {
+        synchronized (mWaiter) {
+            if (mNativeHandle == 0) {
+                return;
+            }
+            setSinkPreparedNative(mNativeHandle, prepared);
+        }
     }
 
     public boolean start(EGLContext mEGLContext, Activity activity, DeviceDescriptor deviceDescriptor, int cameraTexture, NALCallback nalCallback) {
@@ -229,13 +239,13 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
     }
 
     @SuppressWarnings("unused")
+    public NAL obtainNAL(int length) {
+        return mNALCallback.obtainNAL(length);
+    }
+
+    @SuppressWarnings("unused")
     public void pushNAL(NAL nal) {
-        synchronized (mWaiter) {
-            if (mNativeHandle == 0) {
-                return;
-            }
-            mNALCallback.pushNAL(nal);
-        }
+        mNALCallback.pushNAL(nal);
     }
 
     private native long initializeSocket(int port, String deviceName, String[] broadcastAddrList,
@@ -251,26 +261,5 @@ class UdpReceiverThread extends ThreadBase implements NALParser, TrackingThread.
 
     private native String getServerAddress(long nativeHandle);
     private native int getServerPort(long nativeHandle);
-
-    //
-    // NALParser interface
-    //
-
-    @Override
-    public void recycleNal(NAL nal) {
-        recycleNalNative(mNativeHandle, nal);
-    }
-
-    @Override
-    public void setSinkPrepared(boolean prepared) {
-        synchronized (mWaiter) {
-            if (mNativeHandle == 0) {
-                return;
-            }
-            setSinkPreparedNative(mNativeHandle, prepared);
-        }
-    }
-
-    private native void recycleNalNative(long nativeHandle, NAL nal);
     private native void setSinkPreparedNative(long nativeHandle, boolean prepared);
 }

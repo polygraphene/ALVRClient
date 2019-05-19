@@ -89,6 +89,7 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
 
     private SurfaceTexture mSurfaceTexture;
     private Surface mSurface;
+    private EGLContext mEglContext;
 
     public interface RendererCallback {
         void onSurfaceCreated();
@@ -114,10 +115,10 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     }
 
     public void start() {
-        Log.v(TAG, "start");
         mSurfaceView.queueEvent(new Runnable() {
             @Override
             public void run() {
+                Utils.logi(TAG, "start");
                 // Initialize native objects. It's important to call .shutdown to release resources.
                 mViewportList = mApi.createBufferViewportList();
                 mTmpViewport = mApi.createBufferViewport();
@@ -129,7 +130,7 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     @Override
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
         // Called from GLThread
-        Log.v(TAG, "onSurfaceCreated");
+        Utils.logi(TAG, "onSurfaceCreated");
 
         initializeGlObjects();
 
@@ -138,13 +139,14 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
 
     @Override
     public void onSurfaceChanged(GL10 gl, int width, int height) {
-        Log.v(TAG, "onSurfaceChanged");
+        Utils.logi(TAG, "onSurfaceChanged");
     }
 
     public void onResume() {
         mSurfaceView.queueEvent(new Runnable() {
             @Override
             public void run() {
+                Utils.logi(TAG, "onResume");
                 mRenderedFrameIndex = -1;
             }
         });
@@ -154,16 +156,22 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         mSurfaceView.queueEvent(new Runnable() {
             @Override
             public void run() {
+                Utils.logi(TAG, "setThreads");
                 mReceiverThread = receiverThread;
                 mDecoderThread = decoderThread;
             }
         });
     }
 
+    void onFrameDecoded() {
+        mSurfaceView.queueEvent(onFrameDecodedRunnable);
+    }
+
     public void onPause() {
         mSurfaceView.queueEvent(new Runnable() {
             @Override
             public void run() {
+                Utils.logi(TAG, "onPause");
                 mReceiverThread = null;
                 mDecoderThread = null;
             }
@@ -171,7 +179,7 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     }
 
     public void shutdown() {
-        Log.v(TAG, "shutdown");
+        Utils.logi(TAG, "shutdown.");
         mViewportList.shutdown();
         mViewportList = null;
         mTmpViewport.shutdown();
@@ -187,7 +195,7 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     }
 
     public EGLContext getEGLContext() {
-        return EGL14.eglGetCurrentContext();
+        return mEglContext;
     }
 
     public Surface getSurface() {
@@ -211,10 +219,6 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
             }
         }
     };
-
-    void onFrameDecoded(GLSurfaceView surfaceView) {
-        surfaceView.queueEvent(onFrameDecodedRunnable);
-    }
 
     private Runnable onFrameAvailableRunnable = new Runnable() {
         @Override
@@ -289,7 +293,7 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
                 }
                 renderNative(nativeHandle, mLeftMvp, mRightMvp, mLeftViewport, mRightViewport, false, mRenderedFrameIndex);
             } else {
-                mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\nConnected.");
+                mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\nConnected.\nPlease wait for start.");
                 renderNative(nativeHandle, mLeftMvp, mRightMvp, mLeftViewport, mRightViewport, true, 0);
             }
         } else {
@@ -335,13 +339,12 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         mSurfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
             @Override
             public void onFrameAvailable(SurfaceTexture surfaceTexture) {
-                if (Utils.sEnableLog) {
-                    Log.v(TAG, "onFrameAvailable");
-                }
+                Utils.log(TAG, "onFrameAvailable");
                 mSurfaceView.queueEvent(onFrameAvailableRunnable);
             }
         });
         mSurface = new Surface(mSurfaceTexture);
+        mEglContext = EGL14.eglGetCurrentContext();
 
         buildDeviceDescriptor();
     }

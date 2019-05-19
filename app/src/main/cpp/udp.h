@@ -127,7 +127,6 @@ private:
     jmethodID mOnConnectMethodID;
     jmethodID mOnChangeSettingsMethodID;
     jmethodID mOnDisconnectedMethodID;
-    jmethodID mPushNALMethodID;
 
     //
     // Send buffer

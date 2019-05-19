@@ -9,45 +9,31 @@
 #include "nal.h"
 #include "packet_types.h"
 
-static const int MAXIMUM_NAL_BUFFER = 100;
-static const int MAXIMUM_NAL_OBJECT = 200;
-
 static const int NAL_TYPE_SPS = 7;
 
 static const int H265_NAL_TYPE_VPS = 32;
 
 
-NALParser::NALParser(JNIEnv *env, std::function<void(JNIEnv *env, jobject nal)> nalCallback) {
+NALParser::NALParser(JNIEnv *env, jobject udpManager) {
     LOGE("NALParser initialized %p", this);
-    pthread_cond_init(&m_cond_nonzero, NULL);
 
     m_env = env;
-
-    mNalCallback = nalCallback;
+    mUdpManager = env->NewGlobalRef(udpManager);
 
     jclass NAL_clazz = env->FindClass("com/polygraphene/alvr/NAL");
-    jmethodID NAL_ctor = env->GetMethodID(NAL_clazz, "<init>", "()V");
-
     NAL_length = env->GetFieldID(NAL_clazz, "length", "I");
     NAL_frameIndex = env->GetFieldID(NAL_clazz, "frameIndex", "J");
     NAL_buf = env->GetFieldID(NAL_clazz, "buf", "[B");
+    env->DeleteLocalRef(NAL_clazz);
 
-    for (int i = 0; i < MAXIMUM_NAL_OBJECT; i++) {
-        jobject nal = env->NewObject(NAL_clazz, NAL_ctor);
-        jobject tmp = nal;
-        nal = env->NewGlobalRef(nal);
-        env->DeleteLocalRef(tmp);
-
-        m_nalRecycleList.push_back(nal);
-    }
+    jclass udpManagerClazz = env->FindClass("com/polygraphene/alvr/UdpReceiverThread");
+    mObtainNALMethodID = env->GetMethodID(udpManagerClazz, "obtainNAL", "(I)Lcom/polygraphene/alvr/NAL;");
+    mPushNALMethodID = env->GetMethodID(udpManagerClazz, "pushNAL", "(Lcom/polygraphene/alvr/NAL;)V");
+    env->DeleteLocalRef(udpManagerClazz);
 }
 
 NALParser::~NALParser() {
-    for (auto nal : m_nalRecycleList) {
-        m_env->DeleteGlobalRef(nal);
-    }
-    m_nalRecycleList.clear();
-    pthread_cond_destroy(&m_cond_nonzero);
+    m_env->DeleteGlobalRef(mUdpManager);
 }
 
 void NALParser::setCodec(int codec) {
@@ -94,52 +80,29 @@ bool NALParser::processPacket(VideoFrame *packet, int packetSize, bool &fecFailu
     return false;
 }
 
-void NALParser::recycle(JNIEnv *env, jobject nal) {
-    MutexLock lock(m_nalMutex);
-    m_nalRecycleList.push_front(env->NewGlobalRef(nal));
-}
-
 void NALParser::push(const char *buffer, int length, uint64_t frameIndex) {
     jobject nal;
     jbyteArray buf;
-    {
-        MutexLock lock(m_nalMutex);
 
-        if (m_nalRecycleList.size() == 0) {
-            LOGE("NAL Queue is full (nalRecycleList is empty).");
-            return;
-        }
-        nal = m_nalRecycleList.front();
-        m_nalRecycleList.pop_front();
-    }
-
-    buf = (jbyteArray) m_env->GetObjectField(nal, NAL_buf);
-    if (buf == NULL) {
-        buf = m_env->NewByteArray(length);
-        m_env->SetObjectField(nal, NAL_buf, buf);
-    } else {
-        if (m_env->GetArrayLength(buf) < length) {
-            // Expand array
-            m_env->DeleteLocalRef(buf);
-            buf = m_env->NewByteArray(length);
-            m_env->SetObjectField(nal, NAL_buf, buf);
-        }
+    nal = m_env->CallObjectMethod(mUdpManager, mObtainNALMethodID, static_cast<jint>(length));
+    if (nal == nullptr) {
+        LOGE("NAL Queue is full.");
+        return;
     }
 
     m_env->SetIntField(nal, NAL_length, length);
     m_env->SetLongField(nal, NAL_frameIndex, frameIndex);
 
+    buf = (jbyteArray) m_env->GetObjectField(nal, NAL_buf);
     char *cbuf = (char *) m_env->GetByteArrayElements(buf, NULL);
 
     memcpy(cbuf, buffer, length);
     m_env->ReleaseByteArrayElements(buf, (jbyte *) cbuf, 0);
     m_env->DeleteLocalRef(buf);
 
-    pushNal(nal);
-}
+    m_env->CallVoidMethod(mUdpManager, mPushNALMethodID, nal);
 
-void NALParser::pushNal(jobject nal) {
-    mNalCallback(m_env, nal);
+    m_env->DeleteLocalRef(nal);
 }
 
 bool NALParser::fecFailure() {

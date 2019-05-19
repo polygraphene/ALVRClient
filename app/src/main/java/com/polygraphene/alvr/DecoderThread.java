@@ -27,7 +27,6 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
     private static final String VIDEO_FORMAT_H265 = "video/hevc";
     private String mFormat = VIDEO_FORMAT_H265;
 
-    private NALParser mNalParser;
     private MediaCodec mDecoder = null;
     private Surface mSurface;
 
@@ -40,8 +39,7 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
 
     private static final int NAL_QUEUE_MAX = 100;
 
-    private Queue<NAL> mNalQueue = new LinkedList<>();
-
+    private NalQueue mNalQueue = new NalQueue();
     private OutputFrameQueue mQueue;
 
     private static final int MESSAGE_PUSH_NAL = 1;
@@ -90,9 +88,7 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
 
     private final Queue<Integer> mAvailableInputs = new LinkedList<>();
 
-    public DecoderThread(NALParser nalParser,
-                         Surface surface, Context context, DecoderCallback callback) {
-        mNalParser = nalParser;
+    public DecoderThread(Surface surface, Context context, DecoderCallback callback) {
         mSurface = surface;
         mContext = context;
         mQueue = new OutputFrameQueue();
@@ -119,12 +115,8 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
                 Utils.log(TAG, "MESSAGE_PUSH_NAL");
                 NAL nal = (NAL) msg.obj;
 
-                if (mNalQueue.size() < NAL_QUEUE_MAX) {
-                    detectNALType(nal);
-                    mNalQueue.add(nal);
-                } else {
-                    Utils.log(TAG, "NAL Queue is full. Capacity=" + NAL_QUEUE_MAX);
-                }
+                detectNALType(nal);
+                mNalQueue.add(nal);
                 pushNALInternal();
                 return true;
             case MESSAGE_INPUT_BUFFER_AVAILABLE:
@@ -144,7 +136,6 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
         }
         return false;
     }
-
 
     protected void run() {
         try {
@@ -359,7 +350,6 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
         }
         if (consumed) {
             mNalQueue.remove();
-            mNalParser.recycleNal(nal);
         }
     }
 
@@ -388,7 +378,12 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
     }
 
     @Override
-    public void pushNAL(final NAL nal) {
+    public NAL obtainNAL(int length) {
+        return mNalQueue.obtain(length);
+    }
+
+    @Override
+    public void pushNAL(NAL nal) {
         Message message = mHandler.obtainMessage(MESSAGE_PUSH_NAL, nal);
         mHandler.sendMessage(message);
     }

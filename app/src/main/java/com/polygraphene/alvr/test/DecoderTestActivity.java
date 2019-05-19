@@ -1,6 +1,5 @@
 package com.polygraphene.alvr.test;
 
-import android.media.MediaCodec;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -10,13 +9,11 @@ import android.widget.TextView;
 
 import com.polygraphene.alvr.DecoderThread;
 import com.polygraphene.alvr.NAL;
-import com.polygraphene.alvr.NALParser;
 import com.polygraphene.alvr.R;
 
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.LinkedList;
-import java.util.List;
 
 public class DecoderTestActivity extends AppCompatActivity {
 
@@ -61,7 +58,7 @@ public class DecoderTestActivity extends AppCompatActivity {
                     e.printStackTrace();
                 }
 
-                decoderThread = new DecoderThread(dummyNALParser, holder.getSurface(), DecoderTestActivity.this, mDecoderCallback);
+                decoderThread = new DecoderThread(holder.getSurface(), DecoderTestActivity.this, mDecoderCallback);
                 decoderThread.start();
                 surfaceView.postDelayed(new Runnable() {
                     @Override
@@ -81,7 +78,7 @@ public class DecoderTestActivity extends AppCompatActivity {
                             decoderThread.stopAndWait();
                             Log.v("DecoderTestActivity", "Next loop:"+ mLoop + ". stop ok");
 
-                            decoderThread = new DecoderThread(dummyNALParser, holder.getSurface(), DecoderTestActivity.this, mDecoderCallback);
+                            decoderThread = new DecoderThread(holder.getSurface(), DecoderTestActivity.this, mDecoderCallback);
                             decoderThread.start();
                             Log.v("DecoderTestActivity", "Next loop:"+ mLoop + ". started");
                         }
@@ -148,16 +145,4 @@ public class DecoderTestActivity extends AppCompatActivity {
             }
         }
     }
-
-    private NALParser dummyNALParser = new NALParser() {
-        @Override
-        public void recycleNal(NAL nal) {
-
-        }
-
-        @Override
-        public void setSinkPrepared(boolean prepared) {
-
-        }
-    };
 }
