@@ -19,9 +19,6 @@ class VrThread extends Thread {
     private SurfaceTexture mSurfaceTexture;
     private Surface mSurface;
 
-    private final Object mWaiter = new Object();
-    private boolean mFrameAvailable = false;
-
     private LoadingTexture mLoadingTexture = new LoadingTexture();
 
     // Worker threads
@@ -39,7 +36,7 @@ class VrThread extends Thread {
 
     public void onSurfaceCreated(final Surface surface) {
         Log.v(TAG, "VrThread.onSurfaceCreated.");
-        send(new Runnable() {
+        post(new Runnable() {
             @Override
             public void run() {
                 mOvrContext.onSurfaceCreated(surface);
@@ -49,7 +46,7 @@ class VrThread extends Thread {
 
     public void onSurfaceChanged(final Surface surface) {
         Log.v(TAG, "VrThread.onSurfaceChanged.");
-        send(new Runnable() {
+        post(new Runnable() {
             @Override
             public void run() {
                 mOvrContext.onSurfaceChanged(surface);
@@ -59,7 +56,7 @@ class VrThread extends Thread {
 
     public void onSurfaceDestroyed() {
         Log.v(TAG, "VrThread.onSurfaceDestroyed.");
-        send(new Runnable() {
+        post(new Runnable() {
             @Override
             public void run() {
                 mOvrContext.onSurfaceDestroyed();
@@ -68,15 +65,11 @@ class VrThread extends Thread {
     }
 
     public void onResume() {
-        synchronized (mWaiter) {
-            mResumed = true;
-            mWaiter.notifyAll();
-        }
-
-        send(new Runnable() {
+        Log.v(TAG, "VrThread.onResume: Starting worker threads.");
+        post(new Runnable() {
             @Override
             public void run() {
-                Log.v(TAG, "VrThread.onResume: Starting worker threads.");
+                mResumed = true;
 
                 mReceiverThread = new UdpReceiverThread(mUdpReceiverCallback);
 
@@ -93,14 +86,14 @@ class VrThread extends Thread {
                 // To avoid deadlock caused by it, we need to flush last output.
                 mSurfaceTexture.updateTexImage();
 
-                mDecoderThread = new DecoderThread(mReceiverThread, mSurface, mActivity, mDecoderCallback);
+                mDecoderThread = new DecoderThread(mSurface, mActivity, mDecoderCallback);
 
                 try {
                     mDecoderThread.start();
 
                     DeviceDescriptor deviceDescriptor = new DeviceDescriptor();
                     mOvrContext.getDeviceDescriptor(deviceDescriptor);
-                    if (!mReceiverThread.start(mEGLContext, mActivity, deviceDescriptor, mOvrContext.getCameraTexture())) {
+                    if (!mReceiverThread.start(mEGLContext, mActivity, deviceDescriptor, mOvrContext.getCameraTexture(), mDecoderThread)) {
                         Log.e(TAG, "FATAL: Initialization of ReceiverThread failed.");
                         return;
                     }
@@ -117,31 +110,32 @@ class VrThread extends Thread {
 
     public void onPause() {
         Log.v(TAG, "VrThread.onPause: Stopping worker threads.");
-        // DecoderThread must be stopped before ReceiverThread and setting mResumed=false.
-        if (mDecoderThread != null) {
-            Log.v(TAG, "VrThread.onPause: Stopping DecoderThread.");
-            mDecoderThread.stopAndWait();
-        }
-        if (mReceiverThread != null) {
-            Log.v(TAG, "VrThread.onPause: Stopping ReceiverThread.");
-            mReceiverThread.stopAndWait();
-        }
-        // VrThread rendering loop calls mDecoderThread.render and which captures mWaiter lock.
-        // So we need to stop DecoderThread before gain the lock.
-        synchronized (mWaiter) {
-            mResumed = false;
-            mWaiter.notifyAll();
-        }
-
-        Log.v(TAG, "VrThread.onPause: mVrContext.onPause().");
-        send(new Runnable() {
+        post(new Runnable() {
             @Override
             public void run() {
+                // DecoderThread must be stopped before ReceiverThread and setting mResumed=false.
+                if (mDecoderThread != null) {
+                    Log.v(TAG, "VrThread.onPause: Stopping DecoderThread.");
+                    mDecoderThread.stopAndWait();
+                }
+                if (mReceiverThread != null) {
+                    Log.v(TAG, "VrThread.onPause: Stopping ReceiverThread.");
+                    mReceiverThread.stopAndWait();
+                }
+                mResumed = false;
+
                 mOvrContext.onPause();
             }
         });
         Log.v(TAG, "VrThread.onPause: All worker threads has stopped.");
     }
+
+    private Runnable mOnFrameDecodedRunnable = new Runnable() {
+        @Override
+        public void run() {
+            mDecoderThread.releaseBuffer(true);
+        }
+    };
 
     // Called from onDestroy
     @Override
@@ -194,10 +188,7 @@ class VrThread extends Thread {
             @Override
             public void onFrameAvailable(SurfaceTexture surfaceTexture) {
                 Utils.log("VrThread: waitFrame: onFrameAvailable is called.");
-                synchronized (mWaiter) {
-                    mFrameAvailable = true;
-                    mWaiter.notifyAll();
-                }
+                mDecoderThread.onFrameAvailable();
             }
         });
         mSurface = new Surface(mSurfaceTexture);
@@ -221,7 +212,7 @@ class VrThread extends Thread {
     }
 
     private void render() {
-        if (mReceiverThread.isConnected() && mDecoderThread.isFrameAvailable() && mReceiverThread.getErrorMessage() == null) {
+        if (mReceiverThread.isConnected() && mReceiverThread.getErrorMessage() == null) {
             long renderedFrameIndex = waitFrame();
             if (renderedFrameIndex != -1) {
                 mOvrContext.render(renderedFrameIndex);
@@ -246,26 +237,12 @@ class VrThread extends Thread {
     }
 
     private long waitFrame() {
-        synchronized (mWaiter) {
-            mFrameAvailable = false;
-            long frameIndex = mDecoderThread.render();
-            if (frameIndex == -1) {
-                return -1;
-            }
-            while (!mFrameAvailable && mResumed) {
-                try {
-                    mWaiter.wait();
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-            if(!mResumed) {
-                Log.i(TAG, "Exit waitFrame. mResumed=false.");
-                return -1;
-            }
+        boolean available = mDecoderThread.peekAvailable();
+        if (available) {
             mSurfaceTexture.updateTexImage();
-            return frameIndex;
+            return mDecoderThread.clearAvailable();
         }
+        return -1;
     }
 
     // Called on VrThread.
@@ -293,7 +270,6 @@ class VrThread extends Thread {
         @Override
         public void onChangeSettings(int enableTestMode, int suspend, int frameQueueSize) {
             mOvrContext.onChangeSettings(enableTestMode, suspend);
-            mDecoderThread.setFrameQueueSize(frameQueueSize);
         }
 
         @Override
@@ -328,6 +304,11 @@ class VrThread extends Thread {
             mDecoderPrepared = false;
             Log.i(TAG, "DecoderCallback.onDestroy. mVrMode=" + mVrMode + " mDecoderPrepared=" + mDecoderPrepared);
             mReceiverThread.setSinkPrepared(mVrMode && mDecoderPrepared);
+        }
+
+        @Override
+        public void onFrameDecoded() {
+            post(mOnFrameDecodedRunnable);
         }
     };
 }

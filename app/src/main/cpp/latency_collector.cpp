@@ -55,7 +55,10 @@ void LatencyCollector::submit(uint64_t frameIndex) {
 
     submitNewFrame();
 
-    FrameLog(frameIndex, "totalLatency=%llu transportLatency=%llu decodeLatency=%llu", latency[0], latency[1], latency[2]);
+    FrameLog(frameIndex, "totalLatency=%.1f transportLatency=%.1f decodeLatency=%.1f renderLatency1=%.1f renderLatency2=%.1f"
+            , latency[0] / 1000.0, latency[1] / 1000.0, latency[2] / 1000.0
+            , (timestamp.rendered2 - timestamp.decoderOutput) / 1000.0
+            , (timestamp.submit - timestamp.rendered2) / 1000.0);
 }
 
 void LatencyCollector::updateLatency(uint64_t *latency) {

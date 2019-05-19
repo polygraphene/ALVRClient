@@ -111,8 +111,8 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
 
     @Override
     public void stopAndWait() {
+        mTrackingThread.stopAndWait();
         synchronized (mWaiter) {
-            mTrackingThread.stopAndWait();
             interruptNative(mNativeHandle);
         }
         super.stopAndWait();

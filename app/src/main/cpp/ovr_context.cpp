@@ -447,10 +447,8 @@ void OvrContext::render(uint64_t renderedFrameIndex) {
         }
     }
 
-    FrameLog(renderedFrameIndex,
-             "Frame latency is %lu us. foundFrameIndex=%lu LatestFrameIndex=%lu",
-             getTimestampUs() - frame->fetchTime,
-             frame->frameIndex, FrameIndex);
+    FrameLog(renderedFrameIndex, "Frame latency is %lu us.",
+             getTimestampUs() - frame->fetchTime);
 
 // Render eye images and setup the primary layer using ovrTracking2.
     const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java,

@@ -21,7 +21,7 @@ public class OutputFrameQueue {
     private Queue<Element> mUnusedList = new LinkedList<>();
     private MediaCodec mCodec;
     private FrameMap mFrameMap = new FrameMap();
-    private final int mQueueSize = 3;
+    private final int mQueueSize = 2;
     private Element mRendering = null;
     private Element mAvailable = null;
 
@@ -66,7 +66,6 @@ public class OutputFrameQueue {
 
         LatencyCollector.DecoderOutput(foundFrameIndex);
         Utils.frameLog(foundFrameIndex, "Current queue state=" + mQueue.size() + "/" + mQueueSize + " pushed index=" + index);
-        notifyAll();
     }
 
     synchronized public long render(boolean render) {
@@ -134,14 +133,14 @@ public class OutputFrameQueue {
     synchronized public void stop() {
         Log.i(TAG, "Stopping.");
         mStopped = true;
+        mUnusedList.addAll(mQueue);
         mQueue.clear();
-        notifyAll();
     }
 
     synchronized public void reset() {
         Log.i(TAG, "Resetting.");
         mStopped = false;
+        mUnusedList.addAll(mQueue);
         mQueue.clear();
-        notifyAll();
     }
 }
