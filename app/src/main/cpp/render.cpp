@@ -79,7 +79,7 @@ OpenGLExtensions_t glExtensions;
 
 void EglInitExtensions(bool *multi_view) {
     const char *allExtensions = (const char *) glGetString(GL_EXTENSIONS);
-    if (allExtensions != NULL) {
+    if (allExtensions != nullptr) {
         glExtensions.multi_view = strstr(allExtensions, "GL_OVR_multiview2") &&
                                   strstr(allExtensions,
                                          "GL_OVR_multiview_multisampled_render_to_texture");
@@ -147,34 +147,33 @@ static const char *GlFrameBufferStatusString(GLenum status) {
 
 static const char VERTEX_SHADER[] =
         "#ifndef DISABLE_MULTIVIEW\n"
-                "	#define DISABLE_MULTIVIEW 0\n"
+                "    #define DISABLE_MULTIVIEW 0\n"
                 "#endif\n"
                 "#define NUM_VIEWS 2\n"
                 "#if defined( GL_OVR_multiview2 ) && ! DISABLE_MULTIVIEW\n"
-                "	#extension GL_OVR_multiview2 : enable\n"
-                "	layout(num_views=NUM_VIEWS) in;\n"
-                "	#define VIEW_ID gl_ViewID_OVR\n"
+                "    #extension GL_OVR_multiview2 : enable\n"
+                "    layout(num_views=NUM_VIEWS) in;\n"
+                "    #define VIEW_ID gl_ViewID_OVR\n"
                 "#else\n"
-                "	uniform lowp int ViewID;\n"
-                "	#define VIEW_ID ViewID\n"
+                "    uniform lowp int ViewID;\n"
+                "    #define VIEW_ID ViewID\n"
                 "#endif\n"
                 "in vec3 vertexPosition;\n"
                 "in vec4 vertexColor;\n"
                 "in mat4 vertexTransform;\n"
                 "in vec2 vertexUv;\n"
                 "uniform mat4 mvpMatrix[NUM_VIEWS];\n"
-                "uniform lowp int EnableTestMode;\n"
                 "out vec4 fragmentColor;\n"
                 "out vec2 uv;\n"
                 "void main()\n"
                 "{\n"
-                "	gl_Position = mvpMatrix[VIEW_ID] * vec4( vertexPosition, 1.0 );\n"
-                "   if(uint(VIEW_ID) == uint(0)){\n"
-                "      uv = vec2(vertexUv.x, vertexUv.y);\n"
-                "   }else{\n"
-                "      uv = vec2(vertexUv.x + 0.5, vertexUv.y);\n"
-                "   }\n"
-                "   fragmentColor = vertexColor;\n"
+                "    gl_Position = mvpMatrix[VIEW_ID] * vec4( vertexPosition, 1.0 );\n"
+                "    if(uint(VIEW_ID) == uint(0)){\n"
+                "        uv = vec2(vertexUv.x, vertexUv.y);\n"
+                "    }else{\n"
+                "        uv = vec2(vertexUv.x + 0.5, vertexUv.y);\n"
+                "    }\n"
+                "    fragmentColor = vertexColor;\n"
                 "}\n";
 
 static const char FRAGMENT_SHADER[] =
@@ -184,14 +183,9 @@ static const char FRAGMENT_SHADER[] =
                 "in lowp vec4 fragmentColor;\n"
                 "out lowp vec4 outColor;\n"
                 "uniform samplerExternalOES Texture0;\n"
-                "uniform lowp int EnableTestMode;\n"
                 "void main()\n"
                 "{\n"
-                "   if(EnableTestMode % 2 == 0){\n"
-                "	    outColor = texture(Texture0, uv);\n"
-                "   } else {\n"
-                "       outColor = fragmentColor;\n"
-                "   }\n"
+                "    outColor = texture(Texture0, uv);\n"
                 "}\n";
 
 static const char FRAGMENT_SHADER_AR[] =
@@ -202,46 +196,41 @@ static const char FRAGMENT_SHADER_AR[] =
                 "out lowp vec4 outColor;\n"
                 "uniform samplerExternalOES Texture0;\n"
                 "uniform samplerExternalOES Texture1;\n"
-                "uniform lowp int EnableTestMode;\n"
                 "uniform lowp float alpha;\n"
                 "void main()\n"
                 "{\n"
-                "   if(EnableTestMode % 2 == 0){\n"
-                "       if(alpha > 1.0f){ // Non AR\n"
-                "	        outColor = texture(Texture0, uv);\n"
-                "       } else if(alpha < -0.5f){ // Completely AR\n"
-                "           if(uv.x < 0.5f){\n"
-                "	            outColor = texture(Texture1, vec2(uv.x * 2.0f, uv.y));\n"
-                "           }else{\n"
-                "	            outColor = texture(Texture1, vec2(uv.x * 2.0f - 1.0f, uv.y));\n"
-                "           }\n"
-                "       }else{ // VR+AR\n"
-                "           lowp vec4 arColor;\n"
-                "           if(uv.x < 0.5f){\n"
-                "	            arColor = texture(Texture1, vec2(uv.x * 2.0f, uv.y));\n"
-                "           }else{\n"
-                "	            arColor = texture(Texture1, vec2(uv.x * 2.0f - 1.0f, uv.y));\n"
-                "           }\n"
-                "	        outColor = texture(Texture0, uv) * alpha\n"
-                "                      + arColor * (1.0f - alpha);\n"
-                "       }\n"
-                "   } else {\n"
-                "       outColor = fragmentColor;\n"
-                "   }\n"
+                "    if(alpha > 1.0f){ // Non AR\n"
+                "        outColor = texture(Texture0, uv);\n"
+                "    } else if(alpha < -0.5f){ // Completely AR\n"
+                "        if(uv.x < 0.5f){\n"
+                "            outColor = texture(Texture1, vec2(uv.x * 2.0f, uv.y));\n"
+                "        }else{\n"
+                "            outColor = texture(Texture1, vec2(uv.x * 2.0f - 1.0f, uv.y));\n"
+                "        }\n"
+                "    }else{ // VR+AR\n"
+                "        lowp vec4 arColor;\n"
+                "        if(uv.x < 0.5f){\n"
+                "            arColor = texture(Texture1, vec2(uv.x * 2.0f, uv.y));\n"
+                "        }else{\n"
+                "            arColor = texture(Texture1, vec2(uv.x * 2.0f - 1.0f, uv.y));\n"
+                "        }\n"
+                "        outColor = texture(Texture0, uv) * alpha\n"
+                "                    + arColor * (1.0f - alpha);\n"
+                "    }\n"
                 "}\n";
 
 static const char VERTEX_SHADER_LOADING[] =
         "#ifndef DISABLE_MULTIVIEW\n"
-                "	#define DISABLE_MULTIVIEW 0\n"
+                "    #define DISABLE_MULTIVIEW 0\n"
                 "#endif\n"
                 "#define NUM_VIEWS 2\n"
                 "#if defined( GL_OVR_multiview2 ) && ! DISABLE_MULTIVIEW\n"
-                "	#extension GL_OVR_multiview2 : enable\n"
-                "	layout(num_views=NUM_VIEWS) in;\n"
-                "	#define VIEW_ID gl_ViewID_OVR\n"
+                "    #extension GL_OVR_multiview2 : enable\n"
+                "    layout(num_views=NUM_VIEWS) in;\n"
+                "    #define VIEW_ID gl_ViewID_OVR\n"
                 "#else\n"
-                "	uniform lowp int ViewID;\n"
-                "	#define VIEW_ID ViewID\n"
+                "    uniform lowp int ViewID;\n"
+                "    #define VIEW_ID ViewID\n"
                 "#endif\n"
                 "in vec3 vertexPosition;\n"
                 "in vec4 vertexColor;\n"
@@ -259,16 +248,16 @@ static const char VERTEX_SHADER_LOADING[] =
                 "out lowp vec3 position;\n"
                 "void main()\n"
                 "{\n"
-                "   lowp vec4 position4 = mMatrix * vec4( vertexPosition, 1.0 );\n"
-                "	gl_Position = mvpMatrix[VIEW_ID] * position4;\n"
-                "   uv = vertexUv;\n"
-                "   position = position4.xyz / position4.w;\n"
-                "   lowp vec4 lightPoint4 = mvpMatrix[VIEW_ID] * vec4(100.0, 10000.0, 100.0, 1.0);\n"
-                "   lightPoint = lightPoint4.xyz / lightPoint4.w;\n"
-                "   normal = normalize((mvpMatrix[VIEW_ID] * mMatrix * vec4(vertexNormal, 1.0)).xyz);\n"
-                "   lowp float light = clamp(dot(normal, normalize(vec3(0.3, 1.0, 0.3))), 0.3, 1.0);\n"
-                "   fragmentLight = light;\n"
-                "   fragmentColor = Color;\n"
+                "    lowp vec4 position4 = mMatrix * vec4( vertexPosition, 1.0 );\n"
+                "    gl_Position = mvpMatrix[VIEW_ID] * position4;\n"
+                "    uv = vertexUv;\n"
+                "    position = position4.xyz / position4.w;\n"
+                "    lowp vec4 lightPoint4 = mvpMatrix[VIEW_ID] * vec4(100.0, 10000.0, 100.0, 1.0);\n"
+                "    lightPoint = lightPoint4.xyz / lightPoint4.w;\n"
+                "    normal = normalize((mvpMatrix[VIEW_ID] * mMatrix * vec4(vertexNormal, 1.0)).xyz);\n"
+                "    lowp float light = clamp(dot(normal, normalize(vec3(0.3, 1.0, 0.3))), 0.3, 1.0);\n"
+                "    fragmentLight = light;\n"
+                "    fragmentColor = Color;\n"
                 "}\n";
 
 static const char FRAGMENT_SHADER_LOADING[] =
@@ -283,32 +272,32 @@ static const char FRAGMENT_SHADER_LOADING[] =
                 "uniform lowp int Mode;\n"
                 "void main()\n"
                 "{\n"
-                "   if(Mode == 0){\n"
-                "       lowp float distance = length(position.xz);\n"
-                "       // Pick a coordinate to visualize in a grid\n"
-                "       lowp vec2 coord = position.xz / 2.0;\n"
-                "       // Compute anti-aliased world-space grid lines\n"
-                "       lowp vec2 grid = abs(fract(coord - 0.5) - 0.5) / fwidth(coord);\n"
-                "       lowp float line = min(grid.x, grid.y);\n"
-                "       outColor.rgb = vec3(min(line, 1.0) * (1.0 - exp(-distance / 5.0 - 0.01) / 4.0));\n"
-                "       if(distance > 3.0){\n"
-                "           lowp float coef = 1.0 - 3.0 / distance;\n"
-                "           outColor.rgb = (1.0 - coef) * outColor.rgb + coef * vec3(1.0, 1.0, 1.0);\n"
-                "       }\n"
-                "       outColor.a = 1.0;\n"
-                "   } else if(Mode == 1) {\n"
-                "	    outColor = texture(sTexture, uv);\n"
-                "   } else {\n"
-                "       lowp float coef = 1.0;\n"
-                "       if(position.y < 50.0){\n"
-                "           coef = position.y / 100.0;\n"
-                "       }else if(position.y < 100.0){\n"
-                "           coef = (position.y - 50.0) / 50.0 * 0.3 + 0.5;\n"
-                "       }else{\n"
-                "           coef = (position.y - 100.0) / 150.0 * 0.2 + 0.8;\n"
-                "       }\n"
-                "       outColor = vec4(0.8, 0.8, 1.0, 1.0) * coef + vec4(1.0, 1.0, 1.0, 1.0) * (1.0 - coef);\n"
-                "   }\n"
+                "    if(Mode == 0){\n"
+                "        lowp float distance = length(position.xz);\n"
+                "        // Pick a coordinate to visualize in a grid\n"
+                "        lowp vec2 coord = position.xz / 2.0;\n"
+                "        // Compute anti-aliased world-space grid lines\n"
+                "        lowp vec2 grid = abs(fract(coord - 0.5) - 0.5) / fwidth(coord);\n"
+                "        lowp float line = min(grid.x, grid.y);\n"
+                "        outColor.rgb = vec3(min(line, 1.0) * (1.0 - exp(-distance / 5.0 - 0.01) / 4.0));\n"
+                "        if(distance > 3.0){\n"
+                "            lowp float coef = 1.0 - 3.0 / distance;\n"
+                "            outColor.rgb = (1.0 - coef) * outColor.rgb + coef * vec3(1.0, 1.0, 1.0);\n"
+                "        }\n"
+                "        outColor.a = 1.0;\n"
+                "    } else if(Mode == 1) {\n"
+                "        outColor = texture(sTexture, uv);\n"
+                "    } else {\n"
+                "        lowp float coef = 1.0;\n"
+                "        if(position.y < 50.0){\n"
+                "            coef = position.y / 100.0;\n"
+                "        }else if(position.y < 100.0){\n"
+                "            coef = (position.y - 50.0) / 50.0 * 0.3 + 0.5;\n"
+                "        }else{\n"
+                "            coef = (position.y - 100.0) / 150.0 * 0.2 + 0.8;\n"
+                "        }\n"
+                "        outColor = vec4(0.8, 0.8, 1.0, 1.0) * coef + vec4(1.0, 1.0, 1.0, 1.0) * (1.0 - coef);\n"
+                "    }\n"
                 "}\n";
 
 
@@ -734,80 +723,6 @@ void ovrGeometry_CreatePanel(ovrGeometry *geometry) {
     GL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
 }
 
-void ovrGeometry_CreateTestMode(ovrGeometry *geometry) {
-    typedef struct {
-        float positions[8][4];
-        unsigned char colors[8][4];
-        float uv[8][2];
-    } ovrCubeVertices;
-
-    static const ovrCubeVertices cubeVertices =
-            {
-                    // positions
-                    {
-                            {-0.5, +0.5, -0.5, +0.5}, {+0.5, +0.5, -0.5, +0.5}, {+0.5, +0.5, +0.5, +0.5}, {-0.5, +0.5, +0.5, +0.5},    // top
-                            {-0.5, -0.5, -0.5, +0.5}, {-0.5, -0.5, +0.5, +0.5}, {+0.5, -0.5, +0.5, +0.5}, {+0.5, -0.5, -0.5, +0.5}    // bottom
-                    },
-                    // colors
-                    {
-                            {255,  0,    255,  255},  {0,    255,  0,    255},  {0,    0,    255,  255},  {255,  0,    0,    255},
-                            {0,    0,    255,  255},  {0,    255,  0,    255},  {255,  0,    255,  255},  {255,  0,    0,    255}
-                    },
-                    // uv
-                    {
-                            {0,    1},                {0.5,  0},                {0.5,  1},                {0,    0},
-                            {0,    1},                {0.5,  0},                {0.5,  1},                {0,    0},
-                    }
-            };
-
-    static const unsigned short cubeIndices[36] =
-            {
-                    0, 2, 1, 2, 0, 3,    // top
-                    4, 6, 5, 6, 4, 7,    // bottom
-                    2, 6, 7, 7, 1, 2,    // right
-                    0, 4, 5, 5, 3, 0,    // left
-                    3, 5, 6, 6, 2, 3,    // front
-                    0, 1, 7, 7, 4, 0    // back
-            };
-
-    geometry->VertexCount = 8;
-    geometry->IndexCount = 36;
-
-    geometry->VertexAttribs[0].Index = VERTEX_ATTRIBUTE_LOCATION_POSITION;
-    geometry->VertexAttribs[0].Size = 4;
-    geometry->VertexAttribs[0].Type = GL_FLOAT;
-    geometry->VertexAttribs[0].Normalized = true;
-    geometry->VertexAttribs[0].Stride = sizeof(cubeVertices.positions[0]);
-    geometry->VertexAttribs[0].Pointer = (const GLvoid *) offsetof(ovrCubeVertices, positions);
-
-    geometry->VertexAttribs[1].Index = VERTEX_ATTRIBUTE_LOCATION_COLOR;
-    geometry->VertexAttribs[1].Size = 4;
-    geometry->VertexAttribs[1].Type = GL_UNSIGNED_BYTE;
-    geometry->VertexAttribs[1].Normalized = true;
-    geometry->VertexAttribs[1].Stride = sizeof(cubeVertices.colors[0]);
-    geometry->VertexAttribs[1].Pointer = (const GLvoid *) offsetof(ovrCubeVertices, colors);
-
-    geometry->VertexAttribs[2].Index = VERTEX_ATTRIBUTE_LOCATION_UV;
-    geometry->VertexAttribs[2].Size = 2;
-    geometry->VertexAttribs[2].Type = GL_FLOAT;
-    geometry->VertexAttribs[2].Normalized = true;
-    geometry->VertexAttribs[2].Stride = 8;
-    geometry->VertexAttribs[2].Pointer = (const GLvoid *) offsetof(ovrCubeVertices, uv);
-
-    geometry->VertexAttribs[3].Index = -1;
-    geometry->VertexAttribs[4].Index = -1;
-
-    GL(glGenBuffers(1, &geometry->VertexBuffer));
-    GL(glBindBuffer(GL_ARRAY_BUFFER, geometry->VertexBuffer));
-    GL(glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), &cubeVertices, GL_STATIC_DRAW));
-    GL(glBindBuffer(GL_ARRAY_BUFFER, 0));
-
-    GL(glGenBuffers(1, &geometry->IndexBuffer));
-    GL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, geometry->IndexBuffer));
-    GL(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndices), cubeIndices, GL_STATIC_DRAW));
-    GL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
-}
-
 void ovrGeometry_Destroy(ovrGeometry *geometry) {
     GL(glDeleteBuffers(1, &geometry->IndexBuffer));
     GL(glDeleteBuffers(1, &geometry->VertexBuffer));
@@ -849,7 +764,6 @@ void ovrGeometry_DestroyVAO(ovrGeometry *geometry) {
 enum E1test {
     UNIFORM_VIEW_ID,
     UNIFORM_MVP_MATRIX,
-    UNIFORM_ENABLE_TEST_MODE,
     UNIFORM_ALPHA,
     UNIFORM_COLOR,
     UNIFORM_M_MATRIX,
@@ -872,7 +786,6 @@ static ovrUniform ProgramUniforms[] =
         {
                 {UNIFORM_VIEW_ID,          UNIFORM_TYPE_INT,       "ViewID"},
                 {UNIFORM_MVP_MATRIX,       UNIFORM_TYPE_MATRIX4X4, "mvpMatrix"},
-                {UNIFORM_ENABLE_TEST_MODE, UNIFORM_TYPE_INT,       "EnableTestMode"},
                 {UNIFORM_ALPHA, UNIFORM_TYPE_FLOAT,       "alpha"},
                 {UNIFORM_COLOR, UNIFORM_TYPE_VECTOR4,       "Color"},
                 {UNIFORM_M_MATRIX, UNIFORM_TYPE_MATRIX4X4,       "mMatrix"},
@@ -998,7 +911,7 @@ void ovrProgram_Destroy(ovrProgram *program) {
 //
 
 void
-ovrRenderer_Create(ovrRenderer *renderer, const ovrJava *java, const bool useMultiview, int width, int height
+ovrRenderer_Create(ovrRenderer *renderer, const bool useMultiview, int width, int height
         , int SurfaceTextureID, int LoadingTexture, int CameraTexture, bool ARMode) {
     renderer->NumBuffers = useMultiview ? 1 : VRAPI_FRAME_LAYER_EYE_MAX;
     renderer->UseMultiview = useMultiview;
@@ -1037,8 +950,6 @@ void ovrRenderer_CreateScene(ovrRenderer *renderer) {
                       renderer->UseMultiview);
     ovrGeometry_CreatePanel(&renderer->Panel);
     ovrGeometry_CreateVAO(&renderer->Panel);
-    ovrGeometry_CreateTestMode(&renderer->TestMode);
-    ovrGeometry_CreateVAO(&renderer->TestMode);
     renderer->SceneCreated = true;
 }
 
@@ -1050,8 +961,6 @@ void ovrRenderer_Destroy(ovrRenderer *renderer) {
         ovrProgram_Destroy(&renderer->ProgramLoading);
         ovrGeometry_DestroyVAO(&renderer->Panel);
         ovrGeometry_Destroy(&renderer->Panel);
-        ovrGeometry_DestroyVAO(&renderer->TestMode);
-        ovrGeometry_Destroy(&renderer->TestMode);
     }
 #endif
 
@@ -1064,10 +973,8 @@ void ovrRenderer_Destroy(ovrRenderer *renderer) {
 
 #ifdef OVR_SDK
 
-ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava *java,
-                                                   const ovrTracking2 *tracking, ovrMobile *ovr,
-                                                   bool loading, int enableTestMode,
-                                            int AROverlayMode) {
+ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrTracking2 *tracking,
+                                                   bool loading, int AROverlayMode) {
     const ovrTracking2& updatedTracking = *tracking;
 
     ovrLayerProjection2 layer = vrapi_DefaultLayerProjection2();
@@ -1105,7 +1012,7 @@ ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava
                                             &mvpMatrix[1]);
 
         Recti viewport = {0, 0, frameBuffer->Width, frameBuffer->Height};
-        renderEye(eye, mvpMatrix, &viewport, renderer, tracking, loading, enableTestMode, AROverlayMode);
+        renderEye(eye, mvpMatrix, &viewport, renderer, loading, AROverlayMode);
 
         ovrFramebuffer_Resolve(frameBuffer);
         ovrFramebuffer_Advance(frameBuffer);
@@ -1118,8 +1025,8 @@ ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrJava
 
 #endif
 
-void renderEye(int eye, ovrMatrix4f mvpMatrix[2], Recti *viewport, ovrRenderer *renderer, const ovrTracking2 *tracking,
-               bool loading, int enableTestMode, int AROverlayMode) {
+void renderEye(int eye, ovrMatrix4f mvpMatrix[2], Recti *viewport, ovrRenderer *renderer,
+               bool loading, int AROverlayMode) {
     if (loading) {
         GL(glUseProgram(renderer->ProgramLoading.Program));
         if (renderer->ProgramLoading.UniformLocation[UNIFORM_VIEW_ID] >=
@@ -1129,7 +1036,6 @@ void renderEye(int eye, ovrMatrix4f mvpMatrix[2], Recti *viewport, ovrRenderer *
         }
     } else {
         GL(glUseProgram(renderer->Program.Program));
-        GL(glUniform1i(renderer->Program.UniformLocation[UNIFORM_ENABLE_TEST_MODE], enableTestMode));
         if (renderer->Program.UniformLocation[UNIFORM_VIEW_ID] >=
             0)  // NOTE: will not be present when multiview path is enabled.
         {
@@ -1145,59 +1051,7 @@ void renderEye(int eye, ovrMatrix4f mvpMatrix[2], Recti *viewport, ovrRenderer *
     GL(glViewport(viewport->x, viewport->y, viewport->width, viewport->height));
     GL(glScissor(viewport->x, viewport->y, viewport->width, viewport->height));
 
-    //enableTestMode = 0;
-    if ((enableTestMode & 1) != 0) {
-        int N = 10;
-        for (int i = 0; i < N; i++) {
-            ovrMatrix4f TestModeMatrix[2];
-            TestModeMatrix[0] = ovrMatrix4f_CreateIdentity();
-            if (i < 0) {
-                ovrMatrix4f scale = ovrMatrix4f_CreateScale(10, 10, 10);
-                TestModeMatrix[0] = ovrMatrix4f_Multiply(&scale, &TestModeMatrix[0]);
-            }
-            double theta = 2.0 * M_PI * i / (1.0 * N);
-            ovrMatrix4f translation = ovrMatrix4f_CreateTranslation(float(5.0 * cos(theta)), 0,
-                                                                    float(5 * sin(theta)));
-            TestModeMatrix[0] = ovrMatrix4f_Multiply(&translation, &TestModeMatrix[0]);
-
-            TestModeMatrix[1] = TestModeMatrix[0];
-
-            TestModeMatrix[0] = ovrMatrix4f_Multiply(&tracking->Eye[0].ViewMatrix,
-                                                     &TestModeMatrix[0]);
-            TestModeMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ViewMatrix,
-                                                     &TestModeMatrix[1]);
-            TestModeMatrix[0] = ovrMatrix4f_Multiply(&tracking->Eye[0].ProjectionMatrix,
-                                                     &TestModeMatrix[0]);
-            TestModeMatrix[1] = ovrMatrix4f_Multiply(&tracking->Eye[1].ProjectionMatrix,
-                                                     &TestModeMatrix[1]);
-
-            if (i == 0) {
-                LOG("theta:%f", theta);
-                LOG("rotate:%f %f %f %f", tracking->HeadPose.Pose.Orientation.x,
-                    tracking->HeadPose.Pose.Orientation.y,
-                    tracking->HeadPose.Pose.Orientation.z, tracking->HeadPose.Pose.Orientation.w
-                );
-                LOG("tran:\n%s", DumpMatrix(&translation).c_str());
-                LOG("view:\n%s", DumpMatrix(&tracking->Eye[0].ViewMatrix).c_str());
-                LOG("proj:\n%s", DumpMatrix(&tracking->Eye[0].ProjectionMatrix).c_str());
-                LOG("mm:\n%s", DumpMatrix(&TestModeMatrix[0]).c_str());
-            }
-
-            GL(glUniformMatrix4fv(renderer->Program.UniformLocation[UNIFORM_MVP_MATRIX], 2, true,
-                                  (float *) TestModeMatrix));
-            GL(glBindVertexArray(renderer->TestMode.VertexArrayObject));
-
-            if (i < 2) {
-                GL(glActiveTexture(GL_TEXTURE0));
-                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->SurfaceTextureID));
-            } else {
-                GL(glActiveTexture(GL_TEXTURE0));
-                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
-            }
-
-            GL(glDrawElements(GL_TRIANGLES, renderer->TestMode.IndexCount, GL_UNSIGNED_SHORT, NULL));
-        }
-    } else if (loading) {
+    if (loading) {
         // For drawing back frace of the sphere in gltf
         GL(glDisable(GL_CULL_FACE));
         GL(glClearColor(0.88f, 0.95f, 0.95f, 1.0f));
@@ -1218,6 +1072,8 @@ void renderEye(int eye, ovrMatrix4f mvpMatrix[2], Recti *viewport, ovrRenderer *
                                           renderer->ProgramLoading.UniformLocation[UNIFORM_COLOR],
                                           renderer->ProgramLoading.UniformLocation[UNIFORM_M_MATRIX],
                                           renderer->ProgramLoading.UniformLocation[UNIFORM_MODE]);
+        GL(glBindVertexArray(0));
+        GL(glBindTexture(GL_TEXTURE_2D, 0));
     } else {
         GL(glClear(GL_DEPTH_BUFFER_BIT));
 
@@ -1254,21 +1110,18 @@ void renderEye(int eye, ovrMatrix4f mvpMatrix[2], Recti *viewport, ovrRenderer *
             GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->CameraTexture));
             GL(glDrawElements(GL_TRIANGLES, renderer->Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
         }
-    }
+        GL(glBindVertexArray(0));
 
-    GL(glBindVertexArray(0));
-    if (loading) {
-        GL(glBindTexture(GL_TEXTURE_2D, 0));
-    } else {
         GL(glActiveTexture(GL_TEXTURE0));
         GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
         GL(glActiveTexture(GL_TEXTURE1));
         GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
     }
+
     GL(glUseProgram(0));
 
     // Explicitly clear the border texels to black when GL_CLAMP_TO_BORDER is not available.
-    if (glExtensions.EXT_texture_border_clamp == false) {
+    if (!glExtensions.EXT_texture_border_clamp) {
         // Clear to fully opaque black.
         GL(glClearColor(0.0f, 0.0f, 0.0f, 1.0f));
         // bottom

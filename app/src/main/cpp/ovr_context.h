@@ -17,7 +17,7 @@ public:
     void initialize(JNIEnv *env, jobject activity, jobject assetManager, jobject vrThread, bool ARMode, int initialRefreshRate);
     void destroy(JNIEnv *env);
 
-    void onChangeSettings(int EnableTestMode, int Suspend);
+    void onChangeSettings(int Suspend);
     void onSurfaceCreated(jobject surface);
     void onSurfaceDestroyed();
     void onSurfaceChanged(jobject surface);
@@ -44,8 +44,6 @@ public:
         return CameraTexture;
     }
 
-    void getRefreshRates(JNIEnv *env_, jintArray refreshRates);
-
     void setRefreshRate(int refreshRate, bool forceChange = true);
 
     void getDeviceDescriptor(JNIEnv *env, jobject deviceDescriptor);
@@ -62,7 +60,6 @@ private:
     GLuint SurfaceTextureID = 0;
     GLuint loadingTexture = 0;
     GLuint CameraTexture = 0;
-    int enableTestMode = 0;
     int suspend = 0;
     bool Resumed = false;
     int FrameBufferWidth = 0;
@@ -105,10 +102,11 @@ private:
 
     void setInitialRefreshRate(int initialRefreshRate);
 
+    void onVrModeChange();
     void enterVrMode();
     void leaveVrMode();
-    void onVrModeChange();
 
+    void getRefreshRates(JNIEnv *env_, jintArray refreshRates);
     void getFov(JNIEnv *env, jfloatArray fov);
 };
 

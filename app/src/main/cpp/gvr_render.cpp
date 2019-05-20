@@ -12,9 +12,6 @@ GvrRenderer::GvrRenderer() {
 }
 
 void GvrRenderer::glInit(JNIEnv* env, int width, int height) {
-    ovrJava java;
-    java.Env = env;
-
     GLuint textures[2];
     glGenTextures(2, textures);
 
@@ -23,15 +20,15 @@ void GvrRenderer::glInit(JNIEnv* env, int width, int height) {
 
     LOG("GvrRenderer::glInit: Surface=%d Loading=%d", SurfaceTextureID, loadingTexture);
 
-    ovrRenderer_Create(&Renderer, &java, false, width, height, SurfaceTextureID, loadingTexture, 0, false);
+    ovrRenderer_Create(&Renderer, false, width, height, SurfaceTextureID, loadingTexture, 0, false);
     ovrRenderer_CreateScene(&Renderer);
 }
 
 
 void GvrRenderer::renderFrame(ovrMatrix4f mvpMatrix[2], Recti viewport[2], bool loading) {
     mRendererInitialized = true;
-    renderEye(0, mvpMatrix, &viewport[0], &Renderer, nullptr, loading, false, false);
-    renderEye(1, mvpMatrix, &viewport[1], &Renderer, nullptr, loading, false, false);
+    renderEye(0, mvpMatrix, &viewport[0], &Renderer, loading, false);
+    renderEye(1, mvpMatrix, &viewport[1], &Renderer, loading, false);
 }
 
 GvrRenderer::~GvrRenderer() {

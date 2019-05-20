@@ -615,7 +615,7 @@ void UdpManager::onPacketRecv(const char *packet, size_t packetSize) {
         }
         ChangeSettings *settings = (ChangeSettings *) packet;
 
-        m_env->CallVoidMethod(m_instance, mOnChangeSettingsMethodID, settings->enableTestMode, settings->suspend, settings->frameQueueSize);
+        m_env->CallVoidMethod(m_instance, mOnChangeSettingsMethodID, settings->suspend, settings->frameQueueSize);
     } else if (type == ALVR_PACKET_TYPE_AUDIO_FRAME_START) {
         // Change settings
         if (packetSize < sizeof(AudioFrameStart)) {
@@ -702,7 +702,7 @@ void UdpManager::initializeJNICallbacks(JNIEnv *env, jobject instance) {
     jclass clazz = env->GetObjectClass(instance);
 
     mOnConnectMethodID = env->GetMethodID(clazz, "onConnected", "(IIIII)V");
-    mOnChangeSettingsMethodID = env->GetMethodID(clazz, "onChangeSettings", "(III)V");
+    mOnChangeSettingsMethodID = env->GetMethodID(clazz, "onChangeSettings", "(II)V");
     mOnDisconnectedMethodID = env->GetMethodID(clazz, "onDisconnected", "()V");
 
     env->DeleteLocalRef(clazz);

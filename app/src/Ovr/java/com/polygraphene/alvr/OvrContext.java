@@ -52,8 +52,8 @@ public class OvrContext {
         fetchTrackingInfoNative(handle, udpReceiverThread, position, orientation);
     }
 
-    public void onChangeSettings(int EnableTestMode, int suspend) {
-        onChangeSettingsNative(handle, EnableTestMode, suspend);
+    public void onChangeSettings(int suspend) {
+        onChangeSettingsNative(handle, suspend);
     }
 
     public int getLoadingTexture() {
@@ -72,10 +72,6 @@ public class OvrContext {
         return isVrModeNative(handle);
     }
 
-    public void getRefreshRates(int[] refreshRates) {
-        getRefreshRatesNative(handle, refreshRates);
-    }
-
     public void getDeviceDescriptor(DeviceDescriptor deviceDescriptor) {
         getDeviceDescriptorNative(handle, deviceDescriptor);
     }
@@ -86,10 +82,6 @@ public class OvrContext {
 
     public void setRefreshRate(int refreshRate) {
         setRefreshRateNative(handle, refreshRate);
-    }
-
-    public void sendTracking(long udpManager, long frameIndex, float[] headOrientation, float[] headPosition) {
-        sendTrackingNative(handle, udpManager, frameIndex, headOrientation, headPosition);
     }
 
     private native long initializeNative(Activity activity, AssetManager assetManager, VrThread vrThread, boolean ARMode, int initialRefreshRate);
@@ -105,18 +97,15 @@ public class OvrContext {
     private native void renderLoadingNative(long handle);
     private native void fetchTrackingInfoNative(long handle, UdpReceiverThread udpReceiverThread, float[] position, float[] orientation);
 
-    private native void onChangeSettingsNative(long handle, int EnableTestMode, int suspend);
+    private native void onChangeSettingsNative(long handle, int suspend);
 
     private native int getLoadingTextureNative(long handle);
     private native int getSurfaceTextureIDNative(long handle);
     public native int getCameraTextureNative(long handle);
 
     private native boolean isVrModeNative(long handle);
-    private native void getRefreshRatesNative(long handle, int[] refreshRates);
     private native void getDeviceDescriptorNative(long handle, DeviceDescriptor deviceDescriptor);
 
     private native void setFrameGeometryNative(long handle, int width, int height);
     private native void setRefreshRateNative(long handle, int refreshRate);
-
-    private native void sendTrackingNative(long handle, long updManager, long frameIndex, float[] headOrientation, float[] headPosition);
 }

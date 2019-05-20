@@ -21,17 +21,6 @@
 #include "udp.h"
 #include "asset.h"
 
-void OvrContext::onVrModeChange() {
-    if (Resumed && window != NULL) {
-        if (Ovr == NULL) {
-            enterVrMode();
-        }
-    } else {
-        if (Ovr != NULL) {
-            leaveVrMode();
-        }
-    }
-}
 
 void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager, jobject vrThread, bool ARMode, int initialRefreshRate) {
     LOG("Initializing EGL.");
@@ -77,12 +66,8 @@ void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager,
     //
     m_ARMode = ARMode;
 
-    int textureCount = 2;
-    if (m_ARMode) {
-        textureCount++;
-    }
-    GLuint textures[textureCount];
-    glGenTextures(textureCount, textures);
+    GLuint textures[2];
+    glGenTextures(2, textures);
 
     SurfaceTextureID = textures[0];
     loadingTexture = textures[1];
@@ -98,8 +83,20 @@ void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager,
     glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T,
                     GL_CLAMP_TO_EDGE);
 
+    glBindTexture(GL_TEXTURE_2D, loadingTexture);
+
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                    GL_NEAREST);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+                    GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
+                    GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
+                    GL_CLAMP_TO_EDGE);
+
+
     if (m_ARMode) {
-        CameraTexture = textures[2];
+        glGenTextures(1, &CameraTexture);
         glBindTexture(GL_TEXTURE_EXTERNAL_OES, CameraTexture);
 
         glTexParameterf(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER,
@@ -116,7 +113,7 @@ void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager,
                                                   VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_WIDTH);
     FrameBufferHeight = vrapi_GetSystemPropertyInt(&java,
                                                    VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_HEIGHT);
-    ovrRenderer_Create(&Renderer, &java, UseMultiview, FrameBufferWidth, FrameBufferHeight,
+    ovrRenderer_Create(&Renderer, UseMultiview, FrameBufferWidth, FrameBufferHeight,
                        SurfaceTextureID, loadingTexture, CameraTexture, m_ARMode);
     ovrRenderer_CreateScene(&Renderer);
 
@@ -336,7 +333,7 @@ void OvrContext::fetchTrackingInfo(JNIEnv *env_, jobject udpReceiverThread, ovrV
     }
 
     TrackingInfo info;
-    if (position != NULL) {
+    if (position != nullptr) {
         // AR mode
 
         // Rotate PI/2 around (0, 0, -1)
@@ -354,7 +351,7 @@ void OvrContext::fetchTrackingInfo(JNIEnv *env_, jobject udpReceiverThread, ovrV
                          &orientation_rotated);
     } else {
         // Non AR
-        sendTrackingInfo(&info, frame->displayTime, &frame->tracking, NULL, NULL);
+        sendTrackingInfo(&info, frame->displayTime, &frame->tracking, nullptr, nullptr);
     }
     LatencyCollector::Instance().tracking(frame->frameIndex);
 
@@ -363,8 +360,7 @@ void OvrContext::fetchTrackingInfo(JNIEnv *env_, jobject udpReceiverThread, ovrV
 }
 
 
-void OvrContext::onChangeSettings(int EnableTestMode, int Suspend) {
-    enableTestMode = EnableTestMode;
+void OvrContext::onChangeSettings(int Suspend) {
     suspend = Suspend;
 }
 
@@ -377,10 +373,10 @@ void OvrContext::onSurfaceCreated(jobject surface) {
 
 void OvrContext::onSurfaceDestroyed() {
     LOG("onSurfaceDestroyed called. Resumed=%d Window=%p Ovr=%p", Resumed, window, Ovr);
-    if (window != NULL) {
+    if (window != nullptr) {
         ANativeWindow_release(window);
     }
-    window = NULL;
+    window = nullptr;
 
     onVrModeChange();
 }
@@ -391,14 +387,14 @@ void OvrContext::onSurfaceChanged(jobject surface) {
     if (newWindow != window) {
         LOG("Replacing ANativeWindow. %p != %p", newWindow, window);
         ANativeWindow_release(window);
-        window = NULL;
+        window = nullptr;
         onVrModeChange();
 
         window = newWindow;
-        if (window != NULL) {
+        if (window != nullptr) {
             onVrModeChange();
         }
-    } else if (newWindow != NULL) {
+    } else if (newWindow != nullptr) {
         LOG("Got same ANativeWindow. %p == %p", newWindow, window);
         ANativeWindow_release(newWindow);
     }
@@ -426,7 +422,7 @@ void OvrContext::render(uint64_t renderedFrameIndex) {
     {
         MutexLock lock(trackingFrameMutex);
 
-        if (trackingFrameMap.size() > 0) {
+        if (!trackingFrameMap.empty()) {
             oldestFrame = trackingFrameMap.cbegin()->second->frameIndex;
             mostRecentFrame = trackingFrameMap.crbegin()->second->frameIndex;
         }
@@ -439,7 +435,7 @@ void OvrContext::render(uint64_t renderedFrameIndex) {
             LOG("Too old frame has arrived. Instead, we use most old tracking data in trackingFrameMap."
                 "FrameIndex=%lu trackingFrameMap=(%lu - %lu)",
                 renderedFrameIndex, oldestFrame, mostRecentFrame);
-            if (trackingFrameMap.size() > 0) {
+            if (!trackingFrameMap.empty()) {
                 frame = trackingFrameMap.cbegin()->second;
             } else {
                 return;
@@ -451,10 +447,8 @@ void OvrContext::render(uint64_t renderedFrameIndex) {
              getTimestampUs() - frame->fetchTime);
 
 // Render eye images and setup the primary layer using ovrTracking2.
-    const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java,
-                                                                   &frame->tracking,
-                                                                   Ovr, false,
-                                                                   enableTestMode, g_AROverlayMode);
+    const ovrLayerProjection2 worldLayer =
+            ovrRenderer_RenderFrame(&Renderer, &frame->tracking, false, g_AROverlayMode);
 
     LatencyCollector::Instance().rendered2(renderedFrameIndex);
 
@@ -463,16 +457,11 @@ void OvrContext::render(uint64_t renderedFrameIndex) {
                     &worldLayer.Header
             };
 
-    // TODO
-    double DisplayTime = 0.0;
-
-    int SwapInterval = 1;
-
     ovrSubmitFrameDescription2 frameDesc = {};
     frameDesc.Flags = 0;
-    frameDesc.SwapInterval = SwapInterval;
+    frameDesc.SwapInterval = 1;
     frameDesc.FrameIndex = renderedFrameIndex;
-    frameDesc.DisplayTime = DisplayTime;
+    frameDesc.DisplayTime = 0.0;
     frameDesc.LayerCount = 1;
     frameDesc.Layers = layers2;
 
@@ -505,10 +494,8 @@ void OvrContext::renderLoading() {
     double displayTime = vrapi_GetPredictedDisplayTime(Ovr, FrameIndex);
     ovrTracking2 tracking = vrapi_GetPredictedTracking2(Ovr, displayTime);
 
-    const ovrLayerProjection2 worldLayer = ovrRenderer_RenderFrame(&Renderer, &java,
-                                                                   &tracking,
-                                                                   Ovr, true,
-                                                                   enableTestMode, g_AROverlayMode);
+    const ovrLayerProjection2 worldLayer =
+            ovrRenderer_RenderFrame(&Renderer, &tracking, true, g_AROverlayMode);
 
     const ovrLayerHeader2 *layers[] =
             {
@@ -535,14 +522,14 @@ void OvrContext::setFrameGeometry(int width, int height) {
         FrameBufferWidth = eye_width;
         FrameBufferHeight = height;
         ovrRenderer_Destroy(&Renderer);
-        ovrRenderer_Create(&Renderer, &java, UseMultiview, FrameBufferWidth, FrameBufferHeight,
+        ovrRenderer_Create(&Renderer, UseMultiview, FrameBufferWidth, FrameBufferHeight,
                            SurfaceTextureID, loadingTexture, CameraTexture, m_ARMode);
         ovrRenderer_CreateScene(&Renderer);
     }
 }
 
 void OvrContext::getRefreshRates(JNIEnv *env_, jintArray refreshRates) {
-    jint *refreshRates_ = env_->GetIntArrayElements(refreshRates, NULL);
+    jint *refreshRates_ = env_->GetIntArrayElements(refreshRates, nullptr);
 
     // Fill empty entry with 0.
     memset(refreshRates_, 0, sizeof(jint) * ALVR_REFRESH_RATE_LIST_SIZE);
@@ -595,6 +582,18 @@ void OvrContext::setInitialRefreshRate(int initialRefreshRate) {
     setRefreshRate(initialRefreshRate, false);
 }
 
+void OvrContext::onVrModeChange() {
+    if (Resumed && window != nullptr) {
+        if (Ovr == nullptr) {
+            enterVrMode();
+        }
+    } else {
+        if (Ovr != nullptr) {
+            leaveVrMode();
+        }
+    }
+}
+
 void OvrContext::enterVrMode() {
     LOGI("Entering VR mode.");
 
@@ -609,7 +608,7 @@ void OvrContext::enterVrMode() {
 
     Ovr = vrapi_EnterVrMode(&parms);
 
-    if (Ovr == NULL) {
+    if (Ovr == nullptr) {
         LOGE("Invalid ANativeWindow");
         return;
     }
@@ -636,7 +635,7 @@ void OvrContext::leaveVrMode() {
     vrapi_LeaveVrMode(Ovr);
 
     LOGI("Leaved VR mode.");
-    Ovr = NULL;
+    Ovr = nullptr;
 
     // Calling back VrThread to notify Vr state change.
     jclass clazz = env->GetObjectClass(mVrThread);
@@ -676,7 +675,8 @@ void OvrContext::getDeviceDescriptor(JNIEnv *env, jobject deviceDescriptor) {
     fieldID = env->GetFieldID(clazz, "mRefreshRates", "[I");
 
     // Array instance is already set on deviceDescriptor.
-    jintArray refreshRates = static_cast<jintArray>(env->GetObjectField(deviceDescriptor, fieldID));
+    jintArray refreshRates =
+            reinterpret_cast<jintArray>(env->GetObjectField(deviceDescriptor, fieldID));
     getRefreshRates(env, refreshRates);
     env->SetObjectField(deviceDescriptor, fieldID, refreshRates);
     env->DeleteLocalRef(refreshRates);
@@ -687,7 +687,7 @@ void OvrContext::getDeviceDescriptor(JNIEnv *env, jobject deviceDescriptor) {
     env->SetIntField(deviceDescriptor, fieldID, renderHeight);
 
     fieldID = env->GetFieldID(clazz, "mFov", "[F");
-    jfloatArray fov = static_cast<jfloatArray>(env->GetObjectField(deviceDescriptor, fieldID));
+    jfloatArray fov = reinterpret_cast<jfloatArray>(env->GetObjectField(deviceDescriptor, fieldID));
     getFov(env, fov);
     env->SetObjectField(deviceDescriptor, fieldID, fov);
     env->DeleteLocalRef(fov);
@@ -705,7 +705,7 @@ void OvrContext::getDeviceDescriptor(JNIEnv *env, jobject deviceDescriptor) {
 }
 
 void OvrContext::getFov(JNIEnv *env, jfloatArray fov) {
-    jfloat *array = env->GetFloatArrayElements(fov, NULL);
+    jfloat *array = env->GetFloatArrayElements(fov, nullptr);
     float fovX = vrapi_GetSystemPropertyFloat(&java, VRAPI_SYS_PROP_SUGGESTED_EYE_FOV_DEGREES_X);
     float fovY = vrapi_GetSystemPropertyFloat(&java, VRAPI_SYS_PROP_SUGGESTED_EYE_FOV_DEGREES_Y);
     LOGI("OvrContext::getFov: X=%f Y=%f", fovX, fovY);
@@ -721,7 +721,7 @@ void OvrContext::getFov(JNIEnv *env, jfloatArray fov) {
 extern "C"
 JNIEXPORT jlong JNICALL
 Java_com_polygraphene_alvr_OvrContext_initializeNative(JNIEnv *env, jobject instance,
-                                                      jobject activity, jobject assetManager, jobject vrThread, bool ARMode, int initialRefreshRate) {
+                                                      jobject activity, jobject assetManager, jobject vrThread, jboolean ARMode, jint initialRefreshRate) {
     OvrContext *context = new OvrContext();
     context->initialize(env, activity, assetManager, vrThread, ARMode, initialRefreshRate);
     return (jlong) context;
@@ -759,7 +759,7 @@ extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_OvrContext_renderNative(JNIEnv *env, jobject instance, jlong handle,
                                                   jlong renderedFrameIndex) {
-    return ((OvrContext *) handle)->render(renderedFrameIndex);
+    return ((OvrContext *) handle)->render(static_cast<uint64_t>(renderedFrameIndex));
 }
 
 extern "C"
@@ -777,30 +777,29 @@ Java_com_polygraphene_alvr_OvrContext_fetchTrackingInfoNative(JNIEnv *env, jobje
                                                              jobject udpReceiverThread,
                                                              jfloatArray position_,
                                                              jfloatArray orientation_) {
-    if(position_ != NULL && orientation_ != NULL) {
+    if(position_ != nullptr && orientation_ != nullptr) {
         ovrVector3f position;
         ovrQuatf orientation;
 
-        jfloat *position_c = env->GetFloatArrayElements(position_, NULL);
+        jfloat *position_c = env->GetFloatArrayElements(position_, nullptr);
         memcpy(&position, position_c, sizeof(float) * 3);
         env->ReleaseFloatArrayElements(position_, position_c, 0);
 
-        jfloat *orientation_c = env->GetFloatArrayElements(orientation_, NULL);
+        jfloat *orientation_c = env->GetFloatArrayElements(orientation_, nullptr);
         memcpy(&orientation, orientation_c, sizeof(float) * 4);
         env->ReleaseFloatArrayElements(orientation_, orientation_c, 0);
 
         ((OvrContext *) handle)->fetchTrackingInfo(env, udpReceiverThread, &position, &orientation);
     }else {
-        ((OvrContext *) handle)->fetchTrackingInfo(env, udpReceiverThread, NULL, NULL);
+        ((OvrContext *) handle)->fetchTrackingInfo(env, udpReceiverThread, nullptr, nullptr);
     }
 }
 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_OvrContext_onChangeSettingsNative(JNIEnv *env, jobject instance,
-                                                            jlong handle,
-                                                            jint EnableTestMode, jint Suspend) {
-    ((OvrContext *) handle)->onChangeSettings(EnableTestMode, Suspend);
+                                                            jlong handle, jint Suspend) {
+    ((OvrContext *) handle)->onChangeSettings(Suspend);
 }
 
 //
@@ -844,13 +843,7 @@ Java_com_polygraphene_alvr_OvrContext_onPauseNative(JNIEnv *env, jobject instanc
 extern "C"
 JNIEXPORT jboolean JNICALL
 Java_com_polygraphene_alvr_OvrContext_isVrModeNative(JNIEnv *env, jobject instance, jlong handle) {
-    return ((OvrContext *) handle)->isVrMode();
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_OvrContext_getRefreshRatesNative(JNIEnv *env, jobject instance, jlong handle, jintArray refreshRates) {
-    ((OvrContext *) handle)->getRefreshRates(env, refreshRates);
+    return static_cast<jboolean>(((OvrContext *) handle)->isVrMode());
 }
 
 extern "C"

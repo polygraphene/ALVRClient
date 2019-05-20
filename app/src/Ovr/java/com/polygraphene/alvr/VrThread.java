@@ -268,8 +268,8 @@ class VrThread extends Thread {
         }
 
         @Override
-        public void onChangeSettings(int enableTestMode, int suspend, int frameQueueSize) {
-            mOvrContext.onChangeSettings(enableTestMode, suspend);
+        public void onChangeSettings(int suspend, int frameQueueSize) {
+            mOvrContext.onChangeSettings(suspend);
         }
 
         @Override

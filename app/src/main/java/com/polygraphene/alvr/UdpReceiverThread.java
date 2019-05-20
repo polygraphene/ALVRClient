@@ -34,7 +34,7 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
     interface Callback {
         void onConnected(int width, int height, int codec, int frameQueueSize, int refreshRate);
 
-        void onChangeSettings(int enableTestMode, int suspend, int frameQueueSize);
+        void onChangeSettings(int suspend, int frameQueueSize);
 
         void onShutdown(String serverAddr, int serverPort);
 
@@ -224,8 +224,8 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
     }
 
     @SuppressWarnings("unused")
-    public void onChangeSettings(int EnableTestMode, int suspend, int frameQueueSize) {
-        mCallback.onChangeSettings(EnableTestMode, suspend, frameQueueSize);
+    public void onChangeSettings(int suspend, int frameQueueSize) {
+        mCallback.onChangeSettings(suspend, frameQueueSize);
     }
 
     @SuppressWarnings("unused")
