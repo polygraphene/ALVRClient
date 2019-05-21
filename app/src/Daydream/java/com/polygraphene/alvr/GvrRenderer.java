@@ -215,7 +215,7 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         @Override
         public void run() {
             if (isConnected()) {
-                mDecoderThread.releaseBuffer(true);
+                mDecoderThread.releaseBuffer();
             }
         }
     };
@@ -276,17 +276,11 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
 
         long frameIndex = -1;
         if (isConnected()) {
-            if (mDecoderThread.peekAvailable()) {
-                mSurfaceTexture.updateTexImage();
-                frameIndex = mDecoderThread.clearAvailable();
+            frameIndex = mDecoderThread.clearAvailable(mSurfaceTexture);
+            if (frameIndex != -1) {
                 mRenderedFrameIndex = frameIndex;
-
-                float[] matrix = mFrameMap.get(frameIndex);
-                if (matrix != null) {
-                    System.arraycopy(matrix, 0, mHeadFromWorld, 0, matrix.length);
-                }
-                renderNative(nativeHandle, mLeftMvp, mRightMvp, mLeftViewport, mRightViewport, false, frameIndex);
-            } else if(mRenderedFrameIndex != -1) {
+            }
+            if(mRenderedFrameIndex != -1) {
                 float[] matrix = mFrameMap.get(mRenderedFrameIndex);
                 if (matrix != null) {
                     System.arraycopy(matrix, 0, mHeadFromWorld, 0, matrix.length);

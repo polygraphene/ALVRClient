@@ -200,7 +200,7 @@ public class GvrActivity extends BaseActivity {
         }
 
         @Override
-        public void onChangeSettings(int enableTestMode, int suspend, int frameQueueSize) {
+        public void onChangeSettings(int suspend, int frameQueueSize) {
         }
 
         @Override
