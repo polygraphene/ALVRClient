@@ -12,8 +12,8 @@ public class OvrContext {
 
     private long handle;
 
-    public void initialize(Activity activity, AssetManager assetManager, VrThread vrThread, boolean ARMode, int initialRefreshRate) {
-        handle = initializeNative(activity, assetManager, vrThread, ARMode, initialRefreshRate);
+    public void initialize(Activity activity, AssetManager assetManager, OvrThread ovrThread, boolean ARMode, int initialRefreshRate) {
+        handle = initializeNative(activity, assetManager, ovrThread, ARMode, initialRefreshRate);
     }
 
     public void destroy() {
@@ -84,7 +84,7 @@ public class OvrContext {
         setRefreshRateNative(handle, refreshRate);
     }
 
-    private native long initializeNative(Activity activity, AssetManager assetManager, VrThread vrThread, boolean ARMode, int initialRefreshRate);
+    private native long initializeNative(Activity activity, AssetManager assetManager, OvrThread ovrThread, boolean ARMode, int initialRefreshRate);
     private native void destroyNative(long handle);
 
     private native void onResumeNative(long handle);

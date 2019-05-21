@@ -1,6 +1,7 @@
 package com.polygraphene.alvr;
 
 import android.content.Context;
+import android.graphics.SurfaceTexture;
 import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.os.Handler;
@@ -388,19 +389,19 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
         mHandler.sendMessage(message);
     }
 
-    public void releaseBuffer(boolean render) {
-        mQueue.render(render);
+    public void releaseBuffer() {
+        mQueue.render();
     }
 
     public void onFrameAvailable() {
         mQueue.onFrameAvailable();
     }
 
-    public boolean peekAvailable() {
-        return mQueue.peekAvailable();
+    public long clearAvailable(SurfaceTexture surfaceTexture) {
+        return mQueue.clearAvailable(surfaceTexture);
     }
 
-    public long clearAvailable() {
-        return mQueue.clearAvailable();
+    public boolean discartStaleFrames(SurfaceTexture surfaceTexture) {
+        return mQueue.discardStaleFrames(surfaceTexture);
     }
 }

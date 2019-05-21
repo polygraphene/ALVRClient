@@ -63,7 +63,7 @@ public class DecoderTestActivity extends AppCompatActivity {
                 surfaceView.postDelayed(new Runnable() {
                     @Override
                     public void run() {
-                        long ret = decoderThread.clearAvailable();
+                        long ret = decoderThread.clearAvailable(null);
 
                         if(ret >= 0) {
                             mFrameIndex++;

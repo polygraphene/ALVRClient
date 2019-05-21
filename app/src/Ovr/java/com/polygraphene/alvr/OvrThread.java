@@ -4,17 +4,22 @@ import android.app.Activity;
 import android.graphics.SurfaceTexture;
 import android.opengl.EGL14;
 import android.opengl.EGLContext;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.Looper;
 import android.util.Log;
 import android.view.Surface;
 
-class VrThread extends Thread {
-    private static final String TAG = "VrThread";
+import java.util.concurrent.TimeUnit;
+
+class OvrThread {
+    private static final String TAG = "OvrThread";
 
     private Activity mActivity;
 
     private OvrContext mOvrContext = new OvrContext();
-    private ThreadQueue mQueue = null;
-    private boolean mResumed = false;
+    private Handler mHandler;
+    private HandlerThread mHandlerThread;
 
     private SurfaceTexture mSurfaceTexture;
     private Surface mSurface;
@@ -29,14 +34,27 @@ class VrThread extends Thread {
 
     private boolean mVrMode = false;
     private boolean mDecoderPrepared = false;
+    private int mRefreshRate = 60;
 
-    public VrThread(Activity activity) {
+    private long mPreviousRender = 0;
+
+    public OvrThread(Activity activity) {
         this.mActivity = activity;
+
+        mHandlerThread = new HandlerThread("OvrThread");
+        mHandlerThread.start();
+        mHandler = new Handler(mHandlerThread.getLooper());
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                startup();
+            }
+        });
     }
 
     public void onSurfaceCreated(final Surface surface) {
-        Log.v(TAG, "VrThread.onSurfaceCreated.");
-        post(new Runnable() {
+        Log.v(TAG, "OvrThread.onSurfaceCreated.");
+        mHandler.post(new Runnable() {
             @Override
             public void run() {
                 mOvrContext.onSurfaceCreated(surface);
@@ -45,8 +63,8 @@ class VrThread extends Thread {
     }
 
     public void onSurfaceChanged(final Surface surface) {
-        Log.v(TAG, "VrThread.onSurfaceChanged.");
-        post(new Runnable() {
+        Log.v(TAG, "OvrThread.onSurfaceChanged.");
+        mHandler.post(new Runnable() {
             @Override
             public void run() {
                 mOvrContext.onSurfaceChanged(surface);
@@ -55,8 +73,8 @@ class VrThread extends Thread {
     }
 
     public void onSurfaceDestroyed() {
-        Log.v(TAG, "VrThread.onSurfaceDestroyed.");
-        post(new Runnable() {
+        Log.v(TAG, "OvrThread.onSurfaceDestroyed.");
+        mHandler.post(new Runnable() {
             @Override
             public void run() {
                 mOvrContext.onSurfaceDestroyed();
@@ -65,18 +83,19 @@ class VrThread extends Thread {
     }
 
     public void onResume() {
-        Log.v(TAG, "VrThread.onResume: Starting worker threads.");
-        post(new Runnable() {
+        Log.v(TAG, "OvrThread.onResume: Starting worker threads.");
+        // Sometimes previous decoder output remains not updated (when previous call of waitFrame() didn't call updateTexImage())
+        // and onFrameAvailable won't be called after next output.
+        // To avoid deadlock caused by it, we need to flush last output.
+        mHandler.post(new Runnable() {
             @Override
             public void run() {
-                mResumed = true;
-
                 mReceiverThread = new UdpReceiverThread(mUdpReceiverCallback);
 
                 ConnectionStateHolder.ConnectionState connectionState = new ConnectionStateHolder.ConnectionState();
                 ConnectionStateHolder.loadConnectionState(mActivity, connectionState);
 
-                if(connectionState.serverAddr != null && connectionState.serverPort != 0) {
+                if (connectionState.serverAddr != null && connectionState.serverPort != 0) {
                     Log.v(TAG, "load connection state: " + connectionState.serverAddr + " " + connectionState.serverPort);
                     mReceiverThread.recoverConnectionState(connectionState.serverAddr, connectionState.serverPort);
                 }
@@ -93,6 +112,7 @@ class VrThread extends Thread {
 
                     DeviceDescriptor deviceDescriptor = new DeviceDescriptor();
                     mOvrContext.getDeviceDescriptor(deviceDescriptor);
+                    mRefreshRate = deviceDescriptor.mRefreshRates[0];
                     if (!mReceiverThread.start(mEGLContext, mActivity, deviceDescriptor, mOvrContext.getCameraTexture(), mDecoderThread)) {
                         Log.e(TAG, "FATAL: Initialization of ReceiverThread failed.");
                         return;
@@ -101,85 +121,64 @@ class VrThread extends Thread {
                     e.printStackTrace();
                 }
 
-                Log.v(TAG, "VrThread.onResume: mVrContext.onResume().");
+                Log.v(TAG, "OvrThread.onResume: mVrContext.onResume().");
                 mOvrContext.onResume();
             }
         });
-        Log.v(TAG, "VrThread.onResume: Worker threads has started.");
+        mHandler.post(mRenderRunnable);
+        Log.v(TAG, "OvrThread.onResume: Worker threads has started.");
     }
 
     public void onPause() {
-        Log.v(TAG, "VrThread.onPause: Stopping worker threads.");
-        post(new Runnable() {
+        Log.v(TAG, "OvrThread.onPause: Stopping worker threads.");
+        // DecoderThread must be stopped before ReceiverThread and setting mResumed=false.
+        mHandler.post(new Runnable() {
             @Override
             public void run() {
                 // DecoderThread must be stopped before ReceiverThread and setting mResumed=false.
                 if (mDecoderThread != null) {
-                    Log.v(TAG, "VrThread.onPause: Stopping DecoderThread.");
+                    Log.v(TAG, "OvrThread.onPause: Stopping DecoderThread.");
                     mDecoderThread.stopAndWait();
                 }
                 if (mReceiverThread != null) {
-                    Log.v(TAG, "VrThread.onPause: Stopping ReceiverThread.");
+                    Log.v(TAG, "OvrThread.onPause: Stopping ReceiverThread.");
                     mReceiverThread.stopAndWait();
                 }
-                mResumed = false;
 
                 mOvrContext.onPause();
             }
         });
-        Log.v(TAG, "VrThread.onPause: All worker threads has stopped.");
+        Log.v(TAG, "OvrThread.onPause: All worker threads has stopped.");
     }
 
-    private Runnable mOnFrameDecodedRunnable = new Runnable() {
+    private Runnable mRenderRunnable = new Runnable() {
         @Override
         public void run() {
-            mDecoderThread.releaseBuffer(true);
+            render();
+        }
+    };
+    private Runnable mIdleRenderRunnable = new Runnable() {
+        @Override
+        public void run() {
+            render();
         }
     };
 
     // Called from onDestroy
-    @Override
-    public void interrupt() {
-        post(new Runnable() {
+    public void quit() {
+        mHandler.post(new Runnable() {
             @Override
             public void run() {
                 mLoadingTexture.destroyTexture();
-                mQueue.interrupt();
+                Log.v(TAG, "Destroying vrapi state.");
+                mOvrContext.destroy();
             }
         });
+        mHandlerThread.quitSafely();
     }
 
-    private void post(Runnable runnable) {
-        waitLooperPrepared();
-        mQueue.post(runnable);
-    }
-
-    private void send(Runnable runnable) {
-        waitLooperPrepared();
-        mQueue.send(runnable);
-    }
-
-    private void waitLooperPrepared() {
-        synchronized (this) {
-            while (mQueue == null) {
-                try {
-                    wait();
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-    }
-
-    @Override
-    public void run() {
-        setName("VrThread");
-        Log.v(TAG, "VrThread started.");
-
-        synchronized (this) {
-            mQueue = new ThreadQueue();
-            notifyAll();
-        }
+    public void startup() {
+        Log.v(TAG, "OvrThread started.");
 
         mOvrContext.initialize(mActivity, mActivity.getAssets(), this, Constants.IS_ARCORE_BUILD, 60);
 
@@ -187,35 +186,42 @@ class VrThread extends Thread {
         mSurfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
             @Override
             public void onFrameAvailable(SurfaceTexture surfaceTexture) {
-                Utils.log("VrThread: waitFrame: onFrameAvailable is called.");
+                Utils.log("OvrThread: waitFrame: onFrameAvailable is called.");
                 mDecoderThread.onFrameAvailable();
+                mHandler.removeCallbacks(mIdleRenderRunnable);
+                mHandler.post(mRenderRunnable);
             }
-        });
+        }, new Handler(Looper.getMainLooper()));
         mSurface = new Surface(mSurfaceTexture);
 
         mLoadingTexture.initializeMessageCanvas(mOvrContext.getLoadingTexture());
         mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\nLoading...");
 
         mEGLContext = EGL14.eglGetCurrentContext();
-
-        Log.v(TAG, "Start loop of VrThread.");
-        while (mQueue.waitIdle()) {
-            if (!mOvrContext.isVrMode() || !mResumed) {
-                mQueue.waitNext();
-                continue;
-            }
-            render();
-        }
-
-        Log.v(TAG, "Destroying vrapi state.");
-        mOvrContext.destroy();
     }
 
     private void render() {
         if (mReceiverThread.isConnected() && mReceiverThread.getErrorMessage() == null) {
-            long renderedFrameIndex = waitFrame();
+            if (mDecoderThread.discartStaleFrames(mSurfaceTexture)) {
+                Utils.log(TAG, "Discard stale frame. Wait next onFrameAvailable.");
+                mHandler.removeCallbacks(mIdleRenderRunnable);
+                mHandler.postDelayed(mIdleRenderRunnable, 50);
+                return;
+            }
+            long next = checkRenderTiming();
+            if(next > 0) {
+                mHandler.postDelayed(mRenderRunnable, next);
+                return;
+            }
+            long renderedFrameIndex = mDecoderThread.clearAvailable(mSurfaceTexture);
             if (renderedFrameIndex != -1) {
                 mOvrContext.render(renderedFrameIndex);
+                mPreviousRender = System.nanoTime();
+
+                mHandler.postDelayed(mRenderRunnable, 5);
+            } else {
+                mHandler.removeCallbacks(mIdleRenderRunnable);
+                mHandler.postDelayed(mIdleRenderRunnable, 50);
             }
         } else {
             if (mReceiverThread.getErrorMessage() != null) {
@@ -228,24 +234,19 @@ class VrThread extends Thread {
                 }
             }
             mOvrContext.renderLoading();
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+            mHandler.removeCallbacks(mIdleRenderRunnable);
+            mHandler.postDelayed(mIdleRenderRunnable, 100);
         }
     }
 
-    private long waitFrame() {
-        boolean available = mDecoderThread.peekAvailable();
-        if (available) {
-            mSurfaceTexture.updateTexImage();
-            return mDecoderThread.clearAvailable();
-        }
-        return -1;
+    private long checkRenderTiming() {
+        long current = System.nanoTime();
+        long threashold = TimeUnit.SECONDS.toNanos(1) / mRefreshRate -
+                TimeUnit.MILLISECONDS.toNanos(5);
+        return TimeUnit.NANOSECONDS.toMillis(threashold - (current - mPreviousRender));
     }
 
-    // Called on VrThread.
+    // Called on OvrThread.
     public void onVrModeChanged(boolean enter) {
         mVrMode = enter;
         Log.i(TAG, "onVrModeChanged. mVrMode=" + mVrMode + " mDecoderPrepared=" + mDecoderPrepared);
@@ -257,7 +258,7 @@ class VrThread extends Thread {
         public void onConnected(final int width, final int height, final int codec, final int frameQueueSize, final int refreshRate) {
             // We must wait completion of notifyGeometryChange
             // to ensure the first video frame arrives after notifyGeometryChange.
-            send(new Runnable() {
+            mHandler.post(new Runnable() {
                 @Override
                 public void run() {
                     mOvrContext.setRefreshRate(refreshRate);
@@ -285,7 +286,7 @@ class VrThread extends Thread {
 
         @Override
         public void onTracking(float[] position, float[] orientation) {
-            if(mOvrContext.isVrMode()) {
+            if (mOvrContext.isVrMode()) {
                 mOvrContext.fetchTrackingInfo(mReceiverThread, position, orientation);
             }
         }
@@ -308,7 +309,7 @@ class VrThread extends Thread {
 
         @Override
         public void onFrameDecoded() {
-            post(mOnFrameDecodedRunnable);
+            mDecoderThread.releaseBuffer();
         }
     };
 }

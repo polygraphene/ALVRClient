@@ -1,5 +1,6 @@
 package com.polygraphene.alvr;
 
+import android.graphics.SurfaceTexture;
 import android.media.MediaCodec;
 import android.support.annotation.NonNull;
 import android.util.Log;
@@ -22,11 +23,14 @@ public class OutputFrameQueue {
     private MediaCodec mCodec;
     private FrameMap mFrameMap = new FrameMap();
     private final int mQueueSize = 2;
-    private Element mRendering = null;
-    private Element mAvailable = null;
+    private Element mSurface = new Element();
+    private enum SurfaceState {
+        Idle, Rendering, Available
+    }
+    SurfaceState mState = SurfaceState.Idle;
 
     OutputFrameQueue() {
-        for(int i = 0; i < mQueueSize; i++) {
+        for (int i = 0; i < mQueueSize; i++) {
             mUnusedList.add(new Element());
         }
     }
@@ -40,7 +44,7 @@ public class OutputFrameQueue {
     }
 
     synchronized public void pushOutputBuffer(int index, @NonNull MediaCodec.BufferInfo info) {
-        if(mStopped) {
+        if (mStopped) {
             Log.e(TAG, "Ignore output buffer because queue has been already stopped. index=" + index);
             mCodec.releaseOutputBuffer(index, false);
             return;
@@ -54,7 +58,7 @@ public class OutputFrameQueue {
         }
 
         Element elem = mUnusedList.poll();
-        if(elem == null){
+        if (elem == null) {
             Log.e(TAG, "FrameQueue is full. Discard old frame.");
 
             elem = mQueue.poll();
@@ -66,68 +70,96 @@ public class OutputFrameQueue {
 
         LatencyCollector.DecoderOutput(foundFrameIndex);
         Utils.frameLog(foundFrameIndex, "Current queue state=" + mQueue.size() + "/" + mQueueSize + " pushed index=" + index);
+
+        render();
     }
 
-    synchronized public long render(boolean render) {
-        if(mStopped) {
+    synchronized public long render() {
+        if (mStopped) {
             return -1;
         }
-        if (mRendering != null || mAvailable != null) {
+        if (mState != SurfaceState.Idle) {
             // It will conflict with current rendering frame.
             // Defer processing until current frame is rendered.
             Utils.log(TAG, "Conflict with current rendering frame. Defer processing.");
             return -1;
         }
         Element elem = mQueue.poll();
-        if(elem == null) {
+        if (elem == null) {
             return -1;
         }
+        mUnusedList.add(elem);
 
         Utils.frameLog(elem.frameIndex, "Calling releaseOutputBuffer(). index=" + elem.index);
 
-        mRendering = elem;
-        mCodec.releaseOutputBuffer(elem.index, render);
+        mState = SurfaceState.Rendering;
+        mSurface.index = elem.index;
+        mSurface.frameIndex = elem.frameIndex;
+        mCodec.releaseOutputBuffer(elem.index, true);
         return elem.frameIndex;
     }
 
     synchronized public void onFrameAvailable() {
-        if(mStopped) {
+        if (mStopped) {
             return;
         }
-        if(mRendering == null) {
+        if (mState != SurfaceState.Rendering) {
             return;
         }
-        if(mAvailable != null) {
-            return;
-        }
-        Utils.frameLog(mRendering.frameIndex, "onFrameAvailable().");
-        mAvailable = mRendering;
-        mRendering = null;
+        Utils.frameLog(mSurface.frameIndex, "onFrameAvailable().");
+        mState = SurfaceState.Available;
     }
 
-    synchronized public boolean peekAvailable() {
+    synchronized public long clearAvailable(SurfaceTexture surfaceTexture) {
+        if (mStopped) {
+            return -1;
+        }
+        if (mState != SurfaceState.Available) {
+            return -1;
+        }
+        Utils.frameLog(mSurface.frameIndex, "clearAvailable().");
+        long frameIndex = mSurface.frameIndex;
+        mState = SurfaceState.Idle;
+
+        if (surfaceTexture != null) {
+            surfaceTexture.updateTexImage();
+        }
+
+        // Render deferred frame.
+        render();
+
+        return frameIndex;
+    }
+
+    synchronized public boolean discardStaleFrames(SurfaceTexture surfaceTexture) {
         if (mStopped) {
             return false;
         }
-        return mAvailable != null;
-    }
-
-    synchronized public long clearAvailable() {
-        if(mStopped) {
-            return -1;
+        if (mQueue.size() == 0 || mState == SurfaceState.Rendering) {
+            return false;
         }
-        if(mAvailable == null){
-            return -1;
+        if (mState == SurfaceState.Available) {
+            mState = SurfaceState.Idle;
+            if (surfaceTexture != null) {
+                surfaceTexture.updateTexImage();
+            }
         }
-        Utils.frameLog(mAvailable.frameIndex, "clearAvailable().");
-        long frameIndex = mAvailable.frameIndex;
-        mUnusedList.add(mAvailable);
-        mAvailable = null;
 
-        // Render deferred frame.
-        render(true);
-
-        return frameIndex;
+        while (true) {
+            if (mQueue.size() > 1) {
+                // Discard because this elem is not latest frame.
+                Element elem = mQueue.poll();
+                Utils.frameLog(elem.frameIndex, "discardStaleFrames: releaseOutputBuffer(false)");
+                mCodec.releaseOutputBuffer(elem.index, false);
+                mUnusedList.add(elem);
+            } else {
+                // Latest frame.
+                Element elem = mQueue.peek();
+                Utils.frameLog(elem.frameIndex, "discardStaleFrames: releaseOutputBuffer(true)");
+                render();
+                return true;
+            }
+        }
     }
 
     synchronized public void stop() {

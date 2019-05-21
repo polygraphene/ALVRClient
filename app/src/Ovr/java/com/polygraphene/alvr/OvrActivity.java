@@ -1,6 +1,5 @@
 package com.polygraphene.alvr;
 
-import android.app.Activity;
 import android.content.Context;
 import android.media.AudioManager;
 import android.os.Bundle;
@@ -14,22 +13,22 @@ import android.view.WindowManager;
 public class OvrActivity extends BaseActivity {
     private final static String TAG = "OvrActivity";
 
-    private VrThread mVrThread = null;
+    private OvrThread mOvrThread = null;
 
     private final SurfaceHolder.Callback mCallback = new SurfaceHolder.Callback() {
         @Override
         public void surfaceCreated(final SurfaceHolder holder) {
-            mVrThread.onSurfaceCreated(holder.getSurface());
+            mOvrThread.onSurfaceCreated(holder.getSurface());
         }
 
         @Override
         public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-            mVrThread.onSurfaceChanged(holder.getSurface());
+            mOvrThread.onSurfaceChanged(holder.getSurface());
         }
 
         @Override
         public void surfaceDestroyed(SurfaceHolder holder) {
-            mVrThread.onSurfaceDestroyed();
+            mOvrThread.onSurfaceDestroyed();
         }
     };
 
@@ -47,17 +46,16 @@ public class OvrActivity extends BaseActivity {
         SurfaceHolder holder = surfaceView.getHolder();
         holder.addCallback(mCallback);
 
-        Log.v(TAG, "onCreate: Starting VrThread");
-        mVrThread = new VrThread(this);
-        mVrThread.start();
+        Log.v(TAG, "onCreate: Starting OvrThread");
+        mOvrThread = new OvrThread(this);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
 
-        if(mVrThread != null) {
-            mVrThread.onResume();
+        if(mOvrThread != null) {
+            mOvrThread.onResume();
         }
     }
 
@@ -65,8 +63,8 @@ public class OvrActivity extends BaseActivity {
     protected void onPause() {
         super.onPause();
 
-        if(mVrThread != null) {
-            mVrThread.onPause();
+        if(mOvrThread != null) {
+            mOvrThread.onPause();
         }
     }
 
@@ -74,16 +72,12 @@ public class OvrActivity extends BaseActivity {
     protected void onDestroy() {
         super.onDestroy();
 
-        Log.v(TAG, "onDestroy: Stopping VrThread.");
-        if(mVrThread != null) {
-            mVrThread.interrupt();
-            try {
-                mVrThread.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+        Log.v(TAG, "onDestroy: Stopping OvrThread.");
+        if(mOvrThread != null) {
+            mOvrThread.quit();
+            mOvrThread = null;
         }
-        Log.v(TAG, "onDestroy: VrThread has stopped.");
+        Log.v(TAG, "onDestroy: OvrThread has stopped.");
     }
 
     @Override
