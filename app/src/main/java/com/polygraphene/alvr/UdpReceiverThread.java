@@ -19,6 +19,7 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
     }
 
     private static final String BROADCAST_ADDRESS = "255.255.255.255";
+    private static final int HELLO_PORT = 9943;
     private static final int PORT = 9944;
 
     private TrackingThread mTrackingThread;
@@ -123,7 +124,7 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
         try {
             String[] broadcastList = getBroadcastAddressList();
 
-            mNativeHandle = initializeSocket(PORT, getDeviceName(), broadcastList,
+            mNativeHandle = initializeSocket(HELLO_PORT, PORT, getDeviceName(), broadcastList,
                     mDeviceDescriptor.mRefreshRates, mDeviceDescriptor.mRenderWidth, mDeviceDescriptor.mRenderHeight, mDeviceDescriptor.mFov,
                     mDeviceDescriptor.mDeviceType, mDeviceDescriptor.mDeviceSubType, mDeviceDescriptor.mDeviceCapabilityFlags,
                     mDeviceDescriptor.mControllerCapabilityFlags
@@ -248,9 +249,9 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
         mNALCallback.pushNAL(nal);
     }
 
-    private native long initializeSocket(int port, String deviceName, String[] broadcastAddrList,
-                                        int[] refreshRates, int renderWidth, int renderHeight, float[] fov,
-                                        int deviceType, int deviceSubType, int deviceCapabilityFlags, int controllerCapabilityFlags);
+    private native long initializeSocket(int helloPort, int port, String deviceName, String[] broadcastAddrList,
+                                         int[] refreshRates, int renderWidth, int renderHeight, float[] fov,
+                                         int deviceType, int deviceSubType, int deviceCapabilityFlags, int controllerCapabilityFlags);
     private native void closeSocket(long nativeHandle);
     private native void runLoop(long nativeHandle, String serverAddress, int serverPort);
     private native void interruptNative(long nativeHandle);

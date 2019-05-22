@@ -23,7 +23,7 @@ Socket::~Socket() {
     }
 }
 
-void Socket::initialize(JNIEnv *env, int port, jobjectArray broadcastAddrList_) {
+void Socket::initialize(JNIEnv *env, int helloPort, int port, jobjectArray broadcastAddrList_) {
     int val;
     socklen_t len;
 
@@ -68,10 +68,10 @@ void Socket::initialize(JNIEnv *env, int port, jobjectArray broadcastAddrList_) 
     // Parse broadcast address list.
     //
 
-    setBroadcastAddrList(env, port, broadcastAddrList_);
+    setBroadcastAddrList(env, helloPort, port, broadcastAddrList_);
 }
 
-void Socket::setBroadcastAddrList(JNIEnv *env, int port, jobjectArray broadcastAddrList_) {
+void Socket::setBroadcastAddrList(JNIEnv *env, int helloPort, int port, jobjectArray broadcastAddrList_) {
     int broadcastCount = env->GetArrayLength(broadcastAddrList_);
     for (int i = 0; i < broadcastCount; i++) {
         jstring address = (jstring) env->GetObjectArrayElement(broadcastAddrList_, i);
@@ -79,6 +79,13 @@ void Socket::setBroadcastAddrList(JNIEnv *env, int port, jobjectArray broadcastA
         env->DeleteLocalRef(address);
 
         sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(helloPort);
+        inet_pton(addr.sin_family, addressStr.c_str(), &addr.sin_addr);
+
+        m_broadcastAddrList.push_back(addr);
+
         memset(&addr, 0, sizeof(addr));
         addr.sin_family = AF_INET;
         addr.sin_port = htons(port);
@@ -218,9 +225,10 @@ UdpManager::~UdpManager() {
     m_sendQueue.clear();
 }
 
-void UdpManager::initialize(JNIEnv *env, jobject instance, jint port, jstring deviceName_, jobjectArray broadcastAddrList_,
-                       jintArray refreshRates_, jint renderWidth, jint renderHeight, jfloatArray fov,
-                       jint deviceType, jint deviceSubType, jint deviceCapabilityFlags, jint controllerCapabilityFlags) {
+void UdpManager::initialize(JNIEnv *env, jobject instance, jint helloPort, jint port, jstring deviceName_,
+                            jobjectArray broadcastAddrList_, jintArray refreshRates_, jint renderWidth,
+                            jint renderHeight, jfloatArray fov, jint deviceType, jint deviceSubType,
+                            jint deviceCapabilityFlags, jint controllerCapabilityFlags) {
     //
     // Initialize variables
     //
@@ -272,7 +280,7 @@ void UdpManager::initialize(JNIEnv *env, jobject instance, jint port, jstring de
     m_socket.setOnBroadcastRequest(std::bind(&UdpManager::onBroadcastRequest, this));
     m_socket.setOnPacketRecv(std::bind(&UdpManager::onPacketRecv, this, std::placeholders::_1,
                                        std::placeholders::_2));
-    m_socket.initialize(env, port, broadcastAddrList_);
+    m_socket.initialize(env, helloPort, port, broadcastAddrList_);
 
     //
     // Sound
@@ -681,10 +689,10 @@ void UdpManager::loadRefreshRates(JNIEnv *env, jintArray refreshRates_) {
 void UdpManager::loadFov(JNIEnv *env, jfloatArray fov_) {
     jfloat *fov = env->GetFloatArrayElements(fov_, nullptr);
     for(int eye = 0; eye < 2; eye++) {
-        mHelloMessage.eyeFov[eye].left = fov[eye * 2 + 0];
-        mHelloMessage.eyeFov[eye].right = fov[eye * 2 + 1];
-        mHelloMessage.eyeFov[eye].top = fov[eye * 2 + 2];
-        mHelloMessage.eyeFov[eye].bottom = fov[eye * 2 + 3];
+        mHelloMessage.eyeFov[eye].left = fov[eye * 4 + 0];
+        mHelloMessage.eyeFov[eye].right = fov[eye * 4 + 1];
+        mHelloMessage.eyeFov[eye].top = fov[eye * 4 + 2];
+        mHelloMessage.eyeFov[eye].bottom = fov[eye * 4 + 3];
     }
     env->ReleaseFloatArrayElements(fov_, fov, 0);
 }
@@ -712,14 +720,15 @@ extern "C"
 JNIEXPORT jlong JNICALL
 Java_com_polygraphene_alvr_UdpReceiverThread_initializeSocket(
         JNIEnv *env, jobject instance,
-        jint port, jstring deviceName_, jobjectArray broadcastAddrList_,
+        jint helloPort, jint port, jstring deviceName_, jobjectArray broadcastAddrList_,
         jintArray refreshRates_, jint renderWidth, jint renderHeight, jfloatArray fov,
         jint deviceType, jint deviceSubType, jint deviceCapabilityFlags, jint controllerCapabilityFlags) {
     auto udpManager = new UdpManager();
     try {
-        udpManager->initialize(env, instance, port, deviceName_,
+        udpManager->initialize(env, instance, helloPort, port, deviceName_,
                                broadcastAddrList_, refreshRates_, renderWidth, renderHeight, fov,
-                               deviceType, deviceSubType, deviceCapabilityFlags, controllerCapabilityFlags);
+                               deviceType, deviceSubType, deviceCapabilityFlags,
+                               controllerCapabilityFlags);
     } catch (Exception &e) {
         LOGE("Exception on initializing UdpManager. e=%ls", e.what());
         delete udpManager;

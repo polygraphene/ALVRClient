@@ -648,6 +648,7 @@ void OvrContext::leaveVrMode() {
 void OvrContext::getDeviceDescriptor(JNIEnv *env, jobject deviceDescriptor) {
     int renderWidth = vrapi_GetSystemPropertyInt(&java,
                                                   VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_WIDTH);
+    renderWidth *= 2;
     int renderHeight = vrapi_GetSystemPropertyInt(&java,
                                                    VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_HEIGHT);
 

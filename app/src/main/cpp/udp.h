@@ -22,11 +22,11 @@ public:
     Socket();
     ~Socket();
 
-    void initialize(JNIEnv *env, int port,
+    void initialize(JNIEnv *env, int helloPort, int port,
                     jobjectArray broadcastAddrList_);
 
-    int send(const void *buf, size_t len);
     void sendBroadcast(const void *buf, size_t len);
+    int send(const void *buf, size_t len);
     void recv();
 
     void recoverConnection(std::string serverAddress, int serverPort);
@@ -72,16 +72,17 @@ private:
 
     void parse(char *packet, int packetSize, const sockaddr_in &addr);
 
-    void setBroadcastAddrList(JNIEnv *env, int port, jobjectArray broadcastAddrList_);
+    void setBroadcastAddrList(JNIEnv *env, int helloPort, int port, jobjectArray broadcastAddrList_);
 };
 
 class UdpManager {
 public:
     UdpManager();
     ~UdpManager();
-    void initialize(JNIEnv *env, jobject instance, jint port, jstring deviceName_, jobjectArray broadcastAddrList_,
-                    jintArray refreshRates_, jint renderWidth, jint renderHeight, jfloatArray fov,
-                    jint deviceType, jint deviceSubType, jint deviceCapabilityFlags, jint controllerCapabilityFlags);
+    void initialize(JNIEnv *env, jobject instance, jint helloPort, jint port, jstring deviceName_,
+                        jobjectArray broadcastAddrList_, jintArray refreshRates_, jint renderWidth,
+                        jint renderHeight, jfloatArray fov, jint deviceType, jint deviceSubType,
+                        jint deviceCapabilityFlags, jint controllerCapabilityFlags);
 
     NALParser &getNalParser() {
         return *m_nalParser;
