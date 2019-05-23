@@ -223,12 +223,26 @@ public class GvrActivity extends BaseActivity {
     private DecoderThread.DecoderCallback mDecoderCallback = new DecoderThread.DecoderCallback() {
         @Override
         public void onPrepared() {
-            mReceiverThread.setSinkPrepared(true);
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if(mReceiverThread != null) {
+                        mReceiverThread.setSinkPrepared(true);
+                    }
+                }
+            });
         }
 
         @Override
         public void onDestroy() {
-            mReceiverThread.setSinkPrepared(false);
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if(mReceiverThread != null) {
+                        mReceiverThread.setSinkPrepared(false);
+                    }
+                }
+            });
         }
 
         @Override

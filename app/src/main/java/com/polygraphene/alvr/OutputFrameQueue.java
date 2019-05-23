@@ -24,9 +24,11 @@ public class OutputFrameQueue {
     private FrameMap mFrameMap = new FrameMap();
     private final int mQueueSize = 2;
     private Element mSurface = new Element();
+
     private enum SurfaceState {
         Idle, Rendering, Available
     }
+
     SurfaceState mState = SurfaceState.Idle;
 
     OutputFrameQueue() {
@@ -163,6 +165,9 @@ public class OutputFrameQueue {
     }
 
     synchronized public void stop() {
+        if (mStopped) {
+            return;
+        }
         Log.i(TAG, "Stopping.");
         mStopped = true;
         mUnusedList.addAll(mQueue);

@@ -146,6 +146,7 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
             Log.e(TAG, "DecoderThread stopped by Exception.");
         } finally {
             Log.i(TAG, "Stopping decoder.");
+            mQueue.stop();
 
             mDecoderCallback.onDestroy();
             if (mDecoder != null) {
