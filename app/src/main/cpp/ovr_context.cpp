@@ -310,10 +310,10 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
 uint32_t OvrContext::mapButtons(ovrInputTrackedRemoteCapabilities *remoteCapabilities,
                                 ovrInputStateTrackedRemote *remoteInputState) {
     uint32_t buttons = 0;
-    if (remoteCapabilities->ControllerCapabilities == ovrControllerCaps_ModelOculusTouch) {
+    if (remoteCapabilities->ControllerCapabilities & ovrControllerCaps_ModelOculusTouch) {
         // Oculus Quest Touch Cotroller
         if (remoteInputState->Buttons & ovrButton_A) {
-             buttons |= 1 << ALVR_INPUT_A_CLICK;
+            buttons |= 1 << ALVR_INPUT_A_CLICK;
         }
         if (remoteInputState->Buttons & ovrButton_B){
             buttons |= 1 << ALVR_INPUT_B_CLICK;
