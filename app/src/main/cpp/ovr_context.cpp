@@ -13,6 +13,7 @@
 #include <string>
 #include <map>
 #include <vector>
+#include <packet_types.h>
 #include "utils.h"
 #include "render.h"
 #include "ovr_context.h"
@@ -147,29 +148,31 @@ void OvrContext::destroy(JNIEnv *env) {
 void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
     ovrInputCapabilityHeader curCaps;
     ovrResult result;
+    int controller = 0;
 
     for (uint32_t deviceIndex = 0;
          vrapi_EnumerateInputDevices(Ovr, deviceIndex, &curCaps) >= 0; deviceIndex++) {
-        //LOG("Device %d: Type=%d ID=%d", deviceIndex, curCaps.Type, curCaps.DeviceID);
-        if (curCaps.Type == ovrControllerType_TrackedRemote) {
-            // Gear VR / Oculus Go 3DoF Controller
+        LOG("Device %d: Type=%d ID=%d", deviceIndex, curCaps.Type, curCaps.DeviceID);
+        if (curCaps.Type == ovrControllerType_TrackedRemote ||
+                curCaps.Type == ovrControllerType_Reserved0 ||
+                curCaps.Type == ovrControllerType_Reserved1
+        ) {
+            // Gear VR / Oculus Go 3DoF Controller / Oculus Quest Touch Controller
+            if(controller >= 2) {
+                LOG("Device %d: Ignore.", deviceIndex);
+                continue;
+            }
+
+            auto &c = packet->controller[controller];
+
             ovrInputTrackedRemoteCapabilities remoteCapabilities;
+            ovrInputStateTrackedRemote remoteInputState;
+
             remoteCapabilities.Header = curCaps;
             result = vrapi_GetInputDeviceCapabilities(Ovr, &remoteCapabilities.Header);
             if (result != ovrSuccess) {
                 continue;
             }
-            packet->flags |= TrackingInfo::FLAG_CONTROLLER_ENABLE;
-
-            if ((remoteCapabilities.ControllerCapabilities & ovrControllerCaps_LeftHand) != 0) {
-                packet->flags |= TrackingInfo::FLAG_CONTROLLER_LEFTHAND;
-            }
-            if ((remoteCapabilities.ControllerCapabilities & ovrControllerCaps_ModelOculusGo) !=
-                0) {
-                packet->flags |= TrackingInfo::FLAG_CONTROLLER_OCULUSGO;
-            }
-
-            ovrInputStateTrackedRemote remoteInputState;
             remoteInputState.Header.ControllerType = remoteCapabilities.Header.Type;
 
             result = vrapi_GetCurrentInputState(Ovr, remoteCapabilities.Header.DeviceID,
@@ -177,50 +180,75 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
             if (result != ovrSuccess) {
                 continue;
             }
-            packet->controllerButtons = remoteInputState.Buttons;
-            if (remoteInputState.TrackpadStatus) {
-                packet->flags |= TrackingInfo::FLAG_CONTROLLER_TRACKPAD_TOUCH;
+
+            LOG("ControllerCapabilities=%08X ButtonCapabilities=%08X", remoteCapabilities.ControllerCapabilities,
+                    remoteCapabilities.ButtonCapabilities);
+
+            c.flags |= TrackingInfo::Controller::FLAG_CONTROLLER_ENABLE;
+
+            if ((remoteCapabilities.ControllerCapabilities & ovrControllerCaps_LeftHand) != 0) {
+                c.flags |= TrackingInfo::Controller::FLAG_CONTROLLER_LEFTHAND;
             }
-            // Normalize to -1.0 - +1.0 for OpenVR Input. y-asix should be reversed.
-            packet->controllerTrackpadPosition.x =
-                    remoteInputState.TrackpadPosition.x / remoteCapabilities.TrackpadMaxX * 2.0f -
-                    1.0f;
-            packet->controllerTrackpadPosition.y =
-                    remoteInputState.TrackpadPosition.y / remoteCapabilities.TrackpadMaxY * 2.0f -
-                    1.0f;
-            packet->controllerTrackpadPosition.y = -packet->controllerTrackpadPosition.y;
-            packet->controllerBatteryPercentRemaining = remoteInputState.BatteryPercentRemaining;
-            packet->controllerRecenterCount = remoteInputState.RecenterCount;
+
+            if ((remoteCapabilities.ControllerCapabilities & ovrControllerCaps_ModelGearVR) !=
+                 0) {
+                c.flags |= TrackingInfo::Controller::FLAG_CONTROLLER_GEARVR;
+            } else if ((remoteCapabilities.ControllerCapabilities & ovrControllerCaps_ModelOculusGo) !=
+                       0) {
+                c.flags |= TrackingInfo::Controller::FLAG_CONTROLLER_OCULUS_GO;
+            } else if ((remoteCapabilities.ControllerCapabilities & ovrControllerCaps_ModelOculusTouch) !=
+                       0) {
+                c.flags |= TrackingInfo::Controller::FLAG_CONTROLLER_OCULUS_QUEST;
+            }
+
+            c.buttons = mapButtons(&remoteCapabilities, &remoteInputState);
+
+            if((remoteCapabilities.ControllerCapabilities & ovrControllerCaps_HasJoystick) != 0) {
+                c.trackpadPosition.x = remoteInputState.JoystickNoDeadZone.x;
+                c.trackpadPosition.y = remoteInputState.JoystickNoDeadZone.y;
+            } else {
+                // Normalize to -1.0 - +1.0 for OpenVR Input. y-asix should be reversed.
+                c.trackpadPosition.x =
+                        remoteInputState.TrackpadPosition.x / remoteCapabilities.TrackpadMaxX *
+                        2.0f - 1.0f;
+                c.trackpadPosition.y =
+                        remoteInputState.TrackpadPosition.y / remoteCapabilities.TrackpadMaxY *
+                        2.0f - 1.0f;
+                c.trackpadPosition.y = -c.trackpadPosition.y;
+            }
+            c.batteryPercentRemaining = remoteInputState.BatteryPercentRemaining;
+            c.recenterCount = remoteInputState.RecenterCount;
 
             ovrTracking tracking;
             if (vrapi_GetInputTrackingState(Ovr, remoteCapabilities.Header.DeviceID,
                                             displayTime, &tracking) != ovrSuccess) {
                 LOG("vrapi_GetInputTrackingState failed. Device was disconnected?");
             } else {
-                memcpy(&packet->controller_Pose_Orientation,
+                memcpy(&c.orientation,
                        &tracking.HeadPose.Pose.Orientation,
                        sizeof(tracking.HeadPose.Pose.Orientation));
-                memcpy(&packet->controller_Pose_Position,
+                memcpy(&c.position,
                        &tracking.HeadPose.Pose.Position,
                        sizeof(tracking.HeadPose.Pose.Position));
-                memcpy(&packet->controller_AngularVelocity,
+                memcpy(&c.angularVelocity,
                        &tracking.HeadPose.AngularVelocity,
                        sizeof(tracking.HeadPose.AngularVelocity));
-                memcpy(&packet->controller_LinearVelocity,
+                memcpy(&c.linearVelocity,
                        &tracking.HeadPose.LinearVelocity,
                        sizeof(tracking.HeadPose.LinearVelocity));
-                memcpy(&packet->controller_AngularAcceleration,
+                memcpy(&c.angularAcceleration,
                        &tracking.HeadPose.AngularAcceleration,
                        sizeof(tracking.HeadPose.AngularAcceleration));
-                memcpy(&packet->controller_LinearAcceleration,
+                memcpy(&c.linearAcceleration,
                        &tracking.HeadPose.LinearAcceleration,
                        sizeof(tracking.HeadPose.LinearAcceleration));
             }
+            controller++;
         } else if (curCaps.Type == ovrControllerType_Headset) {
             // Gear VR Headset
             ovrInputHeadsetCapabilities capabilities;
             capabilities.Header = curCaps;
-            ovrResult result = vrapi_GetInputDeviceCapabilities(Ovr, &capabilities.Header);
+            result = vrapi_GetInputDeviceCapabilities(Ovr, &capabilities.Header);
             if (result == ovrSuccess) {
                 LOG("Device(Headset) %d: Type=%d ID=%d Cap=%08X Buttons=%08X Max=%d,%d Size=%f,%f",
                     deviceIndex, curCaps.Type, curCaps.DeviceID,
@@ -230,7 +258,7 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
 
                 ovrInputStateHeadset remoteInputState;
                 remoteInputState.Header.ControllerType = capabilities.Header.Type;
-                ovrResult result = vrapi_GetCurrentInputState(Ovr,
+                result = vrapi_GetCurrentInputState(Ovr,
                                                               capabilities.Header.DeviceID,
                                                               &remoteInputState.Header);
 
@@ -278,6 +306,60 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
         }
     }
 }
+
+uint32_t OvrContext::mapButtons(ovrInputTrackedRemoteCapabilities *remoteCapabilities,
+                                ovrInputStateTrackedRemote *remoteInputState) {
+    uint32_t buttons = 0;
+    if (remoteCapabilities->ControllerCapabilities == ovrControllerCaps_ModelOculusTouch) {
+        // Oculus Quest Touch Cotroller
+        if (remoteInputState->Buttons & ovrButton_A) {
+             buttons |= 1 << ALVR_INPUT_A_CLICK;
+        }
+        if (remoteInputState->Buttons & ovrButton_B){
+            buttons |= 1 << ALVR_INPUT_B_CLICK;
+        }
+        if (remoteInputState->Buttons & ovrButton_RThumb){
+            buttons |= 1 << ALVR_INPUT_JOYSTICK_RIGHT_CLICK;
+        }
+        if (remoteInputState->Buttons & ovrButton_RShoulder){
+            buttons |= 1 << ALVR_INPUT_SHOULDER_RIGHT_CLICK;
+        }
+        if (remoteInputState->Buttons & ovrButton_X) {
+            buttons |= 1 << ALVR_INPUT_X_CLICK;
+        }
+        if (remoteInputState->Buttons & ovrButton_Y){
+            buttons |= 1 << ALVR_INPUT_Y_CLICK;
+        }
+        if (remoteInputState->Buttons & ovrButton_LThumb){
+            buttons |= 1 << ALVR_INPUT_JOYSTICK_LEFT_CLICK;
+        }
+        if (remoteInputState->Buttons & ovrButton_LShoulder){
+            buttons |= 1 << ALVR_INPUT_SHOULDER_LEFT_CLICK;
+        }
+        if (remoteInputState->Buttons & ovrButton_GripTrigger){
+            buttons |= 1 << ALVR_INPUT_GRIP_CLICK;
+        }
+        if (remoteInputState->Buttons & ovrButton_Trigger){
+            buttons |= 1 << ALVR_INPUT_TRIGGER_CLICK;
+        }
+    } else {
+        // GearVR or Oculus Go Controller
+        if (remoteInputState->Buttons & ovrButton_A) {
+            buttons |= 1 << ALVR_INPUT_TRIGGER_CLICK;
+        }
+        if (remoteInputState->Buttons & ovrButton_Enter){
+            buttons |= 1 << ALVR_INPUT_TRACKPAD_CLICK;
+        }
+        if (remoteInputState->Buttons & ovrButton_Back){
+            buttons |= 1 << ALVR_INPUT_BACK_CLICK;
+        }
+        if (remoteInputState->TrackpadStatus) {
+            buttons |= 1 << ALVR_INPUT_TRACKPAD_TOUCH;
+        }
+    }
+    return buttons;
+}
+
 
 // Called TrackingThread. So, we can't use this->env.
 void OvrContext::sendTrackingInfo(TrackingInfo *packet, double displayTime, ovrTracking2 *tracking,
