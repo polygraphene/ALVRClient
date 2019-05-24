@@ -11,6 +11,7 @@
 #include "utils.h"
 #include "udp.h"
 
+uint32_t ovrButton_Unknown1 = 0x01000000;
 
 class OvrContext {
 public:

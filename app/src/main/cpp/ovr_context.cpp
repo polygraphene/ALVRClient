@@ -23,7 +23,8 @@
 #include "asset.h"
 
 
-void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager, jobject vrThread, bool ARMode, int initialRefreshRate) {
+void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager, jobject vrThread,
+                            bool ARMode, int initialRefreshRate) {
     LOG("Initializing EGL.");
 
     setAssetManager(env, assetManager);
@@ -153,12 +154,9 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
     for (uint32_t deviceIndex = 0;
          vrapi_EnumerateInputDevices(Ovr, deviceIndex, &curCaps) >= 0; deviceIndex++) {
         LOG("Device %d: Type=%d ID=%d", deviceIndex, curCaps.Type, curCaps.DeviceID);
-        if (curCaps.Type == ovrControllerType_TrackedRemote ||
-                curCaps.Type == ovrControllerType_Reserved0 ||
-                curCaps.Type == ovrControllerType_Reserved1
-        ) {
+        if (curCaps.Type == ovrControllerType_TrackedRemote) {
             // Gear VR / Oculus Go 3DoF Controller / Oculus Quest Touch Controller
-            if(controller >= 2) {
+            if (controller >= 2) {
                 LOG("Device %d: Ignore.", deviceIndex);
                 continue;
             }
@@ -181,8 +179,15 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
                 continue;
             }
 
-            LOG("ControllerCapabilities=%08X ButtonCapabilities=%08X", remoteCapabilities.ControllerCapabilities,
-                    remoteCapabilities.ButtonCapabilities);
+            LOG("ID=%d Cap Controller=%08X Button=%08X Touch=%08X",
+                curCaps.DeviceID,
+                remoteCapabilities.ControllerCapabilities,
+                remoteCapabilities.ButtonCapabilities,
+                remoteCapabilities.TouchCapabilities);
+            LOG("ID=%d Sta Button=%08X Touch=%08X Joystick=(%f,%f)",
+                curCaps.DeviceID,
+                remoteInputState.Buttons, remoteInputState.Touches,
+                remoteInputState.JoystickNoDeadZone.x, remoteInputState.JoystickNoDeadZone.y);
 
             c.flags |= TrackingInfo::Controller::FLAG_CONTROLLER_ENABLE;
 
@@ -191,19 +196,21 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
             }
 
             if ((remoteCapabilities.ControllerCapabilities & ovrControllerCaps_ModelGearVR) !=
-                 0) {
+                0) {
                 c.flags |= TrackingInfo::Controller::FLAG_CONTROLLER_GEARVR;
-            } else if ((remoteCapabilities.ControllerCapabilities & ovrControllerCaps_ModelOculusGo) !=
-                       0) {
+            } else if (
+                    (remoteCapabilities.ControllerCapabilities & ovrControllerCaps_ModelOculusGo) !=
+                    0) {
                 c.flags |= TrackingInfo::Controller::FLAG_CONTROLLER_OCULUS_GO;
-            } else if ((remoteCapabilities.ControllerCapabilities & ovrControllerCaps_ModelOculusTouch) !=
+            } else if ((remoteCapabilities.ControllerCapabilities &
+                        ovrControllerCaps_ModelOculusTouch) !=
                        0) {
                 c.flags |= TrackingInfo::Controller::FLAG_CONTROLLER_OCULUS_QUEST;
             }
 
             c.buttons = mapButtons(&remoteCapabilities, &remoteInputState);
 
-            if((remoteCapabilities.ControllerCapabilities & ovrControllerCaps_HasJoystick) != 0) {
+            if ((remoteCapabilities.ControllerCapabilities & ovrControllerCaps_HasJoystick) != 0) {
                 c.trackpadPosition.x = remoteInputState.JoystickNoDeadZone.x;
                 c.trackpadPosition.y = remoteInputState.JoystickNoDeadZone.y;
             } else {
@@ -259,8 +266,8 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
                 ovrInputStateHeadset remoteInputState;
                 remoteInputState.Header.ControllerType = capabilities.Header.Type;
                 result = vrapi_GetCurrentInputState(Ovr,
-                                                              capabilities.Header.DeviceID,
-                                                              &remoteInputState.Header);
+                                                    capabilities.Header.DeviceID,
+                                                    &remoteInputState.Header);
 
                 if (result == ovrSuccess) {
                     float normalized_x =
@@ -315,42 +322,54 @@ uint32_t OvrContext::mapButtons(ovrInputTrackedRemoteCapabilities *remoteCapabil
         if (remoteInputState->Buttons & ovrButton_A) {
             buttons |= 1 << ALVR_INPUT_A_CLICK;
         }
-        if (remoteInputState->Buttons & ovrButton_B){
+        if (remoteInputState->Buttons & ovrButton_B) {
             buttons |= 1 << ALVR_INPUT_B_CLICK;
         }
-        if (remoteInputState->Buttons & ovrButton_RThumb){
+        if (remoteInputState->Buttons & ovrButton_RThumb) {
             buttons |= 1 << ALVR_INPUT_JOYSTICK_RIGHT_CLICK;
-        }
-        if (remoteInputState->Buttons & ovrButton_RShoulder){
-            buttons |= 1 << ALVR_INPUT_SHOULDER_RIGHT_CLICK;
         }
         if (remoteInputState->Buttons & ovrButton_X) {
             buttons |= 1 << ALVR_INPUT_X_CLICK;
         }
-        if (remoteInputState->Buttons & ovrButton_Y){
+        if (remoteInputState->Buttons & ovrButton_Y) {
             buttons |= 1 << ALVR_INPUT_Y_CLICK;
         }
-        if (remoteInputState->Buttons & ovrButton_LThumb){
+        if (remoteInputState->Buttons & ovrButton_LThumb) {
             buttons |= 1 << ALVR_INPUT_JOYSTICK_LEFT_CLICK;
         }
-        if (remoteInputState->Buttons & ovrButton_LShoulder){
-            buttons |= 1 << ALVR_INPUT_SHOULDER_LEFT_CLICK;
+        if (remoteInputState->Buttons & ovrButton_Enter) {
+            // Menu button on left hand
+            buttons |= 1 << ALVR_INPUT_SYSTEM_CLICK;
         }
-        if (remoteInputState->Buttons & ovrButton_GripTrigger){
+        if (remoteInputState->Buttons & ovrButton_GripTrigger) {
             buttons |= 1 << ALVR_INPUT_GRIP_CLICK;
         }
-        if (remoteInputState->Buttons & ovrButton_Trigger){
+        if (remoteInputState->Buttons & ovrButton_Trigger) {
             buttons |= 1 << ALVR_INPUT_TRIGGER_CLICK;
+        }
+        if (remoteInputState->Buttons & ovrButton_Joystick) {
+            if (remoteCapabilities->ControllerCapabilities & ovrControllerCaps_LeftHand) {
+                buttons |= 1 << ALVR_INPUT_JOYSTICK_LEFT_CLICK;
+            } else {
+                buttons |= 1 << ALVR_INPUT_JOYSTICK_RIGHT_CLICK;
+            }
+        }
+        if (remoteInputState->Buttons & ovrButton_Unknown1) {
+            // Only on right controller. What's button???
+            buttons |= 1 << ALVR_INPUT_BACK_CLICK;
+        }
+        if(remoteInputState->Touches & ovrTouch_Joystick) {
+            buttons |= 1 << ALVR_INPUT_TRACKPAD_TOUCH;
         }
     } else {
         // GearVR or Oculus Go Controller
         if (remoteInputState->Buttons & ovrButton_A) {
             buttons |= 1 << ALVR_INPUT_TRIGGER_CLICK;
         }
-        if (remoteInputState->Buttons & ovrButton_Enter){
+        if (remoteInputState->Buttons & ovrButton_Enter) {
             buttons |= 1 << ALVR_INPUT_TRACKPAD_CLICK;
         }
-        if (remoteInputState->Buttons & ovrButton_Back){
+        if (remoteInputState->Buttons & ovrButton_Back) {
             buttons |= 1 << ALVR_INPUT_BACK_CLICK;
         }
         if (remoteInputState->TrackpadStatus) {
@@ -363,8 +382,8 @@ uint32_t OvrContext::mapButtons(ovrInputTrackedRemoteCapabilities *remoteCapabil
 
 // Called TrackingThread. So, we can't use this->env.
 void OvrContext::sendTrackingInfo(TrackingInfo *packet, double displayTime, ovrTracking2 *tracking,
-                                 const ovrVector3f *other_tracking_position,
-                                 const ovrQuatf *other_tracking_orientation) {
+                                  const ovrVector3f *other_tracking_position,
+                                  const ovrQuatf *other_tracking_orientation) {
     memset(packet, 0, sizeof(TrackingInfo));
 
     uint64_t clientTime = getTimestampUs();
@@ -394,7 +413,7 @@ void OvrContext::sendTrackingInfo(TrackingInfo *packet, double displayTime, ovrT
 
 // Called TrackingThread. So, we can't use this->env.
 void OvrContext::fetchTrackingInfo(JNIEnv *env_, jobject udpReceiverThread, ovrVector3f *position,
-                                  ovrQuatf *orientation) {
+                                   ovrQuatf *orientation) {
     std::shared_ptr<TrackingFrame> frame(new TrackingFrame());
 
     FrameIndex++;
@@ -445,7 +464,7 @@ void OvrContext::fetchTrackingInfo(JNIEnv *env_, jobject udpReceiverThread, ovrV
     LatencyCollector::Instance().tracking(frame->frameIndex);
 
     env_->CallVoidMethod(udpReceiverThread, mUdpReceiverThread_send, reinterpret_cast<jlong>(&info),
-                        static_cast<jint>(sizeof(info)));
+                         static_cast<jint>(sizeof(info)));
 }
 
 
@@ -636,11 +655,11 @@ void OvrContext::getRefreshRates(JNIEnv *env_, jintArray refreshRates) {
     std::string refreshRateList = "";
     char str[100];
     for (int i = 0; i < numberOfRefreshRates; i++) {
-        snprintf(str, sizeof(str), "%f%s", refreshRatesArray[i]
-                , (i != numberOfRefreshRates - 1) ? ", " : "");
+        snprintf(str, sizeof(str), "%f%s", refreshRatesArray[i],
+                 (i != numberOfRefreshRates - 1) ? ", " : "");
         refreshRateList += str;
 
-        if(i < ALVR_REFRESH_RATE_LIST_SIZE) {
+        if (i < ALVR_REFRESH_RATE_LIST_SIZE) {
             refreshRates_[i] = (int) refreshRatesArray[i];
         }
     }
@@ -651,18 +670,19 @@ void OvrContext::getRefreshRates(JNIEnv *env_, jintArray refreshRates) {
 }
 
 void OvrContext::setRefreshRate(int refreshRate, bool forceChange) {
-    if(m_currentRefreshRate == refreshRate) {
+    if (m_currentRefreshRate == refreshRate) {
         LOG("Refresh rate not changed. %d Hz", refreshRate);
         return;
     }
     ovrResult result = vrapi_SetDisplayRefreshRate(Ovr, refreshRate);
-    if(result == ovrSuccess) {
+    if (result == ovrSuccess) {
         LOG("Changed refresh rate. %d Hz", refreshRate);
         m_currentRefreshRate = refreshRate;
     } else {
-        LOG("Failed to change refresh rate. %d Hz Force=%d Result=%d", refreshRate, forceChange, result);
+        LOG("Failed to change refresh rate. %d Hz Force=%d Result=%d", refreshRate, forceChange,
+            result);
         // Really needed?
-        if(forceChange) {
+        if (forceChange) {
             LOG("Force change refresh rete.");
             leaveVrMode();
             enterVrMode();
@@ -739,10 +759,10 @@ void OvrContext::leaveVrMode() {
 // Fill device descriptor.
 void OvrContext::getDeviceDescriptor(JNIEnv *env, jobject deviceDescriptor) {
     int renderWidth = vrapi_GetSystemPropertyInt(&java,
-                                                  VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_WIDTH);
+                                                 VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_WIDTH);
     renderWidth *= 2;
     int renderHeight = vrapi_GetSystemPropertyInt(&java,
-                                                   VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_HEIGHT);
+                                                  VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_HEIGHT);
 
     int deviceType = ALVR_DEVICE_TYPE_OCULUS_MOBILE;
     int deviceSubType = 0;
@@ -750,11 +770,11 @@ void OvrContext::getDeviceDescriptor(JNIEnv *env, jobject deviceDescriptor) {
     int controllerCapabilityFlags = ALVR_CONTROLLER_CAPABILITY_FLAG_ONE_CONTROLLER;
 
     int ovrDeviceType = vrapi_GetSystemPropertyInt(&java, VRAPI_SYS_PROP_DEVICE_TYPE);
-    if(VRAPI_DEVICE_TYPE_GEARVR_START <= ovrDeviceType &&
-       ovrDeviceType <= VRAPI_DEVICE_TYPE_GEARVR_END) {
+    if (VRAPI_DEVICE_TYPE_GEARVR_START <= ovrDeviceType &&
+        ovrDeviceType <= VRAPI_DEVICE_TYPE_GEARVR_END) {
         deviceSubType = ALVR_DEVICE_SUBTYPE_OCULUS_MOBILE_GEARVR;
-    } else if(VRAPI_DEVICE_TYPE_OCULUSGO_START <= ovrDeviceType &&
-              ovrDeviceType <= VRAPI_DEVICE_TYPE_OCULUSGO_END){
+    } else if (VRAPI_DEVICE_TYPE_OCULUSGO_START <= ovrDeviceType &&
+               ovrDeviceType <= VRAPI_DEVICE_TYPE_OCULUSGO_END) {
         // Including MiVR.
         deviceSubType = ALVR_DEVICE_SUBTYPE_OCULUS_MOBILE_GO;
     } else {
@@ -806,7 +826,7 @@ void OvrContext::getFov(JNIEnv *env, jfloatArray fov) {
     double displayTime = vrapi_GetPredictedDisplayTime(Ovr, 0);
     ovrTracking2 tracking = vrapi_GetPredictedTracking2(Ovr, displayTime);
 
-    for(int eye = 0; eye < 2; eye++) {
+    for (int eye = 0; eye < 2; eye++) {
         auto projection = tracking.Eye[eye].ProjectionMatrix;
         double a = projection.M[0][0];
         double b = projection.M[1][1];
@@ -824,12 +844,14 @@ void OvrContext::getFov(JNIEnv *env, jfloatArray fov) {
         double minY = h2 - maxY;
 
         double rr = 180 / M_PI;
-        LOGI("getFov maxX=%f minX=%f maxY=%f minY=%f a=%f b=%f c=%f d=%f n=%f", maxX, minX, maxY, minY, a, b, c, d, n);
+        LOGI("getFov maxX=%f minX=%f maxY=%f minY=%f a=%f b=%f c=%f d=%f n=%f", maxX, minX, maxY,
+             minY, a, b, c, d, n);
         array[eye * 4 + 0] = static_cast<jfloat>(atan(minX / -n) * rr); // left (minX)
         array[eye * 4 + 1] = static_cast<jfloat>(-atan(maxX / -n) * rr); // right (maxX)
         array[eye * 4 + 2] = static_cast<jfloat>(atan(minY / -n) * rr); // top (minY)
         array[eye * 4 + 3] = static_cast<jfloat>(-atan(maxY / -n) * rr); // bottom (maxY)
-        LOGI("getFov[%d](D) r=%f l=%f t=%f b=%f", eye, array[eye * 4 + 0], array[eye * 4 + 1], array[eye * 4 + 2], array[eye * 4 + 3]);
+        LOGI("getFov[%d](D) r=%f l=%f t=%f b=%f", eye, array[eye * 4 + 0], array[eye * 4 + 1],
+             array[eye * 4 + 2], array[eye * 4 + 3]);
     }
 
     env->ReleaseFloatArrayElements(fov, array, 0);
@@ -838,7 +860,9 @@ void OvrContext::getFov(JNIEnv *env, jfloatArray fov) {
 extern "C"
 JNIEXPORT jlong JNICALL
 Java_com_polygraphene_alvr_OvrContext_initializeNative(JNIEnv *env, jobject instance,
-                                                      jobject activity, jobject assetManager, jobject vrThread, jboolean ARMode, jint initialRefreshRate) {
+                                                       jobject activity, jobject assetManager,
+                                                       jobject vrThread, jboolean ARMode,
+                                                       jint initialRefreshRate) {
     OvrContext *context = new OvrContext();
     context->initialize(env, activity, assetManager, vrThread, ARMode, initialRefreshRate);
     return (jlong) context;
@@ -854,35 +878,35 @@ Java_com_polygraphene_alvr_OvrContext_destroyNative(JNIEnv *env, jobject instanc
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_polygraphene_alvr_OvrContext_getLoadingTextureNative(JNIEnv *env, jobject instance,
-                                                             jlong handle) {
+                                                              jlong handle) {
     return ((OvrContext *) handle)->getLoadingTexture();
 }
 
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_polygraphene_alvr_OvrContext_getSurfaceTextureIDNative(JNIEnv *env, jobject instance,
-                                                               jlong handle) {
+                                                                jlong handle) {
     return ((OvrContext *) handle)->getSurfaceTextureID();
 }
 
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_polygraphene_alvr_OvrContext_getCameraTextureNative(JNIEnv *env, jobject instance,
-                                                            jlong handle) {
+                                                             jlong handle) {
     return ((OvrContext *) handle)->getCameraTexture();
 }
 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_OvrContext_renderNative(JNIEnv *env, jobject instance, jlong handle,
-                                                  jlong renderedFrameIndex) {
+                                                   jlong renderedFrameIndex) {
     return ((OvrContext *) handle)->render(static_cast<uint64_t>(renderedFrameIndex));
 }
 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_OvrContext_renderLoadingNative(JNIEnv *env, jobject instance,
-                                                         jlong handle) {
+                                                          jlong handle) {
     return ((OvrContext *) handle)->renderLoading();
 }
 
@@ -890,11 +914,11 @@ Java_com_polygraphene_alvr_OvrContext_renderLoadingNative(JNIEnv *env, jobject i
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_OvrContext_fetchTrackingInfoNative(JNIEnv *env, jobject instance,
-                                                             jlong handle,
-                                                             jobject udpReceiverThread,
-                                                             jfloatArray position_,
-                                                             jfloatArray orientation_) {
-    if(position_ != nullptr && orientation_ != nullptr) {
+                                                              jlong handle,
+                                                              jobject udpReceiverThread,
+                                                              jfloatArray position_,
+                                                              jfloatArray orientation_) {
+    if (position_ != nullptr && orientation_ != nullptr) {
         ovrVector3f position;
         ovrQuatf orientation;
 
@@ -907,7 +931,7 @@ Java_com_polygraphene_alvr_OvrContext_fetchTrackingInfoNative(JNIEnv *env, jobje
         env->ReleaseFloatArrayElements(orientation_, orientation_c, 0);
 
         ((OvrContext *) handle)->fetchTrackingInfo(env, udpReceiverThread, &position, &orientation);
-    }else {
+    } else {
         ((OvrContext *) handle)->fetchTrackingInfo(env, udpReceiverThread, nullptr, nullptr);
     }
 }
@@ -915,7 +939,7 @@ Java_com_polygraphene_alvr_OvrContext_fetchTrackingInfoNative(JNIEnv *env, jobje
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_OvrContext_onChangeSettingsNative(JNIEnv *env, jobject instance,
-                                                            jlong handle, jint Suspend) {
+                                                             jlong handle, jint Suspend) {
     ((OvrContext *) handle)->onChangeSettings(Suspend);
 }
 
@@ -926,22 +950,22 @@ Java_com_polygraphene_alvr_OvrContext_onChangeSettingsNative(JNIEnv *env, jobjec
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_OvrContext_onSurfaceCreatedNative(JNIEnv *env, jobject instance,
-                                                            jlong handle,
-                                                            jobject surface) {
+                                                             jlong handle,
+                                                             jobject surface) {
     ((OvrContext *) handle)->onSurfaceCreated(surface);
 }
 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_OvrContext_onSurfaceDestroyedNative(JNIEnv *env, jobject instance,
-                                                              jlong handle) {
+                                                               jlong handle) {
     ((OvrContext *) handle)->onSurfaceDestroyed();
 }
 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_OvrContext_onSurfaceChangedNative(JNIEnv *env, jobject instance,
-                                                            jlong handle, jobject surface) {
+                                                             jlong handle, jobject surface) {
     ((OvrContext *) handle)->onSurfaceChanged(surface);
 }
 
@@ -974,14 +998,14 @@ Java_com_polygraphene_alvr_OvrContext_getDeviceDescriptorNative(JNIEnv *env, job
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_OvrContext_setFrameGeometryNative(JNIEnv *env, jobject instance,
-                                                            jlong handle, jint width,
-                                                            jint height) {
+                                                             jlong handle, jint width,
+                                                             jint height) {
     ((OvrContext *) handle)->setFrameGeometry(width, height);
 }
 
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_OvrContext_setRefreshRateNative(JNIEnv *env, jobject instance,
-                                                          jlong handle, jint refreshRate) {
+                                                           jlong handle, jint refreshRate) {
     return ((OvrContext *) handle)->setRefreshRate(refreshRate);
 }
