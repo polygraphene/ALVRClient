@@ -405,6 +405,13 @@ void OvrContext::fetchTrackingInfo(JNIEnv *env_, jobject udpReceiverThread, ovrV
     frame->displayTime = vrapi_GetPredictedDisplayTime(Ovr, FrameIndex);
     frame->tracking = vrapi_GetPredictedTracking2(Ovr, frame->displayTime);
 
+    /*LOGI("MVP %llu: \nL-V:\n%s\nL-P:\n%s\nR-V:\n%s\nR-P:\n%s", FrameIndex,
+         DumpMatrix(&frame->tracking.Eye[0].ViewMatrix).c_str(),
+         DumpMatrix(&frame->tracking.Eye[0].ProjectionMatrix).c_str(),
+         DumpMatrix(&frame->tracking.Eye[1].ViewMatrix).c_str(),
+         DumpMatrix(&frame->tracking.Eye[1].ProjectionMatrix).c_str()
+         );*/
+
     {
         MutexLock lock(trackingFrameMutex);
         trackingFrameMap.insert(
@@ -607,6 +614,9 @@ void OvrContext::setFrameGeometry(int width, int height) {
         ovrRenderer_Create(&Renderer, UseMultiview, FrameBufferWidth, FrameBufferHeight,
                            SurfaceTextureID, loadingTexture, CameraTexture, m_ARMode);
         ovrRenderer_CreateScene(&Renderer);
+    } else {
+        LOG("Not Changing FrameBuffer geometry. %dx%d", FrameBufferWidth,
+            FrameBufferHeight);
     }
 }
 
@@ -792,12 +802,36 @@ void OvrContext::getFov(JNIEnv *env, jfloatArray fov) {
     float fovX = vrapi_GetSystemPropertyFloat(&java, VRAPI_SYS_PROP_SUGGESTED_EYE_FOV_DEGREES_X);
     float fovY = vrapi_GetSystemPropertyFloat(&java, VRAPI_SYS_PROP_SUGGESTED_EYE_FOV_DEGREES_Y);
     LOGI("OvrContext::getFov: X=%f Y=%f", fovX, fovY);
+
+    double displayTime = vrapi_GetPredictedDisplayTime(Ovr, 0);
+    ovrTracking2 tracking = vrapi_GetPredictedTracking2(Ovr, displayTime);
+
     for(int eye = 0; eye < 2; eye++) {
-        array[eye * 4 + 0] = fovX / 2; // left
-        array[eye * 4 + 1] = fovX / 2; // right
-        array[eye * 4 + 2] = fovY / 2; // top
-        array[eye * 4 + 3] = fovY / 2; // bottom
+        auto projection = tracking.Eye[eye].ProjectionMatrix;
+        double a = projection.M[0][0];
+        double b = projection.M[1][1];
+        double c = projection.M[0][2];
+        double d = projection.M[1][2];
+        double n = -projection.M[2][3];
+        double w1 = 2.0 * n / a;
+        double h1 = 2.0 * n / b;
+        double w2 = c * w1;
+        double h2 = d * h1;
+
+        double maxX = (w1 + w2) / 2.0;
+        double minX = w2 - maxX;
+        double maxY = (h1 + h2) / 2.0;
+        double minY = h2 - maxY;
+
+        double rr = 180 / M_PI;
+        LOGI("getFov maxX=%f minX=%f maxY=%f minY=%f a=%f b=%f c=%f d=%f n=%f", maxX, minX, maxY, minY, a, b, c, d, n);
+        array[eye * 4 + 0] = static_cast<jfloat>(atan(minX / -n) * rr); // left (minX)
+        array[eye * 4 + 1] = static_cast<jfloat>(-atan(maxX / -n) * rr); // right (maxX)
+        array[eye * 4 + 2] = static_cast<jfloat>(atan(minY / -n) * rr); // top (minY)
+        array[eye * 4 + 3] = static_cast<jfloat>(-atan(maxY / -n) * rr); // bottom (maxY)
+        LOGI("getFov[%d](D) r=%f l=%f t=%f b=%f", eye, array[eye * 4 + 0], array[eye * 4 + 1], array[eye * 4 + 2], array[eye * 4 + 3]);
     }
+
     env->ReleaseFloatArrayElements(fov, array, 0);
 }
 
