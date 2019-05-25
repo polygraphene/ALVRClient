@@ -184,10 +184,11 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
                 remoteCapabilities.ControllerCapabilities,
                 remoteCapabilities.ButtonCapabilities,
                 remoteCapabilities.TouchCapabilities);
-            LOG("ID=%d Sta Button=%08X Touch=%08X Joystick=(%f,%f)",
+            LOG("ID=%d Sta Button=%08X Touch=%08X Joystick=(%f,%f) IndexValue=%f GripValue=%f",
                 curCaps.DeviceID,
                 remoteInputState.Buttons, remoteInputState.Touches,
-                remoteInputState.JoystickNoDeadZone.x, remoteInputState.JoystickNoDeadZone.y);
+                remoteInputState.JoystickNoDeadZone.x, remoteInputState.JoystickNoDeadZone.y,
+                remoteInputState.IndexTrigger, remoteInputState.GripTrigger);
 
             c.flags |= TrackingInfo::Controller::FLAG_CONTROLLER_ENABLE;
 
@@ -223,6 +224,9 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
                         2.0f - 1.0f;
                 c.trackpadPosition.y = -c.trackpadPosition.y;
             }
+            c.triggerValue = remoteInputState.IndexTrigger;
+            c.gripValue = remoteInputState.GripTrigger;
+
             c.batteryPercentRemaining = remoteInputState.BatteryPercentRemaining;
             c.recenterCount = remoteInputState.RecenterCount;
 
@@ -320,60 +324,75 @@ uint32_t OvrContext::mapButtons(ovrInputTrackedRemoteCapabilities *remoteCapabil
     if (remoteCapabilities->ControllerCapabilities & ovrControllerCaps_ModelOculusTouch) {
         // Oculus Quest Touch Cotroller
         if (remoteInputState->Buttons & ovrButton_A) {
-            buttons |= 1 << ALVR_INPUT_A_CLICK;
+            buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_A_CLICK);
         }
         if (remoteInputState->Buttons & ovrButton_B) {
-            buttons |= 1 << ALVR_INPUT_B_CLICK;
+            buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_B_CLICK);
         }
         if (remoteInputState->Buttons & ovrButton_RThumb) {
-            buttons |= 1 << ALVR_INPUT_JOYSTICK_RIGHT_CLICK;
+            buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_JOYSTICK_CLICK);
         }
         if (remoteInputState->Buttons & ovrButton_X) {
-            buttons |= 1 << ALVR_INPUT_X_CLICK;
+            buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_X_CLICK);
         }
         if (remoteInputState->Buttons & ovrButton_Y) {
-            buttons |= 1 << ALVR_INPUT_Y_CLICK;
+            buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_Y_CLICK);
         }
         if (remoteInputState->Buttons & ovrButton_LThumb) {
-            buttons |= 1 << ALVR_INPUT_JOYSTICK_LEFT_CLICK;
+            buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_JOYSTICK_CLICK);
         }
         if (remoteInputState->Buttons & ovrButton_Enter) {
             // Menu button on left hand
-            buttons |= 1 << ALVR_INPUT_SYSTEM_CLICK;
+            buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_SYSTEM_CLICK);
         }
         if (remoteInputState->Buttons & ovrButton_GripTrigger) {
-            buttons |= 1 << ALVR_INPUT_GRIP_CLICK;
+            buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_GRIP_CLICK);
         }
         if (remoteInputState->Buttons & ovrButton_Trigger) {
-            buttons |= 1 << ALVR_INPUT_TRIGGER_CLICK;
+            buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_TRIGGER_CLICK);
         }
         if (remoteInputState->Buttons & ovrButton_Joystick) {
             if (remoteCapabilities->ControllerCapabilities & ovrControllerCaps_LeftHand) {
-                buttons |= 1 << ALVR_INPUT_JOYSTICK_LEFT_CLICK;
+                buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_JOYSTICK_LEFT_CLICK);
             } else {
-                buttons |= 1 << ALVR_INPUT_JOYSTICK_RIGHT_CLICK;
+                buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_JOYSTICK_RIGHT_CLICK);
             }
         }
         if (remoteInputState->Buttons & ovrButton_Unknown1) {
             // Only on right controller. What's button???
-            buttons |= 1 << ALVR_INPUT_BACK_CLICK;
+            buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_BACK_CLICK);
+        }
+        if(remoteInputState->Touches & ovrTouch_A) {
+            buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_A_TOUCH);
+        }
+        if(remoteInputState->Touches & ovrTouch_B) {
+            buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_B_TOUCH);
+        }
+        if(remoteInputState->Touches & ovrTouch_X) {
+            buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_X_TOUCH);
+        }
+        if(remoteInputState->Touches & ovrTouch_Y) {
+            buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_Y_TOUCH);
+        }
+        if(remoteInputState->Touches & ovrTouch_IndexTrigger) {
+            buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_TRIGGER_TOUCH);
         }
         if(remoteInputState->Touches & ovrTouch_Joystick) {
-            buttons |= 1 << ALVR_INPUT_TRACKPAD_TOUCH;
+            buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_JOYSTICK_TOUCH);
         }
     } else {
         // GearVR or Oculus Go Controller
         if (remoteInputState->Buttons & ovrButton_A) {
-            buttons |= 1 << ALVR_INPUT_TRIGGER_CLICK;
+            buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_TRIGGER_CLICK);
         }
         if (remoteInputState->Buttons & ovrButton_Enter) {
-            buttons |= 1 << ALVR_INPUT_TRACKPAD_CLICK;
+            buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_TRACKPAD_CLICK);
         }
         if (remoteInputState->Buttons & ovrButton_Back) {
-            buttons |= 1 << ALVR_INPUT_BACK_CLICK;
+            buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_BACK_CLICK);
         }
         if (remoteInputState->TrackpadStatus) {
-            buttons |= 1 << ALVR_INPUT_TRACKPAD_TOUCH;
+            buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_TRACKPAD_TOUCH);
         }
     }
     return buttons;
