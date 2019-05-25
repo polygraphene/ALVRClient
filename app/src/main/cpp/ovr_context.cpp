@@ -777,10 +777,14 @@ void OvrContext::getDeviceDescriptor(JNIEnv *env, jobject deviceDescriptor) {
                ovrDeviceType <= VRAPI_DEVICE_TYPE_OCULUSGO_END) {
         // Including MiVR.
         deviceSubType = ALVR_DEVICE_SUBTYPE_OCULUS_MOBILE_GO;
+    } else if (VRAPI_DEVICE_TYPE_OCULUSQUEST_START <= ovrDeviceType &&
+               ovrDeviceType <= VRAPI_DEVICE_TYPE_OCULUSQUEST_END) {
+        deviceSubType = ALVR_DEVICE_SUBTYPE_OCULUS_MOBILE_QUEST;
     } else {
         // Unknown
         deviceSubType = 0;
     }
+    LOGI("getDeviceDescriptor: ovrDeviceType: %d deviceType:%d deviceSubType:%d cap:%08X", ovrDeviceType, deviceType, deviceSubType, deviceCapabilityFlags);
 
     jfieldID fieldID;
     jclass clazz = env->GetObjectClass(deviceDescriptor);
