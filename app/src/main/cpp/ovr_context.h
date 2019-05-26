@@ -96,7 +96,7 @@ private:
     jmethodID mUdpReceiverThread_send;
 
     void setControllerInfo(TrackingInfo *packet, double displayTime);
-    uint32_t mapButtons(ovrInputTrackedRemoteCapabilities *remoteCapabilities, ovrInputStateTrackedRemote *remoteInputState);
+    uint64_t mapButtons(ovrInputTrackedRemoteCapabilities *remoteCapabilities, ovrInputStateTrackedRemote *remoteInputState);
 
     void sendTrackingInfo(TrackingInfo *packet, double displayTime, ovrTracking2 *tracking,
                           const ovrVector3f *other_tracking_position,
