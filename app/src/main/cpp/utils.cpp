@@ -1,7 +1,7 @@
 #include "utils.h"
 #include <jni.h>
 
-int gGeneralLogLevel = ANDROID_LOG_VERBOSE;
+int gGeneralLogLevel = ANDROID_LOG_INFO;
 int gSoundLogLevel = ANDROID_LOG_INFO;
 int gSocketLogLevel = ANDROID_LOG_INFO;
 
