@@ -145,6 +145,7 @@ void OvrContext::destroy(JNIEnv *env) {
     vrapi_Shutdown();
 
     env->DeleteGlobalRef(mVrThread);
+    env->DeleteGlobalRef(java.ActivityObject);
 }
 
 
