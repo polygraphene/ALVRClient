@@ -49,6 +49,8 @@ public:
 
     void getDeviceDescriptor(JNIEnv *env, jobject deviceDescriptor);
 
+    void onHapticsFeedback(uint64_t startTime, float amplitude, float duration, float frequency, int hand);
+
 private:
     ANativeWindow *window = NULL;
     ovrMobile *Ovr;
@@ -95,6 +97,17 @@ private:
 
     jmethodID mUdpReceiverThread_send;
 
+    struct HapticsState {
+        uint64_t startUs;
+        uint64_t endUs;
+        float amplitude;
+        float frequency;
+        bool buffered;
+    };
+    // mHapticsState[0]: right hand state
+    // mHapticsState[1]: left hand state
+    HapticsState mHapticsState[2];
+
     void setControllerInfo(TrackingInfo *packet, double displayTime);
     uint64_t mapButtons(ovrInputTrackedRemoteCapabilities *remoteCapabilities, ovrInputStateTrackedRemote *remoteInputState);
 
@@ -110,6 +123,9 @@ private:
 
     void getRefreshRates(JNIEnv *env_, jintArray refreshRates);
     void getFov(JNIEnv *env, jfloatArray fov);
+
+    void updateHapticsState();
+    void finishHapticsBuffer(ovrDeviceID DeviceID);
 };
 
 #endif //ALVRCLIENT_VR_CONTEXT_H

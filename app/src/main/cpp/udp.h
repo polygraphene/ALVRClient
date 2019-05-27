@@ -128,6 +128,7 @@ private:
     jmethodID mOnConnectMethodID;
     jmethodID mOnChangeSettingsMethodID;
     jmethodID mOnDisconnectedMethodID;
+    jmethodID mOnHapticsFeedbackID;
 
     //
     // Send buffer

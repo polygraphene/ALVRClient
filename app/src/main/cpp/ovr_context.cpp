@@ -124,6 +124,8 @@ void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager,
     jclass clazz = env->FindClass("com/polygraphene/alvr/UdpReceiverThread");
     mUdpReceiverThread_send = env->GetMethodID(clazz, "send", "(JI)V");
     env->DeleteLocalRef(clazz);
+
+    memset(mHapticsState, 0, sizeof(mHapticsState));
 }
 
 
@@ -362,22 +364,22 @@ uint64_t OvrContext::mapButtons(ovrInputTrackedRemoteCapabilities *remoteCapabil
             // Only on right controller. What's button???
             buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_BACK_CLICK);
         }
-        if(remoteInputState->Touches & ovrTouch_A) {
+        if (remoteInputState->Touches & ovrTouch_A) {
             buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_A_TOUCH);
         }
-        if(remoteInputState->Touches & ovrTouch_B) {
+        if (remoteInputState->Touches & ovrTouch_B) {
             buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_B_TOUCH);
         }
-        if(remoteInputState->Touches & ovrTouch_X) {
+        if (remoteInputState->Touches & ovrTouch_X) {
             buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_X_TOUCH);
         }
-        if(remoteInputState->Touches & ovrTouch_Y) {
+        if (remoteInputState->Touches & ovrTouch_Y) {
             buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_Y_TOUCH);
         }
-        if(remoteInputState->Touches & ovrTouch_IndexTrigger) {
+        if (remoteInputState->Touches & ovrTouch_IndexTrigger) {
             buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_TRIGGER_TOUCH);
         }
-        if(remoteInputState->Touches & ovrTouch_Joystick) {
+        if (remoteInputState->Touches & ovrTouch_Joystick) {
             buttons |= ALVR_BUTTON_FLAG(ALVR_INPUT_JOYSTICK_TOUCH);
         }
     } else {
@@ -543,6 +545,8 @@ void OvrContext::render(uint64_t renderedFrameIndex) {
     LatencyCollector::Instance().rendered1(renderedFrameIndex);
     FrameLog(renderedFrameIndex, "Got frame for render.");
 
+    updateHapticsState();
+
     uint64_t oldestFrame = 0;
     uint64_t mostRecentFrame = 0;
     std::shared_ptr<TrackingFrame> frame;
@@ -602,6 +606,7 @@ void OvrContext::render(uint64_t renderedFrameIndex) {
              frame->tracking.HeadPose.Pose.Orientation.z,
              frame->tracking.HeadPose.Pose.Orientation.w
     );
+
     if (suspend) {
         LOG("submit enter suspend");
         while (suspend) {
@@ -803,7 +808,8 @@ void OvrContext::getDeviceDescriptor(JNIEnv *env, jobject deviceDescriptor) {
         // Unknown
         deviceSubType = 0;
     }
-    LOGI("getDeviceDescriptor: ovrDeviceType: %d deviceType:%d deviceSubType:%d cap:%08X", ovrDeviceType, deviceType, deviceSubType, deviceCapabilityFlags);
+    LOGI("getDeviceDescriptor: ovrDeviceType: %d deviceType:%d deviceSubType:%d cap:%08X",
+         ovrDeviceType, deviceType, deviceSubType, deviceCapabilityFlags);
 
     jfieldID fieldID;
     jclass clazz = env->GetObjectClass(deviceDescriptor);
@@ -878,6 +884,114 @@ void OvrContext::getFov(JNIEnv *env, jfloatArray fov) {
     }
 
     env->ReleaseFloatArrayElements(fov, array, 0);
+}
+
+
+void OvrContext::updateHapticsState() {
+    ovrInputCapabilityHeader curCaps;
+    ovrResult result;
+
+    for (uint32_t deviceIndex = 0;
+         vrapi_EnumerateInputDevices(Ovr, deviceIndex, &curCaps) >= 0; deviceIndex++) {
+        ovrInputTrackedRemoteCapabilities remoteCapabilities;
+
+        remoteCapabilities.Header = curCaps;
+        result = vrapi_GetInputDeviceCapabilities(Ovr, &remoteCapabilities.Header);
+        if (result != ovrSuccess) {
+            continue;
+        }
+
+        int curHandIndex = (remoteCapabilities.ControllerCapabilities & ovrControllerCaps_LeftHand) ? 1 : 0;
+        auto &s = mHapticsState[curHandIndex];
+
+        uint64_t currentUs = getTimestampUs();
+
+        if(s.startUs <= 0) {
+            // No requested haptics for this hand.
+            if(s.buffered) {
+                finishHapticsBuffer(curCaps.DeviceID);
+                s.buffered = false;
+            }
+            continue;
+        }
+
+        if(currentUs >= s.endUs) {
+            // No more haptics is needed.
+            s.startUs = 0;
+            if(s.buffered) {
+                finishHapticsBuffer(curCaps.DeviceID);
+                s.buffered = false;
+            }
+            continue;
+        }
+
+        if (remoteCapabilities.ControllerCapabilities &
+            ovrControllerCaps_HasBufferedHapticVibration) {
+            // Note: HapticSamplesMax=25 HapticSampleDurationMS=2 on Quest
+
+            // First, call with buffer.Terminated = false and when haptics is no more needed call with buffer.Terminated = true (to stop haptics?).
+            LOG("Send haptic buffer. HapticSamplesMax=%d HapticSampleDurationMS=%d",
+                 remoteCapabilities.HapticSamplesMax, remoteCapabilities.HapticSampleDurationMS);
+
+            uint32_t requiredHapticsBuffer = static_cast<uint32_t >((s.endUs - currentUs) / remoteCapabilities.HapticSampleDurationMS * 1000);
+
+            std::vector<uint8_t> hapticBuffer(remoteCapabilities.HapticSamplesMax);
+            ovrHapticBuffer buffer;
+            buffer.BufferTime = vrapi_GetPredictedDisplayTime(Ovr, FrameIndex);
+            buffer.HapticBuffer = &hapticBuffer[0];
+            buffer.NumSamples = std::min(remoteCapabilities.HapticSamplesMax, requiredHapticsBuffer);
+            buffer.Terminated = false;
+
+            for (int i = 0; i < remoteCapabilities.HapticSamplesMax; i++) {
+                float current = ((currentUs - s.startUs) / 1000000.0f) + (remoteCapabilities.HapticSampleDurationMS * i) / 1000.0f;
+                float intensity =
+                        sinf(static_cast<float>(current * M_PI * 2 * s.frequency)) * s.amplitude;
+                if (intensity < 0) {
+                    intensity = 0;
+                } else if (intensity > 1.0) {
+                    intensity = 1.0;
+                }
+                hapticBuffer[i] = static_cast<uint8_t>(255 * intensity);
+            }
+
+            result = vrapi_SetHapticVibrationBuffer(Ovr, curCaps.DeviceID, &buffer);
+            if (result != ovrSuccess) {
+                LOGI("vrapi_SetHapticVibrationBuffer: Failed. result=%d", result);
+            }
+            s.buffered = true;
+        } else if (remoteCapabilities.ControllerCapabilities &
+                   ovrControllerCaps_HasSimpleHapticVibration) {
+            LOG("Send simple haptic. amplitude=%f", s.amplitude);
+            vrapi_SetHapticVibrationSimple(Ovr, curCaps.DeviceID, s.amplitude);
+        }
+    }
+}
+
+void OvrContext::onHapticsFeedback(uint64_t startTime, float amplitude, float duration, float frequency,
+                              int hand) {
+    LOGI("OvrContext::onHapticsFeedback: processing haptisc. %" PRIu64 " %f %f %f, %d", startTime, amplitude, duration, frequency, hand);
+
+    int curHandIndex = (hand == 0) ? 0 : 1;
+    auto &s = mHapticsState[curHandIndex];
+    s.startUs = getTimestampUs() + startTime;
+    s.endUs = s.startUs + static_cast<uint64_t>(duration * 1000000);
+    s.amplitude = amplitude;
+    s.frequency = frequency;
+    s.buffered = false;
+}
+
+void OvrContext::finishHapticsBuffer(ovrDeviceID DeviceID) {
+    uint8_t hapticBuffer[1] = {0};
+    ovrHapticBuffer buffer;
+    buffer.BufferTime = vrapi_GetPredictedDisplayTime(Ovr, FrameIndex);
+    buffer.HapticBuffer = &hapticBuffer[0];
+    buffer.NumSamples = 1;
+    buffer.Terminated = true;
+
+    auto result = vrapi_SetHapticVibrationBuffer(Ovr, DeviceID, &buffer);
+    if (result != ovrSuccess) {
+        LOGI("vrapi_SetHapticVibrationBuffer: Failed. result=%d", result);
+    }
 }
 
 extern "C"
@@ -1031,4 +1145,14 @@ JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_OvrContext_setRefreshRateNative(JNIEnv *env, jobject instance,
                                                            jlong handle, jint refreshRate) {
     return ((OvrContext *) handle)->setRefreshRate(refreshRate);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_OvrContext_onHapticsFeedbackNative(JNIEnv *env, jobject instance,
+                                                              jlong handle, jlong startTime,
+                                                              jfloat amplitude, jfloat duration,
+                                                              jfloat frequency, jboolean hand) {
+    return ((OvrContext *) handle)->onHapticsFeedback(static_cast<uint64_t>(startTime), amplitude,
+                                                      duration, frequency, hand == 0 ? 0 : 1);
 }

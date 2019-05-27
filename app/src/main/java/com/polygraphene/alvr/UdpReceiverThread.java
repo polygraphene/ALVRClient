@@ -42,6 +42,8 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
         void onDisconnect();
 
         void onTracking(float[] position, float[] orientation);
+
+        void onHapticsFeedback(long startTime, float amplitude, float duration, float frequency, boolean hand);
     }
 
     private Callback mCallback;
@@ -227,6 +229,11 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
     @SuppressWarnings("unused")
     public void onChangeSettings(int suspend, int frameQueueSize) {
         mCallback.onChangeSettings(suspend, frameQueueSize);
+    }
+
+    @SuppressWarnings("unused")
+    public void onHapticsFeedback(long startTime, float amplitude, float duration, float frequency, boolean hand) {
+        mCallback.onHapticsFeedback(startTime, amplitude, duration, frequency, hand);
     }
 
     @SuppressWarnings("unused")

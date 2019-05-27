@@ -655,6 +655,14 @@ void UdpManager::onPacketRecv(const char *packet, size_t packetSize) {
         }
 
         //LOG("Received audio frame: Counter=%d", header->packetCounter);
+    } else if (type == ALVR_PACKET_TYPE_HAPTICS) {
+        if(packetSize < sizeof(HapticsFeedback)) {
+            return;
+        }
+        auto header = (HapticsFeedback *) packet;
+
+        m_env->CallVoidMethod(m_instance, mOnHapticsFeedbackID, static_cast<jlong>(header->startTime),
+                header->amplitude, header->duration, header->frequency, static_cast<jboolean>(header->hand));
     }
 }
 
@@ -712,6 +720,7 @@ void UdpManager::initializeJNICallbacks(JNIEnv *env, jobject instance) {
     mOnConnectMethodID = env->GetMethodID(clazz, "onConnected", "(IIIII)V");
     mOnChangeSettingsMethodID = env->GetMethodID(clazz, "onChangeSettings", "(II)V");
     mOnDisconnectedMethodID = env->GetMethodID(clazz, "onDisconnected", "()V");
+    mOnHapticsFeedbackID = env->GetMethodID(clazz, "onHapticsFeedback", "(JFFFZ)V");
 
     env->DeleteLocalRef(clazz);
 }

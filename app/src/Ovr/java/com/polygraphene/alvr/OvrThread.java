@@ -290,6 +290,15 @@ class OvrThread {
                 mOvrContext.fetchTrackingInfo(mReceiverThread, position, orientation);
             }
         }
+
+        @Override
+        public void onHapticsFeedback(long startTime, float amplitude, float duration, float frequency, boolean hand) {
+            mHandler.post(() -> {
+                if (mOvrContext.isVrMode()) {
+                    mOvrContext.onHapticsFeedback(startTime, amplitude, duration, frequency, hand);
+                }
+            });
+        }
     };
 
     private DecoderThread.DecoderCallback mDecoderCallback = new DecoderThread.DecoderCallback() {
