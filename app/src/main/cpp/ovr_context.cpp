@@ -695,22 +695,16 @@ void OvrContext::getRefreshRates(JNIEnv *env_, jintArray refreshRates) {
 
 void OvrContext::setRefreshRate(int refreshRate, bool forceChange) {
     if (m_currentRefreshRate == refreshRate) {
-        LOG("Refresh rate not changed. %d Hz", refreshRate);
+        LOGI("Refresh rate not changed. %d Hz", refreshRate);
         return;
     }
     ovrResult result = vrapi_SetDisplayRefreshRate(Ovr, refreshRate);
     if (result == ovrSuccess) {
-        LOG("Changed refresh rate. %d Hz", refreshRate);
+        LOGI("Changed refresh rate. %d Hz", refreshRate);
         m_currentRefreshRate = refreshRate;
     } else {
-        LOG("Failed to change refresh rate. %d Hz Force=%d Result=%d", refreshRate, forceChange,
+        LOGE("Failed to change refresh rate. %d Hz Force=%d Result=%d", refreshRate, forceChange,
             result);
-        // Really needed?
-        if (forceChange) {
-            LOG("Force change refresh rete.");
-            leaveVrMode();
-            enterVrMode();
-        }
     }
 }
 
