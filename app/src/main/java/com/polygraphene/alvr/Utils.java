@@ -8,11 +8,7 @@ import android.util.Log;
 public class Utils {
     public static boolean sEnableLog = false;
 
-    static {
-        setFrameLogEnabled(sEnableLog);
-    }
-
-    public static native void setFrameLogEnabled(boolean enabled);
+    public static native void setFrameLogEnabled(long debugFlags);
 
     public static void frameLog(long frameIndex, String s) {
         if(sEnableLog) {
@@ -50,5 +46,11 @@ public class Utils {
             e.printStackTrace();
             return context.getString(R.string.app_name) + " Unknown version";
         }
+    }
+
+    public static void setDebugFlags(long debugFlags) {
+        sEnableLog = (debugFlags & 1) != 0;
+        Log.i("ALVR", "DebugFlags is changed. New=" + debugFlags);
+        setFrameLogEnabled(debugFlags);
     }
 }

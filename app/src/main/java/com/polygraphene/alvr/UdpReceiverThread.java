@@ -227,7 +227,9 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
     }
 
     @SuppressWarnings("unused")
-    public void onChangeSettings(int suspend, int frameQueueSize) {
+    public void onChangeSettings(long debugFlags, int suspend, int frameQueueSize) {
+        PersistentConfig.sDebugFlags = debugFlags;
+        PersistentConfig.saveCurrentConfig();
         mCallback.onChangeSettings(suspend, frameQueueSize);
     }
 

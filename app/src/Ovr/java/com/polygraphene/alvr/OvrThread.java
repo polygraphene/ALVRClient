@@ -92,8 +92,8 @@ class OvrThread {
             public void run() {
                 mReceiverThread = new UdpReceiverThread(mUdpReceiverCallback);
 
-                ConnectionStateHolder.ConnectionState connectionState = new ConnectionStateHolder.ConnectionState();
-                ConnectionStateHolder.loadConnectionState(mActivity, connectionState);
+                PersistentConfig.ConnectionState connectionState = new PersistentConfig.ConnectionState();
+                PersistentConfig.loadConnectionState(mActivity, connectionState);
 
                 if (connectionState.serverAddr != null && connectionState.serverPort != 0) {
                     Log.v(TAG, "load connection state: " + connectionState.serverAddr + " " + connectionState.serverPort);
@@ -276,7 +276,7 @@ class OvrThread {
         @Override
         public void onShutdown(String serverAddr, int serverPort) {
             Log.v(TAG, "save connection state: " + serverAddr + " " + serverPort);
-            ConnectionStateHolder.saveConnectionState(mActivity, serverAddr, serverPort);
+            PersistentConfig.saveConnectionState(mActivity, serverAddr, serverPort);
         }
 
         @Override
