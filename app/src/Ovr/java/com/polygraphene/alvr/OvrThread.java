@@ -53,7 +53,7 @@ class OvrThread {
     }
 
     public void onSurfaceCreated(final Surface surface) {
-        Log.v(TAG, "OvrThread.onSurfaceCreated.");
+        Utils.logi(TAG, () -> "OvrThread.onSurfaceCreated.");
         mHandler.post(new Runnable() {
             @Override
             public void run() {
@@ -63,7 +63,7 @@ class OvrThread {
     }
 
     public void onSurfaceChanged(final Surface surface) {
-        Log.v(TAG, "OvrThread.onSurfaceChanged.");
+        Utils.logi(TAG, () -> "OvrThread.onSurfaceChanged.");
         mHandler.post(new Runnable() {
             @Override
             public void run() {
@@ -73,7 +73,7 @@ class OvrThread {
     }
 
     public void onSurfaceDestroyed() {
-        Log.v(TAG, "OvrThread.onSurfaceDestroyed.");
+        Utils.logi(TAG, () -> "OvrThread.onSurfaceDestroyed.");
         mHandler.post(new Runnable() {
             @Override
             public void run() {
@@ -83,7 +83,7 @@ class OvrThread {
     }
 
     public void onResume() {
-        Log.v(TAG, "OvrThread.onResume: Starting worker threads.");
+        Utils.logi(TAG, () -> "OvrThread.onResume: Starting worker threads.");
         // Sometimes previous decoder output remains not updated (when previous call of waitFrame() didn't call updateTexImage())
         // and onFrameAvailable won't be called after next output.
         // To avoid deadlock caused by it, we need to flush last output.
@@ -96,7 +96,7 @@ class OvrThread {
                 PersistentConfig.loadConnectionState(mActivity, connectionState);
 
                 if (connectionState.serverAddr != null && connectionState.serverPort != 0) {
-                    Log.v(TAG, "load connection state: " + connectionState.serverAddr + " " + connectionState.serverPort);
+                    Utils.logi(TAG, () -> "Load connection state: " + connectionState.serverAddr + " " + connectionState.serverPort);
                     mReceiverThread.recoverConnectionState(connectionState.serverAddr, connectionState.serverPort);
                 }
 
@@ -114,14 +114,14 @@ class OvrThread {
                     mOvrContext.getDeviceDescriptor(deviceDescriptor);
                     mRefreshRate = deviceDescriptor.mRefreshRates[0];
                     if (!mReceiverThread.start(mEGLContext, mActivity, deviceDescriptor, mOvrContext.getCameraTexture(), mDecoderThread)) {
-                        Log.e(TAG, "FATAL: Initialization of ReceiverThread failed.");
+                        Utils.loge(TAG, () -> "FATAL: Initialization of ReceiverThread failed.");
                         return;
                     }
                 } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
                     e.printStackTrace();
                 }
 
-                Log.v(TAG, "OvrThread.onResume: mVrContext.onResume().");
+                Utils.logi(TAG, () -> "OvrThread.onResume: mOvrContext.onResume().");
                 mOvrContext.onResume();
             }
         });
@@ -130,25 +130,24 @@ class OvrThread {
     }
 
     public void onPause() {
-        Log.v(TAG, "OvrThread.onPause: Stopping worker threads.");
+        Utils.log(TAG, () -> "OvrThread.onPause: Stopping worker threads.");
         // DecoderThread must be stopped before ReceiverThread and setting mResumed=false.
         mHandler.post(new Runnable() {
             @Override
             public void run() {
                 // DecoderThread must be stopped before ReceiverThread and setting mResumed=false.
                 if (mDecoderThread != null) {
-                    Log.v(TAG, "OvrThread.onPause: Stopping DecoderThread.");
+                    Utils.log(TAG, () -> "OvrThread.onPause: Stopping DecoderThread.");
                     mDecoderThread.stopAndWait();
                 }
                 if (mReceiverThread != null) {
-                    Log.v(TAG, "OvrThread.onPause: Stopping ReceiverThread.");
+                    Utils.log(TAG, () -> "OvrThread.onPause: Stopping ReceiverThread.");
                     mReceiverThread.stopAndWait();
                 }
 
                 mOvrContext.onPause();
             }
         });
-        Log.v(TAG, "OvrThread.onPause: All worker threads has stopped.");
     }
 
     private Runnable mRenderRunnable = new Runnable() {
@@ -170,7 +169,7 @@ class OvrThread {
             @Override
             public void run() {
                 mLoadingTexture.destroyTexture();
-                Log.v(TAG, "Destroying vrapi state.");
+                Utils.logi(TAG, () -> "Destroying vrapi state.");
                 mOvrContext.destroy();
             }
         });
@@ -178,7 +177,7 @@ class OvrThread {
     }
 
     public void startup() {
-        Log.v(TAG, "OvrThread started.");
+        Utils.logi(TAG, () -> "OvrThread started.");
 
         mOvrContext.initialize(mActivity, mActivity.getAssets(), this, Constants.IS_ARCORE_BUILD, 60);
 
@@ -186,7 +185,7 @@ class OvrThread {
         mSurfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
             @Override
             public void onFrameAvailable(SurfaceTexture surfaceTexture) {
-                Utils.log("OvrThread: waitFrame: onFrameAvailable is called.");
+                Utils.log(TAG, () -> "OvrThread: waitFrame: onFrameAvailable is called.");
                 mDecoderThread.onFrameAvailable();
                 mHandler.removeCallbacks(mIdleRenderRunnable);
                 mHandler.post(mRenderRunnable);
@@ -203,7 +202,7 @@ class OvrThread {
     private void render() {
         if (mReceiverThread.isConnected() && mReceiverThread.getErrorMessage() == null) {
             if (mDecoderThread.discartStaleFrames(mSurfaceTexture)) {
-                Utils.log(TAG, "Discard stale frame. Wait next onFrameAvailable.");
+                Utils.log(TAG, () ->  "Discard stale frame. Wait next onFrameAvailable.");
                 mHandler.removeCallbacks(mIdleRenderRunnable);
                 mHandler.postDelayed(mIdleRenderRunnable, 50);
                 return;
@@ -249,7 +248,7 @@ class OvrThread {
     // Called on OvrThread.
     public void onVrModeChanged(boolean enter) {
         mVrMode = enter;
-        Log.i(TAG, "onVrModeChanged. mVrMode=" + mVrMode + " mDecoderPrepared=" + mDecoderPrepared);
+        Utils.logi(TAG, () -> "onVrModeChanged. mVrMode=" + mVrMode + " mDecoderPrepared=" + mDecoderPrepared);
         mReceiverThread.setSinkPrepared(mVrMode && mDecoderPrepared);
     }
 
@@ -305,14 +304,14 @@ class OvrThread {
         @Override
         public void onPrepared() {
             mDecoderPrepared = true;
-            Log.i(TAG, "DecoderCallback.onPrepared. mVrMode=" + mVrMode + " mDecoderPrepared=" + mDecoderPrepared);
+            Utils.logi(TAG, () -> "DecoderCallback.onPrepared. mVrMode=" + mVrMode + " mDecoderPrepared=" + mDecoderPrepared);
             mReceiverThread.setSinkPrepared(mVrMode && mDecoderPrepared);
         }
 
         @Override
         public void onDestroy() {
             mDecoderPrepared = false;
-            Log.i(TAG, "DecoderCallback.onDestroy. mVrMode=" + mVrMode + " mDecoderPrepared=" + mDecoderPrepared);
+            Utils.logi(TAG, () -> "DecoderCallback.onDestroy. mVrMode=" + mVrMode + " mDecoderPrepared=" + mDecoderPrepared);
             mReceiverThread.setSinkPrepared(mVrMode && mDecoderPrepared);
         }
 

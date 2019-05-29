@@ -974,7 +974,7 @@ void OvrContext::updateHapticsState() {
 
 void OvrContext::onHapticsFeedback(uint64_t startTime, float amplitude, float duration, float frequency,
                               int hand) {
-    LOGI("OvrContext::onHapticsFeedback: processing haptisc. %" PRIu64 " %f %f %f, %d", startTime, amplitude, duration, frequency, hand);
+    LOGI("OvrContext::onHapticsFeedback: processing haptics. %" PRIu64 " %f %f %f, %d", startTime, amplitude, duration, frequency, hand);
 
     int curHandIndex = (hand == 0) ? 0 : 1;
     auto &s = mHapticsState[curHandIndex];

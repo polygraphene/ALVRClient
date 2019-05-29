@@ -47,14 +47,14 @@ public class OutputFrameQueue {
 
     synchronized public void pushOutputBuffer(int index, @NonNull MediaCodec.BufferInfo info) {
         if (mStopped) {
-            Log.e(TAG, "Ignore output buffer because queue has been already stopped. index=" + index);
+            Utils.loge(TAG, () -> "Ignore output buffer because queue has been already stopped. index=" + index);
             mCodec.releaseOutputBuffer(index, false);
             return;
         }
         long foundFrameIndex = mFrameMap.find(info.presentationTimeUs);
 
         if (foundFrameIndex < 0) {
-            Log.e(TAG, "Ignore output buffer because unknown frameIndex. index=" + index);
+            Utils.loge(TAG, () -> "Ignore output buffer because unknown frameIndex. index=" + index);
             mCodec.releaseOutputBuffer(index, false);
             return;
         }
@@ -71,7 +71,7 @@ public class OutputFrameQueue {
         mQueue.add(elem);
 
         LatencyCollector.DecoderOutput(foundFrameIndex);
-        Utils.frameLog(foundFrameIndex, "Current queue state=" + mQueue.size() + "/" + mQueueSize + " pushed index=" + index);
+        Utils.frameLog(foundFrameIndex, () -> "Current queue state=" + mQueue.size() + "/" + mQueueSize + " pushed index=" + index);
 
         render();
     }
@@ -83,7 +83,7 @@ public class OutputFrameQueue {
         if (mState != SurfaceState.Idle) {
             // It will conflict with current rendering frame.
             // Defer processing until current frame is rendered.
-            Utils.log(TAG, "Conflict with current rendering frame. Defer processing.");
+            Utils.log(TAG, () -> "Conflict with current rendering frame. Defer processing.");
             return -1;
         }
         Element elem = mQueue.poll();
@@ -92,7 +92,7 @@ public class OutputFrameQueue {
         }
         mUnusedList.add(elem);
 
-        Utils.frameLog(elem.frameIndex, "Calling releaseOutputBuffer(). index=" + elem.index);
+        Utils.frameLog(elem.frameIndex, () -> "Calling releaseOutputBuffer(). index=" + elem.index);
 
         mState = SurfaceState.Rendering;
         mSurface.index = elem.index;
@@ -108,7 +108,7 @@ public class OutputFrameQueue {
         if (mState != SurfaceState.Rendering) {
             return;
         }
-        Utils.frameLog(mSurface.frameIndex, "onFrameAvailable().");
+        Utils.frameLog(mSurface.frameIndex, () -> "onFrameAvailable().");
         mState = SurfaceState.Available;
     }
 
@@ -119,7 +119,7 @@ public class OutputFrameQueue {
         if (mState != SurfaceState.Available) {
             return -1;
         }
-        Utils.frameLog(mSurface.frameIndex, "clearAvailable().");
+        Utils.frameLog(mSurface.frameIndex, () -> "clearAvailable().");
         long frameIndex = mSurface.frameIndex;
         mState = SurfaceState.Idle;
 
@@ -151,13 +151,13 @@ public class OutputFrameQueue {
             if (mQueue.size() > 1) {
                 // Discard because this elem is not latest frame.
                 Element elem = mQueue.poll();
-                Utils.frameLog(elem.frameIndex, "discardStaleFrames: releaseOutputBuffer(false)");
+                Utils.frameLog(elem.frameIndex, () -> "discardStaleFrames: releaseOutputBuffer(false)");
                 mCodec.releaseOutputBuffer(elem.index, false);
                 mUnusedList.add(elem);
             } else {
                 // Latest frame.
                 Element elem = mQueue.peek();
-                Utils.frameLog(elem.frameIndex, "discardStaleFrames: releaseOutputBuffer(true)");
+                Utils.frameLog(elem.frameIndex, () -> "discardStaleFrames: releaseOutputBuffer(true)");
                 render();
                 return true;
             }
@@ -168,14 +168,14 @@ public class OutputFrameQueue {
         if (mStopped) {
             return;
         }
-        Log.i(TAG, "Stopping.");
+        Utils.logi(TAG, () -> "Stopping.");
         mStopped = true;
         mUnusedList.addAll(mQueue);
         mQueue.clear();
     }
 
     synchronized public void reset() {
-        Log.i(TAG, "Resetting.");
+        Utils.logi(TAG, () -> "Resetting.");
         mStopped = false;
         mUnusedList.addAll(mQueue);
         mQueue.clear();

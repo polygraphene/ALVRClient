@@ -132,7 +132,7 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
                     mDeviceDescriptor.mControllerCapabilityFlags
             );
             if (mNativeHandle == 0) {
-                Log.e(TAG, "Error on initializing socket.");
+                Utils.loge(TAG, () -> "Error on initializing socket.");
                 synchronized (this) {
                     mInitializeFailed = true;
                     notifyAll();
@@ -143,7 +143,7 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
                 mInitialized = true;
                 notifyAll();
             }
-            Log.v(TAG, "UdpReceiverThread initialized.");
+            Utils.logi(TAG, () -> "UdpReceiverThread initialized.");
 
             runLoop(mNativeHandle, mPreviousServerAddress, mPreviousServerPort);
         } finally {
@@ -152,7 +152,7 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
             mNativeHandle = 0;
         }
 
-        Log.v(TAG, "UdpReceiverThread stopped.");
+        Utils.logi(TAG, () -> "UdpReceiverThread stopped.");
     }
 
     // List broadcast address from all interfaces except for mobile network.
@@ -167,7 +167,7 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
 
                 if (networkInterface.getName().startsWith("rmnet")) {
                     // Ignore mobile network interfaces.
-                    Log.v(TAG, "Ignore interface. Name=" + networkInterface.getName());
+                    Utils.log(TAG, () -> "Ignore interface. Name=" + networkInterface.getName());
                     continue;
                 }
 
@@ -181,9 +181,10 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
                         ret.add(interfaceAddress.getBroadcast().getHostAddress());
                     }
                 }
-                Log.v(TAG, "Interface: Name=" + networkInterface.getName() + " Address=" + address + " 2=" + address);
+                String finalAddress = address;
+                Utils.logi(TAG, () -> "Interface: Name=" + networkInterface.getName() + " Address=" + finalAddress);
             }
-            Log.v(TAG, ret.size() + " broadcast addresses were found.");
+            Utils.logi(TAG, () -> ret.size() + " broadcast addresses were found.");
             for (String address : ret) {
                 Log.v(TAG, address);
             }
@@ -214,14 +215,14 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
     // called from native
     @SuppressWarnings("unused")
     public void onConnected(int width, int height, int codec, int frameQueueSize, int refreshRate) {
-        Log.v(TAG, "onConnected is called.");
+        Utils.logi(TAG, () -> "onConnected is called.");
         mCallback.onConnected(width, height, codec, frameQueueSize, refreshRate);
         mTrackingThread.onConnect();
     }
 
     @SuppressWarnings("unused")
     public void onDisconnected() {
-        Log.v(TAG, "onDisconnected is called.");
+        Utils.logi(TAG, () -> "onDisconnected is called.");
         mCallback.onDisconnect();
         mTrackingThread.onDisconnect();
     }

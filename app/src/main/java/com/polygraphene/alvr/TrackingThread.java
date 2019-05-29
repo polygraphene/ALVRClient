@@ -68,7 +68,7 @@ class TrackingThread extends ThreadBase {
             } catch (InterruptedException e) {
             }
         }
-        Log.v(TAG, "TrackingThread has stopped.");
+        Utils.logi(TAG, () -> "TrackingThread has stopped.");
     }
 
     public boolean onRequestPermissionsResult(BaseActivity activity) {

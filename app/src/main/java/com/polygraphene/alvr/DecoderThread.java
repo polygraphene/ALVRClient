@@ -113,7 +113,7 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
     public boolean handleMessage(Message msg) {
         switch (msg.what) {
             case MESSAGE_PUSH_NAL:
-                Utils.log(TAG, "MESSAGE_PUSH_NAL");
+                Utils.log(TAG, () -> "MESSAGE_PUSH_NAL");
                 NAL nal = (NAL) msg.obj;
 
                 detectNALType(nal);
@@ -121,13 +121,13 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
                 pushNALInternal();
                 return true;
             case MESSAGE_INPUT_BUFFER_AVAILABLE:
-                Utils.log(TAG, "MESSAGE_INPUT_BUFFER_AVAILABLE");
+                Utils.log(TAG, () -> "MESSAGE_INPUT_BUFFER_AVAILABLE");
                 int index = msg.arg1;
                 mAvailableInputs.add(index);
                 pushNALInternal();
                 return true;
             case MESSAGE_OUTPUT_FRAME:
-                Utils.log(TAG, "MESSAGE_OUTPUT_FRAME");
+                Utils.log(TAG, () -> "MESSAGE_OUTPUT_FRAME");
                 int index2 = msg.arg1;
                 MediaCodec.BufferInfo info = (MediaCodec.BufferInfo) msg.obj;
 
@@ -143,9 +143,9 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
             decodeLoop();
         } catch (IOException | IllegalStateException e) {
             e.printStackTrace();
-            Log.e(TAG, "DecoderThread stopped by Exception.");
+            Utils.loge(TAG, () -> "DecoderThread stopped by Exception.");
         } finally {
-            Log.i(TAG, "Stopping decoder.");
+            Utils.logi(TAG, () -> "Stopping decoder.");
             mQueue.stop();
 
             mDecoderCallback.onDestroy();
@@ -159,7 +159,7 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
                 mDecoder = null;
             }
         }
-        Log.i(TAG, "DecoderThread stopped.");
+        Utils.logi(TAG, () -> "DecoderThread stopped.");
     }
 
     private void decodeLoop() throws IOException {
@@ -187,7 +187,7 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
         mDecoder.configure(format, mSurface, null, 0);
         mDecoder.start();
 
-        Log.v(TAG, "Codec created. Type=" + mFormat + " Name=" + mDecoder.getCodecInfo().getName());
+        Utils.logi(TAG, () -> "Codec created. Type=" + mFormat + " Name=" + mDecoder.getCodecInfo().getName());
 
         mDecoderCallback.onPrepared();
 
@@ -236,7 +236,7 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
 
             if (nal.length > 0) {
                 String name = mDecoder.getCodecInfo().getName();
-                Utils.frameLog(nal.frameIndex, "Splitting input buffer for codec. NAL Size="
+                Utils.frameLog(nal.frameIndex, () -> "Splitting input buffer for codec. NAL Size="
                         + nal.length + " copyLength=" + copyLength + " codec=" + name);
             }
         }
@@ -247,7 +247,7 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
     class Callback extends MediaCodec.Callback {
         @Override
         public void onInputBufferAvailable(@NonNull MediaCodec codec, final int index) {
-            Utils.log(TAG, "mHandler.sendMessage MESSAGE_INPUT_BUFFER_AVAILABLE");
+            Utils.log(TAG, () -> "mHandler.sendMessage MESSAGE_INPUT_BUFFER_AVAILABLE");
             Message message = mHandler.obtainMessage(MESSAGE_INPUT_BUFFER_AVAILABLE);
             message.arg1 = index;
             mHandler.sendMessage(message);
@@ -255,7 +255,7 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
 
         @Override
         public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index, @NonNull MediaCodec.BufferInfo info) {
-            Utils.log(TAG, "mHandler.sendMessage MESSAGE_OUTPUT_FRAME");
+            Utils.log(TAG, () -> "mHandler.sendMessage MESSAGE_OUTPUT_FRAME");
             Message message = mHandler.obtainMessage(MESSAGE_OUTPUT_FRAME);
             message.arg1 = index;
             message.obj = info;
@@ -264,17 +264,17 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
 
         @Override
         public void onError(@NonNull MediaCodec codec, @NonNull MediaCodec.CodecException e) {
-            Log.e(TAG, "Codec Error: " + e.getMessage() + "\n" + e.getDiagnosticInfo());
+            Utils.loge(TAG, () -> "Codec Error: " + e.getMessage() + "\n" + e.getDiagnosticInfo());
         }
 
         @Override
         public void onOutputFormatChanged(@NonNull MediaCodec codec, @NonNull MediaFormat format) {
-            Log.d(TAG, "New format " + mDecoder.getOutputFormat());
+            Utils.logi(TAG, () -> "New format " + mDecoder.getOutputFormat());
         }
     }
 
     public void onConnect(int codec, int frameQueueSize) {
-        Utils.logi(TAG, "onConnect()");
+        Utils.logi(TAG, () -> "onConnect()");
         if (mQueue != null) {
             mQueue.reset();
         }
@@ -287,7 +287,7 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
 
     private void notifyCodecChange(int codec) {
         if (codec != mCodec) {
-            Utils.logi(TAG, "notifyCodecChange: Codec was changed. New Codec=" + codec);
+            Utils.logi(TAG, () -> "notifyCodecChange: Codec was changed. New Codec=" + codec);
             stopAndWait();
             mCodec = codec;
             if (mCodec == CODEC_H264) {
@@ -298,14 +298,14 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
             mQueue.reset();
             start();
         } else {
-            Utils.logi(TAG, "notifyCodecChange: Codec was not changed. Codec=" + codec);
+            Utils.logi(TAG, () -> "notifyCodecChange: Codec was not changed. Codec=" + codec);
             //mWaitNextIDR = true;
         }
     }
 
     private void pushNALInternal() {
         if (isStopped()) {
-            Log.i(TAG, "decodeLoop Stopped. mStopped==true.");
+            Utils.logi(TAG, () ->"decodeLoop Stopped. mStopped==true.");
             return;
         }
         if (mAvailableInputs.size() == 0) {
@@ -322,14 +322,14 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
 
         if (nal.type == NAL_TYPE_SPS) {
             // (VPS + )SPS + PPS
-            Utils.frameLog(nal.frameIndex, "Feed codec config. Size=" + nal.length);
+            Utils.frameLog(nal.frameIndex, () -> "Feed codec config. Size=" + nal.length);
 
             mWaitNextIDR = false;
 
             consumed = pushInputBuffer(nal, 0, MediaCodec.BUFFER_FLAG_CODEC_CONFIG);
         } else if (nal.type == NAL_TYPE_IDR) {
             // IDR-Frame
-            Utils.frameLog(nal.frameIndex, "Feed IDR-Frame. Size=" + nal.length + " PresentationTime=" + presentationTime);
+            Utils.frameLog(nal.frameIndex, () -> "Feed IDR-Frame. Size=" + nal.length + " PresentationTime=" + presentationTime);
 
             LatencyCollector.DecoderInput(nal.frameIndex);
 
@@ -340,12 +340,12 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
 
             if (mWaitNextIDR) {
                 // Ignore P-Frame until next I-Frame
-                Utils.frameLog(nal.frameIndex, "Ignoring P-Frame");
+                Utils.frameLog(nal.frameIndex, () -> "Ignoring P-Frame");
 
                 consumed = true;
             } else {
                 // P-Frame
-                Utils.frameLog(nal.frameIndex, "Feed P-Frame. Size=" + nal.length + " PresentationTime=" + presentationTime);
+                Utils.frameLog(nal.frameIndex, () -> "Feed P-Frame. Size=" + nal.length + " PresentationTime=" + presentationTime);
 
                 consumed = pushInputBuffer(nal, presentationTime, 0);
             }
@@ -363,7 +363,7 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
         } else {
             NALType = (nal.buf[4] >> 1) & 0x3F;
         }
-        Utils.frameLog(nal.frameIndex, "Got NAL Type=" + NALType + " Length=" + nal.length + " QueueSize=" + mNalQueue.size());
+        Utils.frameLog(nal.frameIndex, () -> "Got NAL Type=" + NALType + " Length=" + nal.length + " QueueSize=" + mNalQueue.size());
 
         if ((mCodec == CODEC_H264 && NALType == NAL_TYPE_SPS) ||
                 (mCodec == CODEC_H265 && NALType == H265_NAL_TYPE_VPS)) {

@@ -46,7 +46,7 @@ public class OvrActivity extends BaseActivity {
         SurfaceHolder holder = surfaceView.getHolder();
         holder.addCallback(mCallback);
 
-        Log.v(TAG, "onCreate: Starting OvrThread");
+        Utils.logi(TAG, () -> "onCreate: Starting OvrThread");
         mOvrThread = new OvrThread(this);
     }
 
@@ -72,17 +72,17 @@ public class OvrActivity extends BaseActivity {
     protected void onDestroy() {
         super.onDestroy();
 
-        Log.v(TAG, "onDestroy: Stopping OvrThread.");
+        Utils.logi(TAG, () -> "onDestroy: Stopping OvrThread.");
         if(mOvrThread != null) {
             mOvrThread.quit();
             mOvrThread = null;
         }
-        Log.v(TAG, "onDestroy: OvrThread has stopped.");
+        Utils.logi(TAG, () -> "onDestroy: OvrThread has stopped.");
     }
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        //Log.v(TAG, "dispatchKeyEvent: " + event.getKeyCode());
+        //Utils.log(TAG, () ->  "dispatchKeyEvent: " + event.getKeyCode());
         if(event.getAction() == KeyEvent.ACTION_DOWN || event.getAction() == KeyEvent.ACTION_UP) {
             if (event.getKeyCode() == KeyEvent.KEYCODE_VOLUME_UP)
             {

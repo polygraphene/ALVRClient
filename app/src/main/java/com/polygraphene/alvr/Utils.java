@@ -10,30 +10,34 @@ public class Utils {
 
     public static native void setFrameLogEnabled(long debugFlags);
 
-    public static void frameLog(long frameIndex, String s) {
+    public interface LogProvider {
+        String obtain();
+    }
+
+    public static void frameLog(long frameIndex, LogProvider s) {
         if(sEnableLog) {
-            Log.v("FrameTracking", "[Frame " + frameIndex + "] " + s);
+            Log.v("FrameTracking", "[Frame " + frameIndex + "] " + s.obtain());
         }
     }
 
-    public static void log(String s) {
+    public static void log(LogProvider s) {
         if(sEnableLog) {
-            Log.v("FrameTracking", s);
+            Log.v("FrameTracking", s.obtain());
         }
     }
 
-    public static void log(String tag, String s) {
+    public static void log(String tag, LogProvider s) {
         if(sEnableLog) {
-            Log.v(tag, s);
+            Log.v(tag, s.obtain());
         }
     }
 
-    public static void logi(String tag, String s) {
-        Log.i(tag, s);
+    public static void logi(String tag, LogProvider s) {
+        Log.i(tag, s.obtain());
     }
 
-    public static void loge(String tag, String s) {
-        Log.e(tag, s);
+    public static void loge(String tag, LogProvider s) {
+        Log.e(tag, s.obtain());
     }
 
 

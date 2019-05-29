@@ -41,7 +41,7 @@ public class ThreadBase {
             String[] split = name.split("\\.");
             setName(split[split.length - 1]);
 
-            Log.v("ThreadBase", name +" has started.");
+            Utils.log("ThreadBase", () -> name +" has started.");
 
             ThreadBase.this.run();
         }
