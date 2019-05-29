@@ -67,6 +67,7 @@ private:
     bool Resumed = false;
     int FrameBufferWidth = 0;
     int FrameBufferHeight = 0;
+    bool mExtraLatencyMode = false;
 
     static const int DEFAULT_REFRESH_RATE = 60;
     int m_currentRefreshRate = DEFAULT_REFRESH_RATE;
@@ -126,6 +127,8 @@ private:
 
     void updateHapticsState();
     void finishHapticsBuffer(ovrDeviceID DeviceID);
+
+    void reflectExtraLatencyMode(bool always);
 };
 
 #endif //ALVRCLIENT_VR_CONTEXT_H

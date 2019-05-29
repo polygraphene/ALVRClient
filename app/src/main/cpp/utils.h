@@ -18,6 +18,7 @@
 extern int gGeneralLogLevel;
 extern int gSoundLogLevel;
 extern int gSocketLogLevel;
+extern bool gDisableExtraLatencyMode;
 
 #define LOG(...) if(gGeneralLogLevel <= ANDROID_LOG_VERBOSE){__android_log_print(ANDROID_LOG_VERBOSE, "ALVR Native", __VA_ARGS__);}
 #define LOGI(...) if(gGeneralLogLevel <= ANDROID_LOG_INFO){__android_log_print(ANDROID_LOG_INFO, "ALVR Native", __VA_ARGS__);}
