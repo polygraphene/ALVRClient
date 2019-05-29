@@ -51,6 +51,8 @@ public:
 
     void onHapticsFeedback(uint64_t startTime, float amplitude, float duration, float frequency, int hand);
 
+    bool getButtonDown();
+
 private:
     ANativeWindow *window = NULL;
     ovrMobile *Ovr;
@@ -108,6 +110,9 @@ private:
     // mHapticsState[0]: right hand state
     // mHapticsState[1]: left hand state
     HapticsState mHapticsState[2];
+
+    // Previous trigger button state.
+    bool mButtonPressed;
 
     void setControllerInfo(TrackingInfo *packet, double displayTime);
     uint64_t mapButtons(ovrInputTrackedRemoteCapabilities *remoteCapabilities, ovrInputStateTrackedRemote *remoteInputState);

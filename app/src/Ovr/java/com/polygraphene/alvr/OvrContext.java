@@ -88,6 +88,10 @@ public class OvrContext {
         onHapticsFeedbackNative(handle, startTime, amplitude, duration, frequency, hand);
     }
 
+    public boolean getButtonDown() {
+        return getButtonDownNative(handle);
+    }
+
     private native long initializeNative(Activity activity, AssetManager assetManager, OvrThread ovrThread, boolean ARMode, int initialRefreshRate);
     private native void destroyNative(long handle);
 
@@ -113,4 +117,6 @@ public class OvrContext {
     private native void setFrameGeometryNative(long handle, int width, int height);
     private native void setRefreshRateNative(long handle, int refreshRate);
     private native void onHapticsFeedbackNative(long handle, long startTime, float amplitude, float duration, float frequency, boolean hand);
+
+    private native boolean getButtonDownNative(long handle);
 }

@@ -29,6 +29,7 @@ class OvrThread {
     // Worker threads
     private DecoderThread mDecoderThread;
     private UdpReceiverThread mReceiverThread;
+    private LauncherSocket mLauncherSocket;
 
     private EGLContext mEGLContext;
 
@@ -90,6 +91,9 @@ class OvrThread {
         mHandler.post(new Runnable() {
             @Override
             public void run() {
+                mLauncherSocket = new LauncherSocket(mLauncherSocketCallback);
+                mLauncherSocket.listen();
+
                 mReceiverThread = new UdpReceiverThread(mUdpReceiverCallback);
 
                 PersistentConfig.ConnectionState connectionState = new PersistentConfig.ConnectionState();
@@ -135,6 +139,11 @@ class OvrThread {
         mHandler.post(new Runnable() {
             @Override
             public void run() {
+                if (mLauncherSocket != null) {
+                    mLauncherSocket.close();
+                    mLauncherSocket = null;
+                }
+
                 // DecoderThread must be stopped before ReceiverThread and setting mResumed=false.
                 if (mDecoderThread != null) {
                     Utils.log(TAG, () -> "OvrThread.onPause: Stopping DecoderThread.");
@@ -228,6 +237,11 @@ class OvrThread {
             } else {
                 if (mReceiverThread.isConnected()) {
                     mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\n \nConnected!\nStreaming will begin soon!");
+                } else if(mLauncherSocket != null && mLauncherSocket.isConnected()) {
+                    mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\n \nConnected!\nStart SteamVR on server.");
+                    if (mOvrContext.getButtonDown()) {
+                        mLauncherSocket.sendCommand("StartServer");
+                    }
                 } else {
                     mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\n \nPress CONNECT button\non ALVR server.");
                 }
@@ -318,6 +332,12 @@ class OvrThread {
         @Override
         public void onFrameDecoded() {
             mDecoderThread.releaseBuffer();
+        }
+    };
+
+    private LauncherSocket.LauncherSocketCallback mLauncherSocketCallback = new LauncherSocket.LauncherSocketCallback() {
+        @Override
+        public void onConnect() {
         }
     };
 }

@@ -1008,6 +1008,42 @@ void OvrContext::reflectExtraLatencyMode(bool always) {
     }
 }
 
+/// Check if buttons to send launch signal to server is down on current frame.
+/// \return true if down at current frame.
+bool OvrContext::getButtonDown() {
+    ovrInputCapabilityHeader curCaps;
+    ovrResult result;
+    bool buttonPressed = false;
+
+    for (uint32_t deviceIndex = 0;
+         vrapi_EnumerateInputDevices(Ovr, deviceIndex, &curCaps) >= 0; deviceIndex++) {
+        if (curCaps.Type == ovrControllerType_TrackedRemote) {
+            ovrInputTrackedRemoteCapabilities remoteCapabilities;
+            ovrInputStateTrackedRemote remoteInputState;
+
+            remoteCapabilities.Header = curCaps;
+            result = vrapi_GetInputDeviceCapabilities(Ovr, &remoteCapabilities.Header);
+            if (result != ovrSuccess) {
+                continue;
+            }
+            remoteInputState.Header.ControllerType = remoteCapabilities.Header.Type;
+
+            result = vrapi_GetCurrentInputState(Ovr, remoteCapabilities.Header.DeviceID,
+                                                &remoteInputState.Header);
+            if (result != ovrSuccess) {
+                continue;
+            }
+
+            buttonPressed = buttonPressed || (remoteInputState.Buttons &
+                    (ovrButton_Trigger | ovrButton_A | ovrButton_B | ovrButton_X | ovrButton_Y)) != 0;
+        }
+    }
+
+    bool ret = buttonPressed && !mButtonPressed;
+    mButtonPressed = buttonPressed;
+    return ret;
+}
+
 extern "C"
 JNIEXPORT jlong JNICALL
 Java_com_polygraphene_alvr_OvrContext_initializeNative(JNIEnv *env, jobject instance,
@@ -1169,4 +1205,12 @@ Java_com_polygraphene_alvr_OvrContext_onHapticsFeedbackNative(JNIEnv *env, jobje
                                                               jfloat frequency, jboolean hand) {
     return ((OvrContext *) handle)->onHapticsFeedback(static_cast<uint64_t>(startTime), amplitude,
                                                       duration, frequency, hand == 0 ? 0 : 1);
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_polygraphene_alvr_OvrContext_getButtonDownNative(JNIEnv *env, jobject instance,
+                                                          jlong handle) {
+
+    return static_cast<jboolean>(((OvrContext *) handle)->getButtonDown());
 }
