@@ -420,7 +420,7 @@ void UdpManager::sendTimeSyncLocked() {
 
 void UdpManager::sendBroadcastLocked() {
     time_t current = time(nullptr);
-    if (m_prevSentBroadcast != current && !m_socket.isConnected()) {
+    if (m_prevSentBroadcast != current) {
         LOGI("Sending broadcast hello.");
         m_socket.sendBroadcast(&mHelloMessage, sizeof(mHelloMessage));
     }
