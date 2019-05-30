@@ -129,7 +129,6 @@ class OvrThread {
                 mOvrContext.onResume();
             }
         });
-        mHandler.post(mRenderRunnable);
     }
 
     public void onPause() {
@@ -231,6 +230,9 @@ class OvrThread {
                 mHandler.postDelayed(mIdleRenderRunnable, 50);
             }
         } else {
+            if (!mOvrContext.isVrMode()) {
+                return;
+            }
             if (mReceiverThread.getErrorMessage() != null) {
                 mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\n \n!!! Error on ARCore initialization !!!\n" + mReceiverThread.getErrorMessage());
             } else {
@@ -263,6 +265,9 @@ class OvrThread {
         mVrMode = enter;
         Utils.logi(TAG, () -> "onVrModeChanged. mVrMode=" + mVrMode + " mDecoderPrepared=" + mDecoderPrepared);
         mReceiverThread.setSinkPrepared(mVrMode && mDecoderPrepared);
+        if (mVrMode) {
+            mHandler.post(mRenderRunnable);
+        }
     }
 
     private UdpReceiverThread.Callback mUdpReceiverCallback = new UdpReceiverThread.Callback() {
