@@ -13,6 +13,7 @@ import com.koushikdutta.async.callback.ListenCallback;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 
 public class LauncherSocket {
@@ -20,6 +21,7 @@ public class LauncherSocket {
     private boolean mConnected = false;
     private AsyncSocket mSocket;
     private AsyncServerSocket mServerSocket;
+    private Gson mGson = new Gson();
     private int mRequestId = 1;
     private int mReadState = 0;
     private int mLength = 0;
@@ -27,8 +29,8 @@ public class LauncherSocket {
     byte[] mReadBuffer;
 
     private class Command {
-        private int requestId;
-        private String command;
+        public int requestId;
+        public String command;
 
         Command(int requestId, String command) {
             this.requestId = requestId;
@@ -78,17 +80,21 @@ public class LauncherSocket {
     }
 
     public void close() {
+        Utils.logi(TAG, () -> "Close.");
         if (mServerSocket != null) {
             mServerSocket.stop();
+            mServerSocket = null;
         }
         if (mSocket != null) {
+            sendCommand("Close");
+            mSocket.end();
             mSocket.close();
+            mSocket = null;
         }
     }
 
     public void sendCommand(String commandName) {
-        Gson gson = new Gson();
-        String json = gson.toJson(new Command(mRequestId, commandName));
+        String json = mGson.toJson(new Command(mRequestId, commandName));
         ByteBufferList byteBufferList = new ByteBufferList();
 
         byte[] buffer = json.getBytes(StandardCharsets.UTF_8);
@@ -104,6 +110,8 @@ public class LauncherSocket {
     }
 
     private void onDataAvailable(DataEmitter emitter, ByteBufferList bb) {
+        bb.order(ByteOrder.LITTLE_ENDIAN);
+
         while (bb.remaining() > 0) {
             if (mReadState == 0) {
                 mRemaining = mLength = bb.getInt();
@@ -119,8 +127,25 @@ public class LauncherSocket {
                     return;
                 }
                 bb.get(mReadBuffer, mLength - mRemaining, mRemaining);
+
+                onReceive();
                 mReadState = 0;
             }
+        }
+    }
+
+    private void onReceive() {
+        Command command = mGson.fromJson(new String(mReadBuffer, StandardCharsets.UTF_8), Command.class);
+        if(command.command.equals("Close")) {
+            Utils.logi(TAG, () -> "Connection closed by server.");
+            if(mSocket != null) {
+                mSocket.end();
+                mSocket.close();
+                mSocket = null;
+            }
+            mConnected = false;
+        } else {
+            Utils.loge(TAG, () -> "Unknown command received. command=" + command.command + " requestId=" + command.requestId);
         }
     }
 }

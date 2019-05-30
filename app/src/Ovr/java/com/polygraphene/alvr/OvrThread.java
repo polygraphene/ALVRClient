@@ -130,11 +130,10 @@ class OvrThread {
             }
         });
         mHandler.post(mRenderRunnable);
-        Log.v(TAG, "OvrThread.onResume: Worker threads has started.");
     }
 
     public void onPause() {
-        Utils.log(TAG, () -> "OvrThread.onPause: Stopping worker threads.");
+        Utils.logi(TAG, () -> "OvrThread.onPause: Stopping worker threads.");
         // DecoderThread must be stopped before ReceiverThread and setting mResumed=false.
         mHandler.post(new Runnable() {
             @Override
