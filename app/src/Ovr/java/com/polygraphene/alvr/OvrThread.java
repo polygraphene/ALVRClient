@@ -45,42 +45,22 @@ class OvrThread {
         mHandlerThread = new HandlerThread("OvrThread");
         mHandlerThread.start();
         mHandler = new Handler(mHandlerThread.getLooper());
-        mHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                startup();
-            }
-        });
+        mHandler.post(() -> startup());
     }
 
     public void onSurfaceCreated(final Surface surface) {
         Utils.logi(TAG, () -> "OvrThread.onSurfaceCreated.");
-        mHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                mOvrContext.onSurfaceCreated(surface);
-            }
-        });
+        mHandler.post(() -> mOvrContext.onSurfaceCreated(surface));
     }
 
     public void onSurfaceChanged(final Surface surface) {
         Utils.logi(TAG, () -> "OvrThread.onSurfaceChanged.");
-        mHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                mOvrContext.onSurfaceChanged(surface);
-            }
-        });
+        mHandler.post(() -> mOvrContext.onSurfaceChanged(surface));
     }
 
     public void onSurfaceDestroyed() {
         Utils.logi(TAG, () -> "OvrThread.onSurfaceDestroyed.");
-        mHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                mOvrContext.onSurfaceDestroyed();
-            }
-        });
+        mHandler.post(() -> mOvrContext.onSurfaceDestroyed());
     }
 
     public void onResume() {
@@ -88,97 +68,78 @@ class OvrThread {
         // Sometimes previous decoder output remains not updated (when previous call of waitFrame() didn't call updateTexImage())
         // and onFrameAvailable won't be called after next output.
         // To avoid deadlock caused by it, we need to flush last output.
-        mHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                mLauncherSocket = new LauncherSocket(mLauncherSocketCallback);
-                mLauncherSocket.listen();
+        mHandler.post(() -> {
+            mLauncherSocket = new LauncherSocket(mLauncherSocketCallback);
+            mLauncherSocket.listen();
 
-                mReceiverThread = new UdpReceiverThread(mUdpReceiverCallback);
+            mReceiverThread = new UdpReceiverThread(mUdpReceiverCallback);
 
-                PersistentConfig.ConnectionState connectionState = new PersistentConfig.ConnectionState();
-                PersistentConfig.loadConnectionState(mActivity, connectionState);
+            PersistentConfig.ConnectionState connectionState = new PersistentConfig.ConnectionState();
+            PersistentConfig.loadConnectionState(mActivity, connectionState);
 
-                if (connectionState.serverAddr != null && connectionState.serverPort != 0) {
-                    Utils.logi(TAG, () -> "Load connection state: " + connectionState.serverAddr + " " + connectionState.serverPort);
-                    mReceiverThread.recoverConnectionState(connectionState.serverAddr, connectionState.serverPort);
-                }
-
-                // Sometimes previous decoder output remains not updated (when previous call of waitFrame() didn't call updateTexImage())
-                // and onFrameAvailable won't be called after next output.
-                // To avoid deadlock caused by it, we need to flush last output.
-                mSurfaceTexture.updateTexImage();
-
-                mDecoderThread = new DecoderThread(mSurface, mActivity, mDecoderCallback);
-
-                try {
-                    mDecoderThread.start();
-
-                    DeviceDescriptor deviceDescriptor = new DeviceDescriptor();
-                    mOvrContext.getDeviceDescriptor(deviceDescriptor);
-                    mRefreshRate = deviceDescriptor.mRefreshRates[0];
-                    if (!mReceiverThread.start(mEGLContext, mActivity, deviceDescriptor, mOvrContext.getCameraTexture(), mDecoderThread)) {
-                        Utils.loge(TAG, () -> "FATAL: Initialization of ReceiverThread failed.");
-                        return;
-                    }
-                } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
-                    e.printStackTrace();
-                }
-
-                Utils.logi(TAG, () -> "OvrThread.onResume: mOvrContext.onResume().");
-                mOvrContext.onResume();
+            if (connectionState.serverAddr != null && connectionState.serverPort != 0) {
+                Utils.logi(TAG, () -> "Load connection state: " + connectionState.serverAddr + " " + connectionState.serverPort);
+                mReceiverThread.recoverConnectionState(connectionState.serverAddr, connectionState.serverPort);
             }
+
+            // Sometimes previous decoder output remains not updated (when previous call of waitFrame() didn't call updateTexImage())
+            // and onFrameAvailable won't be called after next output.
+            // To avoid deadlock caused by it, we need to flush last output.
+            mSurfaceTexture.updateTexImage();
+
+            mDecoderThread = new DecoderThread(mSurface, mActivity, mDecoderCallback);
+
+            try {
+                mDecoderThread.start();
+
+                DeviceDescriptor deviceDescriptor = new DeviceDescriptor();
+                mOvrContext.getDeviceDescriptor(deviceDescriptor);
+                mRefreshRate = deviceDescriptor.mRefreshRates[0];
+                if (!mReceiverThread.start(mEGLContext, mActivity, deviceDescriptor, mOvrContext.getCameraTexture(), mDecoderThread)) {
+                    Utils.loge(TAG, () -> "FATAL: Initialization of ReceiverThread failed.");
+                    return;
+                }
+            } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
+                e.printStackTrace();
+            }
+
+            Utils.logi(TAG, () -> "OvrThread.onResume: mOvrContext.onResume().");
+            mOvrContext.onResume();
         });
     }
 
     public void onPause() {
         Utils.logi(TAG, () -> "OvrThread.onPause: Stopping worker threads.");
         // DecoderThread must be stopped before ReceiverThread and setting mResumed=false.
-        mHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                if (mLauncherSocket != null) {
-                    mLauncherSocket.close();
-                    mLauncherSocket = null;
-                }
-
-                // DecoderThread must be stopped before ReceiverThread and setting mResumed=false.
-                if (mDecoderThread != null) {
-                    Utils.log(TAG, () -> "OvrThread.onPause: Stopping DecoderThread.");
-                    mDecoderThread.stopAndWait();
-                }
-                if (mReceiverThread != null) {
-                    Utils.log(TAG, () -> "OvrThread.onPause: Stopping ReceiverThread.");
-                    mReceiverThread.stopAndWait();
-                }
-
-                mOvrContext.onPause();
+        mHandler.post(() -> {
+            if (mLauncherSocket != null) {
+                mLauncherSocket.close();
+                mLauncherSocket = null;
             }
+
+            // DecoderThread must be stopped before ReceiverThread and setting mResumed=false.
+            if (mDecoderThread != null) {
+                Utils.log(TAG, () -> "OvrThread.onPause: Stopping DecoderThread.");
+                mDecoderThread.stopAndWait();
+            }
+            if (mReceiverThread != null) {
+                Utils.log(TAG, () -> "OvrThread.onPause: Stopping ReceiverThread.");
+                mReceiverThread.stopAndWait();
+            }
+
+            mOvrContext.onPause();
         });
     }
 
-    private Runnable mRenderRunnable = new Runnable() {
-        @Override
-        public void run() {
-            render();
-        }
-    };
-    private Runnable mIdleRenderRunnable = new Runnable() {
-        @Override
-        public void run() {
-            render();
-        }
-    };
+    private Runnable mRenderRunnable = () -> render();
+    private Runnable mIdleRenderRunnable = () -> render();
 
     // Called from onDestroy
     public void quit() {
-        mHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                mLoadingTexture.destroyTexture();
-                Utils.logi(TAG, () -> "Destroying vrapi state.");
-                mOvrContext.destroy();
-            }
+        mHandler.post(() -> {
+            mLoadingTexture.destroyTexture();
+            Utils.logi(TAG, () -> "Destroying vrapi state.");
+            mOvrContext.destroy();
         });
         mHandlerThread.quitSafely();
     }
@@ -189,14 +150,11 @@ class OvrThread {
         mOvrContext.initialize(mActivity, mActivity.getAssets(), this, Constants.IS_ARCORE_BUILD, 60);
 
         mSurfaceTexture = new SurfaceTexture(mOvrContext.getSurfaceTextureID());
-        mSurfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
-            @Override
-            public void onFrameAvailable(SurfaceTexture surfaceTexture) {
-                Utils.log(TAG, () -> "OvrThread: waitFrame: onFrameAvailable is called.");
-                mDecoderThread.onFrameAvailable();
-                mHandler.removeCallbacks(mIdleRenderRunnable);
-                mHandler.post(mRenderRunnable);
-            }
+        mSurfaceTexture.setOnFrameAvailableListener(surfaceTexture -> {
+            Utils.log(TAG, () -> "OvrThread: waitFrame: onFrameAvailable is called.");
+            mDecoderThread.onFrameAvailable();
+            mHandler.removeCallbacks(mIdleRenderRunnable);
+            mHandler.post(mRenderRunnable);
         }, new Handler(Looper.getMainLooper()));
         mSurface = new Surface(mSurfaceTexture);
 
@@ -275,13 +233,10 @@ class OvrThread {
         public void onConnected(final int width, final int height, final int codec, final int frameQueueSize, final int refreshRate) {
             // We must wait completion of notifyGeometryChange
             // to ensure the first video frame arrives after notifyGeometryChange.
-            mHandler.post(new Runnable() {
-                @Override
-                public void run() {
-                    mOvrContext.setRefreshRate(refreshRate);
-                    mOvrContext.setFrameGeometry(width, height);
-                    mDecoderThread.onConnect(codec, frameQueueSize);
-                }
+            mHandler.post(() -> {
+                mOvrContext.setRefreshRate(refreshRate);
+                mOvrContext.setFrameGeometry(width, height);
+                mDecoderThread.onConnect(codec, frameQueueSize);
             });
         }
 
