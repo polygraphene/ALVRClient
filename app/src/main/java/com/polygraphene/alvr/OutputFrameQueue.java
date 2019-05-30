@@ -22,7 +22,7 @@ public class OutputFrameQueue {
     private Queue<Element> mUnusedList = new LinkedList<>();
     private MediaCodec mCodec;
     private FrameMap mFrameMap = new FrameMap();
-    private final int mQueueSize = 2;
+    private final int mQueueSize = 1;
     private Element mSurface = new Element();
 
     private enum SurfaceState {
