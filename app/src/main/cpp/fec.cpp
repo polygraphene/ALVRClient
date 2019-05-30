@@ -34,7 +34,9 @@ void FECQueue::addVideoPacket(const VideoFrame *packet, int packetSize, bool &fe
         // New frame
         if (!m_recovered) {
             FrameLog(m_currentFrame.trackingFrameIndex,
-                     "Previous frame cannot be recovered. shards=%u:%u frameByteSize=%d fecPercentage=%d m_totalShards=%u m_shardPackets=%u m_blockSize=%u",
+                     "Previous frame cannot be recovered. videoFrame=%llu shards=%u:%u frameByteSize=%d"
+                     " fecPercentage=%d m_totalShards=%u m_shardPackets=%u m_blockSize=%u",
+                     m_currentFrame.videoFrameIndex,
                      m_totalDataShards,
                      m_totalParityShards,
                      m_currentFrame.frameByteSize, m_currentFrame.fecPercentage, m_totalShards,
@@ -113,10 +115,9 @@ void FECQueue::addVideoPacket(const VideoFrame *packet, int packetSize, bool &fe
         if(m_firstPacketOfNextFrame != 0 && m_firstPacketOfNextFrame != startPacket) {
             // Whole frame packet loss
             FrameLog(m_currentFrame.trackingFrameIndex,
-                     "Previous frame was completely lost. shards=%u:%u frameByteSize=%d fecPercentage=%d m_totalShards=%u "
+                     "Previous frame was completely lost. videoFrame=%llu shards=%u:%u frameByteSize=%d fecPercentage=%d m_totalShards=%u "
                      "m_shardPackets=%u m_blockSize=%u m_firstPacketOfNextFrame=%u startPacket=%u currentPacket=%u",
-                     m_totalDataShards,
-                     m_totalParityShards,
+                     m_currentFrame.videoFrameIndex, m_totalDataShards, m_totalParityShards,
                      m_currentFrame.frameByteSize, m_currentFrame.fecPercentage, m_totalShards,
                      m_shardPackets, m_blockSize, m_firstPacketOfNextFrame, startPacket, m_currentFrame.packetCounter);
             for (int packet = 0; packet < m_shardPackets; packet++) {
@@ -129,8 +130,9 @@ void FECQueue::addVideoPacket(const VideoFrame *packet, int packetSize, bool &fe
         m_firstPacketOfNextFrame = nextStartPacket;
 
         FrameLog(m_currentFrame.trackingFrameIndex,
-                 "Start new frame. frameByteSize=%d fecPercentage=%d m_totalDataShards=%u m_totalParityShards=%u m_totalShards=%u m_shardPackets=%u m_blockSize=%u",
-                 m_currentFrame.frameByteSize, m_currentFrame.fecPercentage, m_totalDataShards,
+                 "Start new frame. videoFrame=%llu frameByteSize=%d fecPercentage=%d m_totalDataShards=%u m_totalParityShards=%u"
+                 " m_totalShards=%u m_shardPackets=%u m_blockSize=%u",
+                 m_currentFrame.videoFrameIndex, m_currentFrame.frameByteSize, m_currentFrame.fecPercentage, m_totalDataShards,
                  m_totalParityShards, m_totalShards, m_shardPackets, m_blockSize);
     }
     size_t shardIndex = packet->fecIndex / m_shardPackets;
