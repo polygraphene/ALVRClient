@@ -209,12 +209,12 @@ class OvrThread {
 
     private void render() {
         if (mReceiverThread.isConnected() && mReceiverThread.getErrorMessage() == null) {
-            if (mDecoderThread.discartStaleFrames(mSurfaceTexture)) {
+            /*if (mDecoderThread.discartStaleFrames(mSurfaceTexture)) {
                 Utils.log(TAG, () ->  "Discard stale frame. Wait next onFrameAvailable.");
                 mHandler.removeCallbacks(mIdleRenderRunnable);
                 mHandler.postDelayed(mIdleRenderRunnable, 50);
                 return;
-            }
+            }*/
             long next = checkRenderTiming();
             if(next > 0) {
                 mHandler.postDelayed(mRenderRunnable, next);
