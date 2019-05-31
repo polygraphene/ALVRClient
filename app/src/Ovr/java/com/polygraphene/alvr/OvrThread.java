@@ -197,7 +197,7 @@ class OvrThread {
                 if (mReceiverThread.isConnected()) {
                     mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\n \nConnected!\nStreaming will begin soon!");
                 } else if(mLauncherSocket != null && mLauncherSocket.isConnected()) {
-                    mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\n \nConnected!\nStart SteamVR on server.");
+                    mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\n \nConnected!\nPress Trigger\nto start SteamVR.");
                     if (mOvrContext.getButtonDown()) {
                         mLauncherSocket.sendCommand("StartServer");
                     }
