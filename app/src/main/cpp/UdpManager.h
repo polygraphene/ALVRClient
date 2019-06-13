@@ -27,10 +27,6 @@ public:
                         jint renderHeight, jfloatArray fov, jint deviceType, jint deviceSubType,
                         jint deviceCapabilityFlags, jint controllerCapabilityFlags);
 
-    NALParser &getNalParser() {
-        return *m_nalParser;
-    }
-
     void send(const void *packet, int length);
 
     void runLoop(JNIEnv *env, jobject instance, jstring serverAddress, int serverPort);
@@ -41,6 +37,36 @@ public:
 
     jstring getServerAddress(JNIEnv *env);
     int getServerPort();
+
+private:
+
+    void initializeJNICallbacks(JNIEnv *env, jobject instance);
+
+    void sendStreamStartPacket();
+
+    void sendPacketLossReport(ALVR_LOST_FRAME_TYPE frameType, uint32_t fromPacketCounter,
+                              uint32_t toPacketCounter);
+    void processVideoSequence(uint32_t sequence);
+    void processSoundSequence(uint32_t sequence);
+
+    void processReadPipe(int pipefd);
+
+    void sendTimeSyncLocked();
+    void sendBroadcastLocked();
+    void doPeriodicWork();
+
+    void recoverConnection(std::string serverAddress, int serverPort);
+
+    void checkConnection();
+    void updateTimeout();
+
+    void onConnect(const ConnectionMessage &connectionMessage);
+    void onBroadcastRequest();
+    void onPacketRecv(const char *packet, size_t packetSize);
+
+    void loadRefreshRates(JNIEnv *refreshRates, jintArray pArray);
+    void loadFov(JNIEnv *env, jfloatArray fov_);
+
 private:
 // Connection has lost when elapsed 3 seconds from last packet.
     static const uint64_t CONNECTION_TIMEOUT = 3 * 1000 * 1000;
@@ -50,7 +76,7 @@ private:
     // Turned true when decoder thread is prepared.
     bool mSinkPrepared = false;
 
-    Socket m_socket;
+    UdpSocket m_socket;
     time_t m_prevSentSync = 0;
     time_t m_prevSentBroadcast = 0;
     int64_t m_timeDiff = 0;
@@ -85,32 +111,6 @@ private:
     std::mutex pipeMutex;
     std::list<SendBuffer> m_sendQueue;
 
-    void initializeJNICallbacks(JNIEnv *env, jobject instance);
-
-    void sendStreamStartPacket();
-
-    void sendPacketLossReport(ALVR_LOST_FRAME_TYPE frameType, uint32_t fromPacketCounter,
-                              uint32_t toPacketCounter);
-    void processVideoSequence(uint32_t sequence);
-    void processSoundSequence(uint32_t sequence);
-
-    void processReadPipe(int pipefd);
-
-    void sendTimeSyncLocked();
-    void sendBroadcastLocked();
-    void doPeriodicWork();
-
-    void recoverConnection(std::string serverAddress, int serverPort);
-
-    void checkConnection();
-    void updateTimeout();
-
-    void onConnect(const ConnectionMessage &connectionMessage);
-    void onBroadcastRequest();
-    void onPacketRecv(const char *packet, size_t packetSize);
-
-    void loadRefreshRates(JNIEnv *refreshRates, jintArray pArray);
-    void loadFov(JNIEnv *env, jfloatArray fov_);
 };
 
 #endif //ALVRCLIENT_UDP_H

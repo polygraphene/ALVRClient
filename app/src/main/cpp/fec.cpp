@@ -150,7 +150,7 @@ void FECQueue::addVideoPacket(const VideoFrame *packet, int packetSize, bool &fe
         m_receivedParityShards[packetIndex]++;
     }
 
-    char *p = &m_frameBuffer[packet->fecIndex * ALVR_MAX_VIDEO_BUFFER_SIZE];
+    std::byte *p = &m_frameBuffer[packet->fecIndex * ALVR_MAX_VIDEO_BUFFER_SIZE];
     char *payload = ((char *) packet) + sizeof(VideoFrame);
     int payloadSize = packetSize - sizeof(VideoFrame);
     memcpy(p, payload, payloadSize);
@@ -193,8 +193,7 @@ bool FECQueue::reconstruct() {
                  m_receivedParityShards[packet], m_totalParityShards);
 
         for (int i = 0; i < m_totalShards; i++) {
-            m_shards[i] = &m_frameBuffer[(i * m_shardPackets + packet) *
-                                         ALVR_MAX_VIDEO_BUFFER_SIZE];
+            m_shards[i] = &m_frameBuffer[(i * m_shardPackets + packet) * ALVR_MAX_VIDEO_BUFFER_SIZE];
         }
 
         int result = reed_solomon_reconstruct(m_rs, (unsigned char **) &m_shards[0],
@@ -220,7 +219,7 @@ bool FECQueue::reconstruct() {
     return ret;
 }
 
-const char *FECQueue::getFrameBuffer() {
+const std::byte *FECQueue::getFrameBuffer() {
     return &m_frameBuffer[0];
 }
 

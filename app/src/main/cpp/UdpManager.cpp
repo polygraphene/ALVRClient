@@ -77,7 +77,7 @@ void UdpManager::initialize(JNIEnv *env, jobject instance, jint helloPort, jint 
     mHelloMessage.controllerCapabilityFlags = static_cast<uint32_t>(controllerCapabilityFlags);
 
     //
-    // Socket
+    // UdpSocket
     //
 
     m_socket.setOnConnect(std::bind(&UdpManager::onConnect, this, std::placeholders::_1));

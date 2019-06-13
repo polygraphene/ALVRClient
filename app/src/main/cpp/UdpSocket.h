@@ -11,11 +11,11 @@
 
 #include "packet_types.h"
 
-class Socket
+class UdpSocket
 {
 public:
-    Socket() = default;
-    ~Socket();
+    UdpSocket() = default;
+    ~UdpSocket();
 
     void initialize(JNIEnv *env, int helloPort, int port, jobjectArray broadcastAddrList_);
     void sendBroadcast(const void *buf, size_t len);

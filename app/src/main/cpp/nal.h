@@ -17,8 +17,8 @@ public:
 
     bool fecFailure();
 private:
-    void push(const char *buffer, int length, uint64_t frameIndex);
-    int findVPSSPS(const char *frameBuffer, int frameByteSize);
+    void push(const std::byte *buffer, int length, uint64_t frameIndex);
+    int findVPSSPS(const std::byte *frameBuffer, int frameByteSize);
 
     FECQueue m_queue;
 

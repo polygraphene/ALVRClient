@@ -12,7 +12,7 @@
 #include "UdpSocket.h"
 #include "utils.h"
 
-Socket::~Socket()
+UdpSocket::~UdpSocket()
 {
     if (m_sock >= 0)
     {
@@ -20,7 +20,7 @@ Socket::~Socket()
     }
 }
 
-void Socket::initialize(JNIEnv *env, int helloPort, int port, jobjectArray broadcastAddrList_)
+void UdpSocket::initialize(JNIEnv *env, int helloPort, int port, jobjectArray broadcastAddrList_)
 {
     int val;
     socklen_t len;
@@ -42,7 +42,7 @@ void Socket::initialize(JNIEnv *env, int helloPort, int port, jobjectArray broad
     setsockopt(m_sock, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
 
     //
-    // Socket recv buffer
+    // UdpSocket recv buffer
     //
 
     //setMaxSocketBuffer();
@@ -73,7 +73,7 @@ void Socket::initialize(JNIEnv *env, int helloPort, int port, jobjectArray broad
 }
 
 void
-Socket::setBroadcastAddrList(JNIEnv *env, int helloPort, int port, jobjectArray broadcastAddrList_)
+UdpSocket::setBroadcastAddrList(JNIEnv *env, int helloPort, int port, jobjectArray broadcastAddrList_)
 {
     int broadcastCount = env->GetArrayLength(broadcastAddrList_);
 
@@ -100,13 +100,13 @@ Socket::setBroadcastAddrList(JNIEnv *env, int helloPort, int port, jobjectArray 
     }
 }
 
-int Socket::send(const void *buf, size_t len)
+int UdpSocket::send(const void *buf, size_t len)
 {
     LOGSOCKET("Sending %zu bytes", len);
     return (int) sendto(m_sock, buf, len, 0, (sockaddr *) &m_serverAddr, sizeof(m_serverAddr));
 }
 
-void Socket::recv()
+void UdpSocket::recv()
 {
     char packet[MAX_PACKET_UDP_PACKET_SIZE];
     sockaddr_in addr;
@@ -128,13 +128,13 @@ void Socket::recv()
     }
 }
 
-void Socket::disconnect()
+void UdpSocket::disconnect()
 {
     m_connected = false;
     memset(&m_serverAddr, 0, sizeof(m_serverAddr));
 }
 
-jstring Socket::getServerAddress(JNIEnv *env)
+jstring UdpSocket::getServerAddress(JNIEnv *env)
 {
     if (m_hasServerAddress)
     {
@@ -146,19 +146,19 @@ jstring Socket::getServerAddress(JNIEnv *env)
     return NULL;
 }
 
-int Socket::getServerPort()
+int UdpSocket::getServerPort()
 {
     if (m_hasServerAddress)
         return htons(m_serverAddr.sin_port);
     return 0;
 }
 
-int Socket::getSocket()
+int UdpSocket::getSocket()
 {
     return m_sock;
 }
 
-void Socket::sendBroadcast(const void *buf, size_t len)
+void UdpSocket::sendBroadcast(const void *buf, size_t len)
 {
     for (const sockaddr_in &address : m_broadcastAddrList)
     {
@@ -166,7 +166,7 @@ void Socket::sendBroadcast(const void *buf, size_t len)
     }
 }
 
-void Socket::parse(char *packet, int packetSize, const sockaddr_in &addr)
+void UdpSocket::parse(char *packet, int packetSize, const sockaddr_in &addr)
 {
     if (m_connected)
     {
@@ -219,7 +219,7 @@ void Socket::parse(char *packet, int packetSize, const sockaddr_in &addr)
     }
 }
 
-void Socket::recoverConnection(std::string serverAddress, int serverPort)
+void UdpSocket::recoverConnection(std::string serverAddress, int serverPort)
 {
     LOGI("Sending recover connection request. server=%s:%d", serverAddress.c_str(), serverPort);
     sockaddr_in addr;
@@ -233,22 +233,22 @@ void Socket::recoverConnection(std::string serverAddress, int serverPort)
     sendto(m_sock, &message, sizeof(message), 0, (sockaddr *) &addr, sizeof(addr));
 }
 
-void Socket::setOnConnect(std::function<void(const ConnectionMessage &connectionMessage)> onConnect)
+void UdpSocket::setOnConnect(std::function<void(const ConnectionMessage &connectionMessage)> onConnect)
 {
     m_onConnect = onConnect;
 }
 
-void Socket::setOnBroadcastRequest(std::function<void()> onBroadcastRequest)
+void UdpSocket::setOnBroadcastRequest(std::function<void()> onBroadcastRequest)
 {
     m_onBroadcastRequest = onBroadcastRequest;
 }
 
-void Socket::setOnPacketRecv(std::function<void(const char *buf, size_t len)> onPacketRecv)
+void UdpSocket::setOnPacketRecv(std::function<void(const char *buf, size_t len)> onPacketRecv)
 {
     m_onPacketRecv = onPacketRecv;
 }
 
-bool Socket::isConnected() const
+bool UdpSocket::isConnected() const
 {
     return m_connected;
 }

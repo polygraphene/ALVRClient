@@ -13,7 +13,7 @@ public:
 
     void addVideoPacket(const VideoFrame *packet, int packetSize, bool &fecFailure);
     bool reconstruct();
-    const char *getFrameBuffer();
+    const std::byte *getFrameBuffer();
     int getFrameByteSize();
 
     bool fecFailure();
@@ -28,11 +28,11 @@ private:
     size_t m_totalShards;
     uint32_t m_firstPacketOfNextFrame = 0;
     std::vector<std::vector<unsigned char>> m_marks;
-    std::vector<char> m_frameBuffer;
+    std::vector<std::byte> m_frameBuffer;
     std::vector<uint32_t> m_receivedDataShards;
     std::vector<uint32_t> m_receivedParityShards;
     std::vector<bool> m_recoveredPacket;
-    std::vector<char *> m_shards;
+    std::vector<std::byte *> m_shards;
     bool m_recovered;
     bool m_fecFailure;
     reed_solomon *m_rs = NULL;
