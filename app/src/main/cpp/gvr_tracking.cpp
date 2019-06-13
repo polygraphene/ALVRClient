@@ -21,7 +21,7 @@
 #include "ovr_context.h"
 #include "latency_collector.h"
 #include "packet_types.h"
-#include "udp.h"
+#include "UdpManager.h"
 #include "asset.h"
 
 #include "vr/gvr/capi/include/gvr.h"

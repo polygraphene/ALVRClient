@@ -9,7 +9,7 @@
 #include "packet_types.h"
 #include "render.h"
 #include "utils.h"
-#include "udp.h"
+#include "UdpManager.h"
 #include "ovr_context.h"
 
 #include "vr/gvr/capi/include/gvr.h"

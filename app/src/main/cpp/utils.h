@@ -104,41 +104,41 @@ inline uint64_t getTimestampUs(){
     uint64_t Current = (uint64_t)tv.tv_sec * 1000 * 1000 + tv.tv_usec;
     return Current;
 }
-
 //
-// Mutex
+////
+//// Mutex
+////
 //
-
-class Mutex {
-    pthread_mutex_t mutex;
-public:
-    Mutex() { pthread_mutex_init(&mutex, NULL); }
-    ~Mutex() { pthread_mutex_destroy(&mutex); }
-
-    void Lock(){
-        pthread_mutex_lock(&mutex);
-    }
-
-    void Unlock(){
-        pthread_mutex_unlock(&mutex);
-    }
-
-    void CondWait(pthread_cond_t *cond){
-        pthread_cond_wait(cond, &mutex);
-    }
-};
-
-class MutexLock {
-    Mutex *mutex;
-public:
-    MutexLock(Mutex& mutex) {
-        this->mutex = &mutex;
-        this->mutex->Lock();
-    }
-    ~MutexLock() {
-        this->mutex->Unlock();
-    }
-};
+//class Mutex {
+//    pthread_mutex_t mutex;
+//public:
+//    Mutex() { pthread_mutex_init(&mutex, NULL); }
+//    ~Mutex() { pthread_mutex_destroy(&mutex); }
+//
+//    void Lock(){
+//        pthread_mutex_lock(&mutex);
+//    }
+//
+//    void Unlock(){
+//        pthread_mutex_unlock(&mutex);
+//    }
+//
+//    void CondWait(pthread_cond_t *cond){
+//        pthread_cond_wait(cond, &mutex);
+//    }
+//};
+//
+//class MutexLock {
+//    Mutex *mutex;
+//public:
+//    MutexLock(Mutex& mutex) {
+//        this->mutex = &mutex;
+//        this->mutex->Lock();
+//    }
+//    ~MutexLock() {
+//        this->mutex->Unlock();
+//    }
+//};
 
 //
 // Utility

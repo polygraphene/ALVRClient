@@ -31,36 +31,43 @@ public class OutputFrameQueue {
 
     SurfaceState mState = SurfaceState.Idle;
 
-    OutputFrameQueue() {
+    OutputFrameQueue()
+    {
         for (int i = 0; i < mQueueSize; i++) {
             mUnusedList.add(new Element());
         }
     }
 
-    public void setCodec(MediaCodec codec) {
+    public void setCodec(MediaCodec codec)
+    {
         mCodec = codec;
     }
 
-    public void pushInputBuffer(long presentationTimeUs, long frameIndex) {
+    public void pushInputBuffer(long presentationTimeUs, long frameIndex)
+    {
         mFrameMap.put(presentationTimeUs, frameIndex);
     }
 
-    synchronized public void pushOutputBuffer(int index, @NonNull MediaCodec.BufferInfo info) {
-        if (mStopped) {
+    synchronized public void pushOutputBuffer(int index, @NonNull MediaCodec.BufferInfo info)
+    {
+        if (mStopped)
+        {
             Utils.loge(TAG, () -> "Ignore output buffer because queue has been already stopped. index=" + index);
             mCodec.releaseOutputBuffer(index, false);
             return;
         }
         long foundFrameIndex = mFrameMap.find(info.presentationTimeUs);
 
-        if (foundFrameIndex < 0) {
+        if (foundFrameIndex < 0)
+        {
             Utils.loge(TAG, () -> "Ignore output buffer because unknown frameIndex. index=" + index);
             mCodec.releaseOutputBuffer(index, false);
             return;
         }
 
         Element elem = mUnusedList.poll();
-        if (elem == null) {
+        if (elem == null)
+        {
             Log.e(TAG, "FrameQueue is full. Discard old frame.");
 
             elem = mQueue.poll();
@@ -76,7 +83,8 @@ public class OutputFrameQueue {
         render();
     }
 
-    synchronized public long render() {
+    synchronized public long render()
+    {
         if (mStopped) {
             return -1;
         }
@@ -101,22 +109,27 @@ public class OutputFrameQueue {
         return elem.frameIndex;
     }
 
-    synchronized public void onFrameAvailable() {
-        if (mStopped) {
+    synchronized public void onFrameAvailable()
+    {
+        if (mStopped)
+        {
             return;
         }
-        if (mState != SurfaceState.Rendering) {
+        if (mState != SurfaceState.Rendering)
+        {
             return;
         }
         Utils.frameLog(mSurface.frameIndex, () -> "onFrameAvailable().");
         mState = SurfaceState.Available;
     }
 
-    synchronized public long clearAvailable(SurfaceTexture surfaceTexture) {
+    synchronized public long clearAvailable(SurfaceTexture surfaceTexture)
+    {
         if (mStopped) {
             return -1;
         }
-        if (mState != SurfaceState.Available) {
+        if (mState != SurfaceState.Available)
+        {
             return -1;
         }
         Utils.frameLog(mSurface.frameIndex, () -> "clearAvailable().");
@@ -133,7 +146,8 @@ public class OutputFrameQueue {
         return frameIndex;
     }
 
-    synchronized public boolean discardStaleFrames(SurfaceTexture surfaceTexture) {
+    synchronized public boolean discardStaleFrames(SurfaceTexture surfaceTexture)
+    {
         if (mStopped) {
             return false;
         }

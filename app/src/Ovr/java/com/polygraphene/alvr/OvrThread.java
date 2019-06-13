@@ -165,7 +165,8 @@ class OvrThread {
     }
 
     private void render() {
-        if (mReceiverThread.isConnected() && mReceiverThread.getErrorMessage() == null) {
+        if (mReceiverThread.isConnected() && mReceiverThread.getErrorMessage() == null)
+        {
             /*if (mDecoderThread.discartStaleFrames(mSurfaceTexture)) {
                 Utils.log(TAG, () ->  "Discard stale frame. Wait next onFrameAvailable.");
                 mHandler.removeCallbacks(mIdleRenderRunnable);
@@ -178,19 +179,23 @@ class OvrThread {
                 return;
             }
             long renderedFrameIndex = mDecoderThread.clearAvailable(mSurfaceTexture);
-            if (renderedFrameIndex != -1) {
+            if (renderedFrameIndex != -1)
+            {
                 mOvrContext.render(renderedFrameIndex);
                 mPreviousRender = System.nanoTime();
 
                 mHandler.postDelayed(mRenderRunnable, 5);
-            } else {
+            }
+            else
+            {
                 mHandler.removeCallbacks(mIdleRenderRunnable);
                 mHandler.postDelayed(mIdleRenderRunnable, 50);
             }
-        } else {
-            if (!mOvrContext.isVrMode()) {
+        }
+        else
+        {
+            if (!mOvrContext.isVrMode())
                 return;
-            }
             if (mReceiverThread.getErrorMessage() != null) {
                 mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\n \n!!! Error on ARCore initialization !!!\n" + mReceiverThread.getErrorMessage());
             } else {

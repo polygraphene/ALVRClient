@@ -9,71 +9,14 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <new>
+#include <stack>
+#include <mutex>
 
 #include "packet_types.h"
 #include "nal.h"
 #include "sound.h"
-
-// Maximum UDP packet size
-static const int MAX_PACKET_SIZE = 2000;
-
-class Socket {
-public:
-    Socket();
-    ~Socket();
-
-    void initialize(JNIEnv *env, int helloPort, int port,
-                    jobjectArray broadcastAddrList_);
-
-    void sendBroadcast(const void *buf, size_t len);
-    int send(const void *buf, size_t len);
-    void recv();
-
-    void recoverConnection(std::string serverAddress, int serverPort);
-
-    void disconnect();
-
-    //
-    // Callback
-    //
-
-    void setOnConnect(std::function<void(const ConnectionMessage &connectionMessage)> onConnect) {
-        m_onConnect = onConnect;
-    }
-    void setOnBroadcastRequest(std::function<void()> onBroadcastRequest) {
-        m_onBroadcastRequest = onBroadcastRequest;
-    }
-    void setOnPacketRecv(std::function<void(const char *buf, size_t len)> onPacketRecv) {
-        m_onPacketRecv = onPacketRecv;
-    }
-
-    //
-    // Getter
-    //
-
-    bool isConnected() {
-        return m_connected;
-    }
-    jstring getServerAddress(JNIEnv *env);
-    int getServerPort();
-    int getSocket();
-private:
-    int m_sock = -1;
-    bool m_connected = false;
-
-    bool m_hasServerAddress = false;
-    sockaddr_in m_serverAddr = {};
-
-    std::list<sockaddr_in> m_broadcastAddrList;
-
-    std::function<void(const ConnectionMessage &connectionMessage)> m_onConnect;
-    std::function<void()> m_onBroadcastRequest;
-    std::function<void(const char *buf, size_t len)> m_onPacketRecv;
-
-    void parse(char *packet, int packetSize, const sockaddr_in &addr);
-
-    void setBroadcastAddrList(JNIEnv *env, int helloPort, int port, jobjectArray broadcastAddrList_);
-};
+#include "UdpSocket.h"
 
 class UdpManager {
 public:
@@ -134,12 +77,12 @@ private:
     // Send buffer
     //
     struct SendBuffer {
-        char buf[MAX_PACKET_SIZE];
+        char buf[MAX_PACKET_UDP_PACKET_SIZE];
         int len;
     };
 
     int m_notifyPipe[2] = {-1, -1};
-    Mutex pipeMutex;
+    std::mutex pipeMutex;
     std::list<SendBuffer> m_sendQueue;
 
     void initializeJNICallbacks(JNIEnv *env, jobject instance);

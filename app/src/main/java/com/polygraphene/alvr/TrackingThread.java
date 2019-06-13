@@ -6,7 +6,8 @@ import android.util.Log;
 
 import java.util.concurrent.TimeUnit;
 
-class TrackingThread extends ThreadBase {
+class TrackingThread extends ThreadBase
+{
     private static final String TAG = "TrackingThread";
     private int mRefreshRate = 72*3;
     interface TrackingCallback {

@@ -9,7 +9,7 @@
 #include "packet_types.h"
 #include "render.h"
 #include "utils.h"
-#include "udp.h"
+#include "UdpManager.h"
 
 uint32_t ovrButton_Unknown1 = 0x01000000;
 
@@ -97,7 +97,7 @@ private:
     typedef std::map<uint64_t, std::shared_ptr<TrackingFrame> > TRACKING_FRAME_MAP;
 
     TRACKING_FRAME_MAP trackingFrameMap;
-    Mutex trackingFrameMutex;
+    std::mutex trackingFrameMutex;
 
     ovrRenderer Renderer;
 

@@ -11,7 +11,8 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 
-class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCallback {
+class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCallback
+{
     private static final String TAG = "UdpReceiverThread";
 
     static {
@@ -58,11 +59,13 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
     private long mNativeHandle = 0;
     private final Object mWaiter = new Object();
 
-    UdpReceiverThread(Callback callback) {
+    UdpReceiverThread(Callback callback)
+    {
         mCallback = callback;
     }
 
-    private String getDeviceName() {
+    private String getDeviceName()
+    {
         String manufacturer = android.os.Build.MANUFACTURER;
         String model = android.os.Build.MODEL;
         if (model.toLowerCase().startsWith(manufacturer.toLowerCase())) {
@@ -72,12 +75,14 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
         }
     }
 
-    public void recoverConnectionState(String serverAddress, int serverPort) {
+    public void recoverConnectionState(String serverAddress, int serverPort)
+    {
         mPreviousServerAddress = serverAddress;
         mPreviousServerPort = serverPort;
     }
 
-    public void setSinkPrepared(boolean prepared) {
+    public void setSinkPrepared(boolean prepared)
+    {
         synchronized (mWaiter) {
             if (mNativeHandle == 0) {
                 return;
@@ -86,7 +91,8 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
         }
     }
 
-    public boolean start(EGLContext mEGLContext, Activity activity, DeviceDescriptor deviceDescriptor, int cameraTexture, NALCallback nalCallback) {
+    public boolean start(EGLContext mEGLContext, Activity activity, DeviceDescriptor deviceDescriptor, int cameraTexture, NALCallback nalCallback)
+    {
         mTrackingThread = new TrackingThread();
         mTrackingThread.setCallback(this);
 
@@ -96,8 +102,10 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
 
         super.startBase();
 
-        synchronized (this) {
-            while (!mInitialized && !mInitializeFailed) {
+        synchronized (this)
+        {
+            while (!mInitialized && !mInitializeFailed)
+            {
                 try {
                     wait();
                 } catch (InterruptedException e) {
@@ -106,7 +114,8 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
             }
         }
 
-        if(!mInitializeFailed) {
+        if(!mInitializeFailed)
+        {
             mTrackingThread.start(mEGLContext, activity, cameraTexture);
         }
         return !mInitializeFailed;
@@ -122,7 +131,8 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
     }
 
     @Override
-    public void run() {
+    public void run()
+    {
         try {
             String[] broadcastList = getBroadcastAddressList();
 
@@ -157,7 +167,8 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
 
     // List broadcast address from all interfaces except for mobile network.
     // We should send all broadcast address to use USB tethering or VPN.
-    private String[] getBroadcastAddressList() {
+    private String[] getBroadcastAddressList()
+    {
         List<String> ret = new ArrayList<>();
         try {
             Enumeration<NetworkInterface> networkInterfaces = NetworkInterface.getNetworkInterfaces();
@@ -198,7 +209,8 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
     }
 
     @Override
-    public void onTracking(float[] position, float[] orientation) {
+    public void onTracking(float[] position, float[] orientation)
+    {
         if (isConnectedNative(mNativeHandle)) {
             mCallback.onTracking(position, orientation);
         }

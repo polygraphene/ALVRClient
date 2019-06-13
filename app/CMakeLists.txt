@@ -35,7 +35,8 @@ add_library( # Sets the name of the library.
              SHARED
 
              # Provides a relative path to your source file(s).
-             src/main/cpp/udp.cpp
+            src/main/cpp/UdpManager.cpp
+             src/main/cpp/UdpSocket.cpp
              src/main/cpp/nal.cpp
              src/main/cpp/render.cpp
              src/main/cpp/latency_collector.cpp

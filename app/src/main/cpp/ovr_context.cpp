@@ -20,7 +20,7 @@
 #include "ovr_context.h"
 #include "latency_collector.h"
 #include "packet_types.h"
-#include "udp.h"
+#include "UdpManager.h"
 #include "asset.h"
 
 
@@ -520,10 +520,10 @@ void OvrContext::fetchTrackingInfo(JNIEnv *env_, jobject udpReceiverThread, ovrV
          );*/
 
     {
-        MutexLock lock(trackingFrameMutex);
-        trackingFrameMap.insert(
-                std::pair<uint64_t, std::shared_ptr<TrackingFrame> >(FrameIndex, frame));
-        if (trackingFrameMap.size() > MAXIMUM_TRACKING_FRAMES) {
+        std::lock_guard<decltype(trackingFrameMutex)> lock(trackingFrameMutex);
+        trackingFrameMap.insert(std::pair<uint64_t, std::shared_ptr<TrackingFrame> >(FrameIndex, frame));
+        if (trackingFrameMap.size() > MAXIMUM_TRACKING_FRAMES)
+        {
             trackingFrameMap.erase(trackingFrameMap.cbegin());
         }
     }
@@ -619,26 +619,29 @@ void OvrContext::render(uint64_t renderedFrameIndex) {
     uint64_t mostRecentFrame = 0;
     std::shared_ptr<TrackingFrame> frame;
     {
-        MutexLock lock(trackingFrameMutex);
+        std::lock_guard<decltype(trackingFrameMutex)> lock(trackingFrameMutex);
 
-        if (!trackingFrameMap.empty()) {
+        if (!trackingFrameMap.empty())
+        {
             oldestFrame = trackingFrameMap.cbegin()->second->frameIndex;
             mostRecentFrame = trackingFrameMap.crbegin()->second->frameIndex;
         }
 
         const auto it = trackingFrameMap.find(renderedFrameIndex);
-        if (it != trackingFrameMap.end()) {
+        if (it != trackingFrameMap.end())
+        {
             frame = it->second;
-        } else {
+        }
+        else
+        {
             // No matching tracking info. Too old frame.
             LOG("Too old frame has arrived. Instead, we use most old tracking data in trackingFrameMap."
                 "FrameIndex=%lu trackingFrameMap=(%lu - %lu)",
                 renderedFrameIndex, oldestFrame, mostRecentFrame);
-            if (!trackingFrameMap.empty()) {
+            if (!trackingFrameMap.empty())
                 frame = trackingFrameMap.cbegin()->second;
-            } else {
+            else
                 return;
-            }
         }
     }
 

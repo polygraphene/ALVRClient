@@ -8,6 +8,9 @@
 static const int ALVR_MAX_PACKET_SIZE = 1400;
 static const int ALVR_REFRESH_RATE_LIST_SIZE = 4;
 
+// Maximum UDP packet size
+static const int MAX_PACKET_UDP_PACKET_SIZE = 2000;
+
 static const char *ALVR_HELLO_PACKET_SIGNATURE = "ALVR";
 
 enum ALVR_PACKET_TYPE {

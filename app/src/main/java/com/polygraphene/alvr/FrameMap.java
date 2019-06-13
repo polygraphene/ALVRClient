@@ -9,7 +9,8 @@ import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.concurrent.atomic.AtomicLongArray;
 
 // Stores mapping of presentationTime to frameIndex for tracking frameIndex on decoding.
-public class FrameMap {
+public class FrameMap
+{
     private AtomicLongArray mFakeFrameHashMap = new AtomicLongArray(4096);
 
     public void put(long presentationTime, long frameIndex) {
