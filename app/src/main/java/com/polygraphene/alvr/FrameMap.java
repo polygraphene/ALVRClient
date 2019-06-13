@@ -2,27 +2,21 @@ package com.polygraphene.alvr;
 
 import android.util.LongSparseArray;
 
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.concurrent.atomic.AtomicLongArray;
 
 // Stores mapping of presentationTime to frameIndex for tracking frameIndex on decoding.
 public class FrameMap {
-    private static final int MAX_FRAMES = 50;
+    private AtomicLongArray mFakeFrameHashMap = new AtomicLongArray(4096);
 
-    private List<Long> mFrameHistory = new LinkedList<>();
-    private LongSparseArray<Long> mFrameHashMap = new LongSparseArray<>();
-
-    public synchronized void put(long presentationTime, long frameIndex) {
-        mFrameHistory.add(presentationTime);
-        mFrameHashMap.put(presentationTime, frameIndex);
-        if (mFrameHistory.size() > MAX_FRAMES) {
-            Long key = mFrameHistory.remove(0);
-            mFrameHashMap.remove(key);
-        }
+    public void put(long presentationTime, long frameIndex) {
+        mFakeFrameHashMap.set((int)(presentationTime & (4096 - 1)), frameIndex);
     }
 
-    public synchronized long find(long presentationTime) {
-        Long f = mFrameHashMap.get(presentationTime);
-        return f != null ? f : -1;
+    public long find(long presentationTime) {
+        return mFakeFrameHashMap.getAndSet((int)(presentationTime & (4096 - 1)), -1);
     }
 }

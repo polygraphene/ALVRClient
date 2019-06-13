@@ -1,11 +1,10 @@
 package com.polygraphene.alvr;
 
-import java.util.LinkedList;
-import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class NalQueue {
-    private Queue<NAL> mUnusedList = new LinkedList<>();
-    private Queue<NAL> mNalQueue = new LinkedList<>();
+    private ConcurrentLinkedQueue<NAL> mUnusedList = new ConcurrentLinkedQueue<>();
+    private ConcurrentLinkedQueue<NAL> mNalQueue = new ConcurrentLinkedQueue<>();
     private static final int SIZE = 100;
     private static final int DEFAULT_BUFFER_SIZE = 100 * 1000;
 
@@ -17,7 +16,7 @@ public class NalQueue {
         }
     }
 
-    synchronized public NAL obtain(int length) {
+    public NAL obtain(int length) {
         NAL nal = mUnusedList.poll();
         if (nal == null) {
             return null;
@@ -29,25 +28,25 @@ public class NalQueue {
         return nal;
     }
 
-    synchronized public void add(NAL nal) {
+    public void add(NAL nal) {
         mNalQueue.add(nal);
     }
 
-    synchronized public NAL peek() {
+    public NAL peek() {
         return mNalQueue.peek();
     }
 
-    synchronized public void remove() {
+    public void remove() {
         NAL nal = mNalQueue.remove();
         mUnusedList.add(nal);
     }
 
-    synchronized public void clear() {
+    public void clear() {
         mUnusedList.addAll(mNalQueue);
         mNalQueue.clear();
     }
 
-    synchronized public int size() {
+    public int size() {
         return mNalQueue.size();
     }
 }

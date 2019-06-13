@@ -118,7 +118,7 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         mSurfaceView.queueEvent(new Runnable() {
             @Override
             public void run() {
-                Utils.logi(TAG, "start");
+                Utils.logi(TAG, () -> "start");
                 // Initialize native objects. It's important to call .shutdown to release resources.
                 mViewportList = mApi.createBufferViewportList();
                 mTmpViewport = mApi.createBufferViewport();
@@ -130,7 +130,7 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     @Override
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
         // Called from GLThread
-        Utils.logi(TAG, "onSurfaceCreated");
+        Utils.logi(TAG, () -> "onSurfaceCreated");
 
         initializeGlObjects();
 
@@ -139,14 +139,14 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
 
     @Override
     public void onSurfaceChanged(GL10 gl, int width, int height) {
-        Utils.logi(TAG, "onSurfaceChanged");
+        Utils.logi(TAG, () -> "onSurfaceChanged");
     }
 
     public void onResume() {
         mSurfaceView.queueEvent(new Runnable() {
             @Override
             public void run() {
-                Utils.logi(TAG, "onResume");
+                Utils.logi(TAG, () -> "onResume");
                 mRenderedFrameIndex = -1;
             }
         });
@@ -156,7 +156,7 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         mSurfaceView.queueEvent(new Runnable() {
             @Override
             public void run() {
-                Utils.logi(TAG, "setThreads");
+                Utils.logi(TAG, () -> "setThreads");
                 mReceiverThread = receiverThread;
                 mDecoderThread = decoderThread;
             }
@@ -171,7 +171,7 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         mSurfaceView.queueEvent(new Runnable() {
             @Override
             public void run() {
-                Utils.logi(TAG, "onPause");
+                Utils.logi(TAG, () -> "onPause");
                 mReceiverThread = null;
                 mDecoderThread = null;
             }
@@ -179,7 +179,7 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
     }
 
     public void shutdown() {
-        Utils.logi(TAG, "shutdown.");
+        Utils.logi(TAG, () -> "shutdown.");
         mViewportList.shutdown();
         mViewportList = null;
         mTmpViewport.shutdown();
@@ -333,7 +333,7 @@ public class GvrRenderer implements GLSurfaceView.Renderer {
         mSurfaceTexture.setOnFrameAvailableListener(new SurfaceTexture.OnFrameAvailableListener() {
             @Override
             public void onFrameAvailable(SurfaceTexture surfaceTexture) {
-                Utils.log(TAG, "onFrameAvailable");
+                Utils.log(TAG, () -> "onFrameAvailable");
                 mSurfaceView.queueEvent(onFrameAvailableRunnable);
             }
         });

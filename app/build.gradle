@@ -1,17 +1,17 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 26
+    compileSdkVersion 29
     defaultConfig {
         applicationId "com.polygraphene.alvr"
         minSdkVersion 21
-        targetSdkVersion 26
+        targetSdkVersion 29
         versionCode 28
         versionName "2.4.0-alpha5"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
         externalNativeBuild {
             cmake {
-                cppFlags ""
+                cppFlags "-std=c++17 -fexceptions -frtti"
             }
         }
     }
@@ -19,6 +19,10 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug
+            debuggable = true
+            jniDebuggable = true
+            renderscriptOptimLevel = 3
             ndk {
                 abiFilters "arm64-v8a", "armeabi-v7a"
             }
@@ -51,7 +55,7 @@ android {
     productFlavors {
         Github {
             applicationId 'com.polygraphene.alvr'
-            dimension "distribute"
+            dimension 'sdk'
             manifestPlaceholders = [filter: "android.intent.category.LAUNCHER"]
         }
         OculusStore {
@@ -91,6 +95,7 @@ android {
         sourceCompatibility = '1.8'
         targetCompatibility = '1.8'
     }
+    buildToolsVersion = '29.0.0'
 }
 
 dependencies {

@@ -172,6 +172,9 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
         MediaFormat format = MediaFormat.createVideoFormat(mFormat, DummyWidth, DummyHeight);
         format.setString("KEY_MIME", mFormat);
 
+        format.setInteger(MediaFormat.KEY_OPERATING_RATE, Short.MAX_VALUE);
+        format.setInteger(MediaFormat.KEY_PRIORITY, 0);
+
         if (mCodec == CODEC_H264) {
             format.setByteBuffer("csd-0", ByteBuffer.wrap(DummySPS, 0, DummySPS.length));
             format.setByteBuffer("csd-1", ByteBuffer.wrap(DummyPPS, 0, DummyPPS.length));
@@ -181,6 +184,8 @@ public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCa
         mDecoder = MediaCodec.createDecoderByType(mFormat);
 
         mQueue.setCodec(mDecoder);
+
+
 
         mDecoder.setVideoScalingMode(MediaCodec.VIDEO_SCALING_MODE_SCALE_TO_FIT);
         mDecoder.setCallback(new Callback());

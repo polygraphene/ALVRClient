@@ -9,8 +9,11 @@ cmake_minimum_required(VERSION 3.4.1)
 # or SHARED, and provides the relative paths to its source code.
 # You can define multiple libraries, and CMake builds them for you.
 # Gradle automatically packages shared libraries with your APK.
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -g")
+#set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -g")
+set(CMAKE_CXX_FLAGS_DEBUG  "${CMAKE_CXX_FLAGS} -O3 -std=c++17 -g")
+set(CMAKE_CXX_FLAGS_RELEASE  "${CMAKE_CXX_FLAGS} -O3 -std=c++17 -g")
+set (ANDROID_STL c++_static)
 
 link_directories(src/main/jniLibs/${ANDROID_ABI})
 

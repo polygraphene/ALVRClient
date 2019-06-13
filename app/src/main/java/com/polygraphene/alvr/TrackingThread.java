@@ -9,7 +9,6 @@ import java.util.concurrent.TimeUnit;
 class TrackingThread extends ThreadBase {
     private static final String TAG = "TrackingThread";
     private int mRefreshRate = 72*3;
-
     interface TrackingCallback {
         void onTracking(float[] position, float[] orientation);
     }
@@ -30,7 +29,7 @@ class TrackingThread extends ThreadBase {
 
     public void start(EGLContext mEGLContext, Activity activity, int cameraTexture) {
         mArThread = new ArThread(mEGLContext);
-        mArThread.initialize(activity);
+        mArThread.initialize((BaseActivity) activity);
         mArThread.setCameraTexture(cameraTexture);
 
         super.startBase();
