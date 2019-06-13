@@ -3,18 +3,32 @@
     package="com.polygraphene.alvr"
     android:installLocation="auto">
 
-    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-feature
+        android:glEsVersion="0x00030001"
+        android:required="true" />
+    <application>
     <uses-feature android:name="android.hardware.vr.headtracking" android:required="true" android:version="1"/>
 
-    <application
-        android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_round"
-        android:supportsRtl="true"
-        android:theme="@style/AppTheme">
-        <activity android:name=".test.DecoderTestActivity"><intent-filter>
-            <action android:name="android.intent.action.MAIN" /></intent-filter></activity>
+        <meta-data
+            android:name="com.samsung.android.vr.application.mode"
+            android:value="vr_only" />
+
+        <activity
+            android:name="com.polygraphene.alvr.OvrActivity"
+            android:configChanges="screenSize|screenLayout|orientation|keyboardHidden|keyboard|navigation|uiMode|density"
+            android:excludeFromRecents="true"
+            android:icon="@mipmap/ic_launcher"
+            android:launchMode="singleTask"
+            android:roundIcon="@mipmap/ic_launcher_round"
+            android:screenOrientation="landscape"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
     </application>
 
 </manifest>

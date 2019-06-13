@@ -2,13 +2,10 @@ package com.polygraphene.alvr;
 
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
-import android.opengl.GLES20;
 import android.opengl.GLUtils;
-
-import javax.microedition.khronos.opengles.GL10;
+import android.opengl.GLES32;
 
 public class LoadingTexture {
 
@@ -19,7 +16,7 @@ public class LoadingTexture {
     private String mCurrentText = "";
 
     void initializeMessageCanvas(int texture){
-        mBitmap = Bitmap.createBitmap(1024, 1024, Bitmap.Config.ARGB_4444);
+        mBitmap = Bitmap.createBitmap(1024, 1024, Bitmap.Config.ARGB_8888);
 
         mCanvas = new Canvas(mBitmap);
 
@@ -62,21 +59,21 @@ public class LoadingTexture {
         }
 
         // Note that gl context has created on vrAPI.initialize.
-        GLES20.glBindTexture(GL10.GL_TEXTURE_2D, mTexture);
+        GLES32.glBindTexture(GLES32.GL_TEXTURE_2D, mTexture);
 
-        GLES20.glTexParameterf(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_MIN_FILTER, GL10.GL_NEAREST);
-        GLES20.glTexParameterf(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_MAG_FILTER, GL10.GL_LINEAR);
+        GLES32.glTexParameterf(GLES32.GL_TEXTURE_2D, GLES32.GL_TEXTURE_MIN_FILTER, GLES32.GL_NEAREST);
+        GLES32.glTexParameterf(GLES32.GL_TEXTURE_2D, GLES32.GL_TEXTURE_MAG_FILTER, GLES32.GL_LINEAR);
 
-        GLES20.glTexParameterf(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_S, GL10.GL_REPEAT);
-        GLES20.glTexParameterf(GL10.GL_TEXTURE_2D, GL10.GL_TEXTURE_WRAP_T, GL10.GL_REPEAT);
+        GLES32.glTexParameterf(GLES32.GL_TEXTURE_2D, GLES32.GL_TEXTURE_WRAP_S, GLES32.GL_REPEAT);
+        GLES32.glTexParameterf(GLES32.GL_TEXTURE_2D, GLES32.GL_TEXTURE_WRAP_T, GLES32.GL_REPEAT);
 
-        GLUtils.texImage2D(GL10.GL_TEXTURE_2D, 0, mBitmap, 0);
+        GLUtils.texImage2D(GLES32.GL_TEXTURE_2D, 0, mBitmap, 0);
     }
 
     void destroyTexture() {
         int[] textures = new int [1];
         textures[0] = mTexture;
-        GLES20.glDeleteTextures(1, textures, 0);
+        GLES32.glDeleteTextures(1, textures, 0);
     }
 
 }

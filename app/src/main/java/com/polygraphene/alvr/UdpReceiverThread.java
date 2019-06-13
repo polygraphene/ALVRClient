@@ -216,9 +216,9 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
         }
     }
 
-    public String getErrorMessage() {
-        return mTrackingThread.getErrorMessage();
-    }
+//    public String getErrorMessage() {
+//        return mTrackingThread.getErrorMessage();
+//    }
 
     public boolean isConnected() {
         return isConnectedNative(mNativeHandle);

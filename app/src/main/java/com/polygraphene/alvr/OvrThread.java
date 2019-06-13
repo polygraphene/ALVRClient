@@ -147,7 +147,7 @@ class OvrThread {
     public void startup() {
         Utils.logi(TAG, () -> "OvrThread started.");
 
-        mOvrContext.initialize(mActivity, mActivity.getAssets(), this, Constants.IS_ARCORE_BUILD, 60);
+        mOvrContext.initialize(mActivity, mActivity.getAssets(), this, false, 60);
 
         mSurfaceTexture = new SurfaceTexture(mOvrContext.getSurfaceTextureID());
         mSurfaceTexture.setOnFrameAvailableListener(surfaceTexture -> {
@@ -165,7 +165,7 @@ class OvrThread {
     }
 
     private void render() {
-        if (mReceiverThread.isConnected() && mReceiverThread.getErrorMessage() == null)
+        if (mReceiverThread.isConnected())
         {
             /*if (mDecoderThread.discartStaleFrames(mSurfaceTexture)) {
                 Utils.log(TAG, () ->  "Discard stale frame. Wait next onFrameAvailable.");
@@ -196,20 +196,24 @@ class OvrThread {
         {
             if (!mOvrContext.isVrMode())
                 return;
-            if (mReceiverThread.getErrorMessage() != null) {
-                mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\n \n!!! Error on ARCore initialization !!!\n" + mReceiverThread.getErrorMessage());
-            } else {
-                if (mReceiverThread.isConnected()) {
-                    mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\n \nConnected!\nStreaming will begin soon!");
-                } else if(mLauncherSocket != null && mLauncherSocket.isConnected()) {
-                    mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\n \nConnected!\nPress Trigger\nto start SteamVR.");
-                    if (mOvrContext.getButtonDown()) {
-                        mLauncherSocket.sendCommand("StartServer");
-                    }
-                } else {
-                    mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\n \nPress CONNECT button\non ALVR server.");
+
+            if (mReceiverThread.isConnected())
+            {
+                mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\n \nConnected!\nStreaming will begin soon!");
+            }
+            else if(mLauncherSocket != null && mLauncherSocket.isConnected())
+            {
+                mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\n \nConnected!\nPress Trigger\nto start SteamVR.");
+                if (mOvrContext.getButtonDown())
+                {
+                    mLauncherSocket.sendCommand("StartServer");
                 }
             }
+            else
+            {
+                mLoadingTexture.drawMessage(Utils.getVersionName(mActivity) + "\n \nPress CONNECT button\non ALVR server.");
+            }
+
             mOvrContext.renderLoading();
             mHandler.removeCallbacks(mIdleRenderRunnable);
             mHandler.postDelayed(mIdleRenderRunnable, 100);

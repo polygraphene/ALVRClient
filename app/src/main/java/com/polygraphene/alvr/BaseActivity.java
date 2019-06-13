@@ -13,7 +13,7 @@ abstract class BaseActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         PersistentConfig.loadCurrentConfig(this);
         super.onCreate(savedInstanceState);
-        ArThread.requestPermissions(this);
+        //ArThread.requestPermissions(this);
     }
 
     @Override
@@ -33,8 +33,8 @@ abstract class BaseActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        if (!ArThread.onRequestPermissionsResult(this)) {
-            finish();
-        }
+//        if (!ArThread.onRequestPermissionsResult(this)) {
+//            finish();
+//        }
     }
 }

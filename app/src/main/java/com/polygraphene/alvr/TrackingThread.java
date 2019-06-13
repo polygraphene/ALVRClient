@@ -15,7 +15,7 @@ class TrackingThread extends ThreadBase
     }
 
     private TrackingCallback mCallback;
-    private ArThread mArThread;
+    //private ArThread mArThread;
 
     public TrackingThread() {
     }
@@ -29,25 +29,25 @@ class TrackingThread extends ThreadBase
     }
 
     public void start(EGLContext mEGLContext, Activity activity, int cameraTexture) {
-        mArThread = new ArThread(mEGLContext);
-        mArThread.initialize((BaseActivity) activity);
-        mArThread.setCameraTexture(cameraTexture);
+//        mArThread = new ArThread(mEGLContext);
+//        mArThread.initialize((BaseActivity) activity);
+//        mArThread.setCameraTexture(cameraTexture);
 
         super.startBase();
-        mArThread.start();
+        //mArThread.start();
     }
 
     public void onConnect() {
-        mArThread.onConnect();
+        //mArThread.onConnect();
     }
 
     public void onDisconnect() {
-        mArThread.onDisconnect();
+        //mArThread.onDisconnect();
     }
 
     @Override
     public void stopAndWait() {
-        mArThread.stopAndWait();
+        //mArThread.stopAndWait();
         super.stopAndWait();
     }
 
@@ -55,7 +55,7 @@ class TrackingThread extends ThreadBase
     public void run() {
         long previousFetchTime = System.nanoTime();
         while (!isStopped()) {
-            mCallback.onTracking(mArThread.getPosition(), mArThread.getOrientation());
+            mCallback.onTracking(null, null);
             try {
                 previousFetchTime += 1000 * 1000 * 1000 / mRefreshRate;
                 long next = previousFetchTime - System.nanoTime();
@@ -71,11 +71,11 @@ class TrackingThread extends ThreadBase
         Utils.logi(TAG, () -> "TrackingThread has stopped.");
     }
 
-    public boolean onRequestPermissionsResult(BaseActivity activity) {
-        return mArThread.onRequestPermissionsResult(activity);
-    }
+//    public boolean onRequestPermissionsResult(BaseActivity activity) {
+//        return mArThread.onRequestPermissionsResult(activity);
+//    }
 
-    public String getErrorMessage() {
-        return mArThread.getErrorMessage();
-    }
+//    public String getErrorMessage() {
+//        return mArThread.getErrorMessage();
+//    }
 }
