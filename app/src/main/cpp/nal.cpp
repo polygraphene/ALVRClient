@@ -105,8 +105,8 @@ void NALParser::push(const char *buffer, int length, uint64_t frameIndex) {
     m_env->DeleteLocalRef(nal);
 }
 
-bool NALParser::fecFailure() {
-    return m_queue.fecFailure();
+bool NALParser::fecFailure(uint64_t *startOfFailedFrame, uint64_t *endOfFailedFrame) {
+    return m_queue.fecFailure(startOfFailedFrame, endOfFailedFrame);
 }
 
 int NALParser::findVPSSPS(const char *frameBuffer, int frameByteSize) {

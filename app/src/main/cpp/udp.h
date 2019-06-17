@@ -146,8 +146,7 @@ private:
 
     void sendStreamStartPacket();
 
-    void sendPacketLossReport(ALVR_LOST_FRAME_TYPE frameType, uint32_t fromPacketCounter,
-                              uint32_t toPacketCounter);
+    void sendPacketLossReport(ALVR_LOST_FRAME_TYPE frameType, uint64_t startOfFailedFrame, uint64_t endOfFailedFrame);
     void processVideoSequence(uint32_t sequence);
     void processSoundSequence(uint32_t sequence);
 

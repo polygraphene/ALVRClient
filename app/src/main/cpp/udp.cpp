@@ -115,7 +115,6 @@ void Socket::recv() {
         }
         LOGSOCKET("recvfrom Ok. calling parse(). ret=%d", packetSize);
         parse(packet, packetSize, addr);
-        LOGSOCKET("parse() end. ret=%d", packetSize);
     }
 }
 
@@ -304,13 +303,12 @@ void UdpManager::initialize(JNIEnv *env, jobject instance, jint helloPort, jint 
     LOGI("UdpManager initialized.");
 }
 
-void UdpManager::sendPacketLossReport(ALVR_LOST_FRAME_TYPE frameType, uint32_t fromPacketCounter,
-                                      uint32_t toPacketCounter) {
-    PacketErrorReport report;
-    report.type = ALVR_PACKET_TYPE_PACKET_ERROR_REPORT;
+void UdpManager::sendPacketLossReport(ALVR_LOST_FRAME_TYPE frameType, uint64_t startOfFailedFrame, uint64_t endOfFailedFrame) {
+    FrameFailedReport report;
+    report.type = ALVR_PACKET_TYPE_FRAME_FAILED_REPORT;
     report.lostFrameType = frameType;
-    report.fromPacketCounter = fromPacketCounter;
-    report.toPacketCounter = toPacketCounter;
+    report.startOfFailedFrame = startOfFailedFrame;
+    report.endOfFailedFrame = endOfFailedFrame;
     int ret = m_socket.send(&report, sizeof(report));
     LOGI("Sent packet loss report. ret=%d", ret);
 }
@@ -407,7 +405,6 @@ void UdpManager::sendTimeSyncLocked() {
         timeSync.maxDecodeLatency = (uint32_t) LatencyCollector::Instance().getLatency(2, 1);
         timeSync.minDecodeLatency = (uint32_t) LatencyCollector::Instance().getLatency(2, 2);
 
-        timeSync.fecFailure = m_nalParser->fecFailure() ? 1 : 0;
         timeSync.fecFailureTotal = LatencyCollector::Instance().getFecFailureTotal();
         timeSync.fecFailureInSecond = LatencyCollector::Instance().getFecFailureInSecond();
 
@@ -597,7 +594,9 @@ void UdpManager::onPacketRecv(const char *packet, size_t packetSize) {
         }
         if (fecFailure) {
             LatencyCollector::Instance().fecFailure();
-            sendPacketLossReport(ALVR_LOST_FRAME_TYPE_VIDEO, 0, 0);
+            uint64_t startOfFailedFrame, endOfFailedFrame;
+            m_nalParser->fecFailure(&startOfFailedFrame, &endOfFailedFrame);
+            sendPacketLossReport(ALVR_LOST_FRAME_TYPE_VIDEO, startOfFailedFrame, endOfFailedFrame);
         }
     } else if (type == ALVR_PACKET_TYPE_TIME_SYNC) {
         // Time sync packet

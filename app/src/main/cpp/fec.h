@@ -16,7 +16,7 @@ public:
     const char *getFrameBuffer();
     int getFrameByteSize();
 
-    bool fecFailure();
+    bool fecFailure(uint64_t *startOfFailedFrame, uint64_t *endOfFailedFrame);
     void clearFecFailure();
 private:
 
@@ -36,6 +36,9 @@ private:
     bool m_recovered;
     bool m_fecFailure;
     reed_solomon *m_rs = NULL;
+    uint64_t mLastSuccessfulVideoFrame = 0;
+    uint64_t mStartOfFailedVideoFrame = 0;
+    uint64_t mEndOfFailedVideoFrame = 0;
 
     static bool reed_solomon_initialized;
 };
