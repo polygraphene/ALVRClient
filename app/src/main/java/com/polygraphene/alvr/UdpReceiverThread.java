@@ -218,6 +218,7 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
         Utils.logi(TAG, () -> "onConnected is called.");
         mCallback.onConnected(width, height, codec, frameQueueSize, refreshRate);
         mTrackingThread.onConnect();
+        mTrackingThread.changeRefreshRate(refreshRate);
     }
 
     @SuppressWarnings("unused")
