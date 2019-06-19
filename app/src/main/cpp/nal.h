@@ -9,13 +9,13 @@
 
 class NALParser {
 public:
-    NALParser(JNIEnv *env, jobject udpManager);
+    NALParser(JNIEnv *env, jobject udpManager, UdpManager *udpManager_C);
     ~NALParser();
 
-    void setCodec(int codec);
-    bool processPacket(VideoFrame *packet, int packetSize, bool &fecFailure);
+    void reset();
 
-    bool fecFailure(uint64_t *startOfFailedFrame, uint64_t *endOfFailedFrame);
+    void setCodec(int codec);
+    bool processPacket(VideoFrame *packet, int packetSize);
 private:
     void push(const char *buffer, int length, uint64_t frameIndex);
     int findVPSSPS(const char *frameBuffer, int frameByteSize);
@@ -33,5 +33,7 @@ private:
 
     jmethodID mObtainNALMethodID;
     jmethodID mPushNALMethodID;
+
+    bool mIDRProcessed = false;
 };
 #endif //ALVRCLIENT_NAL_H

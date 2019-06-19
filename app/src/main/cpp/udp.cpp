@@ -110,7 +110,9 @@ void Socket::recv() {
         int packetSize = static_cast<int>(recvfrom(m_sock, packet, MAX_PACKET_SIZE, 0, (sockaddr *) &addr,
                                                    &socklen));
         if (packetSize <= 0) {
-            LOGSOCKET("Error on recvfrom. ret=%d", packetSize);
+            if(errno != EWOULDBLOCK) {
+                LOGSOCKET("Error on recvfrom. errno=%d %s", errno, strerror(errno));
+            }
             return;
         }
         LOGSOCKET("recvfrom Ok. calling parse(). ret=%d", packetSize);
@@ -242,7 +244,7 @@ void UdpManager::initialize(JNIEnv *env, jobject instance, jint helloPort, jint 
 
     initializeJNICallbacks(env, instance);
 
-    m_nalParser = std::make_shared<NALParser>(env, instance);
+    m_nalParser = std::make_shared<NALParser>(env, instance, this);
 
     //
     // Fill hello message
@@ -303,16 +305,6 @@ void UdpManager::initialize(JNIEnv *env, jobject instance, jint helloPort, jint 
     LOGI("UdpManager initialized.");
 }
 
-void UdpManager::sendPacketLossReport(ALVR_LOST_FRAME_TYPE frameType, uint64_t startOfFailedFrame, uint64_t endOfFailedFrame) {
-    FrameFailedReport report;
-    report.type = ALVR_PACKET_TYPE_FRAME_FAILED_REPORT;
-    report.lostFrameType = frameType;
-    report.startOfFailedFrame = startOfFailedFrame;
-    report.endOfFailedFrame = endOfFailedFrame;
-    int ret = m_socket.send(&report, sizeof(report));
-    LOGI("Sent packet loss report. ret=%d", ret);
-}
-
 void UdpManager::processVideoSequence(uint32_t sequence) {
     if (m_prevVideoSequence != 0 && m_prevVideoSequence + 1 != sequence) {
         int32_t lost = sequence - (m_prevVideoSequence + 1);
@@ -338,8 +330,6 @@ void UdpManager::processSoundSequence(uint32_t sequence) {
             lost = -lost;
         }
         LatencyCollector::Instance().packetLoss(lost);
-
-        sendPacketLossReport(ALVR_LOST_FRAME_TYPE_AUDIO, m_prevSoundSequence + 1, sequence - 1);
 
         LOGE("SoundPacket loss %d (%d -> %d)", lost, m_prevSoundSequence + 1,
              sequence - 1);
@@ -522,6 +512,7 @@ void UdpManager::setSinkPrepared(bool prepared) {
     mSinkPrepared = prepared;
     LOGSOCKETI("setSinkPrepared: Decoder prepared=%d", mSinkPrepared);
     if (prepared && isConnected()) {
+        m_nalParser->reset();
         LOGSOCKETI("setSinkPrepared: Send stream start packet.");
         sendStreamStartPacket();
     }
@@ -537,6 +528,17 @@ jstring UdpManager::getServerAddress(JNIEnv *env) {
 
 int UdpManager::getServerPort() {
     return m_socket.getServerPort();
+}
+
+void UdpManager::sendVideoFrameAck(bool result, bool isIDR, uint64_t startFrame, uint64_t endFrame) {
+    VideoFrameAck packet;
+    packet.type = ALVR_PACKET_TYPE_VIDEO_FRAME_ACK;
+    packet.ackType = result ? ALVR_FRAME_ACK_TYPE_ACK : ALVR_FRAME_ACK_TYPE_NACK;
+    packet.frameType = isIDR ? ALVR_FRAME_ACK_VIDEO_FRAME_TYPE_IDR : ALVR_FRAME_ACK_VIDEO_FRAME_TYPE_P;
+    packet.startFrame = startFrame;
+    packet.endFrame = endFrame;
+    int ret = m_socket.send(&packet, sizeof(packet));
+    LOGI("Sent frame ack. ret=%d result=%d isIDR=%d", ret, result, isIDR);
 }
 
 void UdpManager::onConnect(const ConnectionMessage &connectionMessage) {
@@ -555,6 +557,7 @@ void UdpManager::onConnect(const ConnectionMessage &connectionMessage) {
             , m_connectionMessage.frameQueueSize, m_connectionMessage.refreshRate);
 
     if (mSinkPrepared) {
+        m_nalParser->reset();
         LOGSOCKETI("onConnect: Send stream start packet.");
         sendStreamStartPacket();
     }
@@ -586,17 +589,9 @@ void UdpManager::onPacketRecv(const char *packet, size_t packetSize) {
 
         processVideoSequence(header->packetCounter);
 
-        // Following packets of a video frame
-        bool fecFailure = false;
-        bool ret2 = m_nalParser->processPacket(header, packetSize, fecFailure);
+        bool ret2 = m_nalParser->processPacket(header, packetSize);
         if (ret2) {
             LatencyCollector::Instance().receivedLast(header->trackingFrameIndex);
-        }
-        if (fecFailure) {
-            LatencyCollector::Instance().fecFailure();
-            uint64_t startOfFailedFrame, endOfFailedFrame;
-            m_nalParser->fecFailure(&startOfFailedFrame, &endOfFailedFrame);
-            sendPacketLossReport(ALVR_LOST_FRAME_TYPE_VIDEO, startOfFailedFrame, endOfFailedFrame);
         }
     } else if (type == ALVR_PACKET_TYPE_TIME_SYNC) {
         // Time sync packet

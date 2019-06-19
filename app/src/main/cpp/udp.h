@@ -98,6 +98,8 @@ public:
 
     jstring getServerAddress(JNIEnv *env);
     int getServerPort();
+
+    void sendVideoFrameAck(bool result, bool isIDR, uint64_t startFrame, uint64_t endFrame);
 private:
 // Connection has lost when elapsed 3 seconds from last packet.
     static const uint64_t CONNECTION_TIMEOUT = 3 * 1000 * 1000;
@@ -146,7 +148,6 @@ private:
 
     void sendStreamStartPacket();
 
-    void sendPacketLossReport(ALVR_LOST_FRAME_TYPE frameType, uint64_t startOfFailedFrame, uint64_t endOfFailedFrame);
     void processVideoSequence(uint32_t sequence);
     void processSoundSequence(uint32_t sequence);
 

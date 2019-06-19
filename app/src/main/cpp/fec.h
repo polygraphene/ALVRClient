@@ -6,19 +6,21 @@
 #include "packet_types.h"
 #include "reedsolomon/rs.h"
 
+class UdpManager;
+
 class FECQueue {
 public:
-    FECQueue();
+    FECQueue(UdpManager *udpManager);
     ~FECQueue();
 
-    void addVideoPacket(const VideoFrame *packet, int packetSize, bool &fecFailure);
+    void reset();
+
+    void addVideoPacket(const VideoFrame *packet, int packetSize);
     bool reconstruct();
     const char *getFrameBuffer();
     int getFrameByteSize();
-
-    bool fecFailure(uint64_t *startOfFailedFrame, uint64_t *endOfFailedFrame);
-    void clearFecFailure();
 private:
+    UdpManager *mUdpManager;
 
     VideoFrame m_currentFrame;
     size_t m_shardPackets;
@@ -26,7 +28,6 @@ private:
     size_t m_totalDataShards;
     size_t m_totalParityShards;
     size_t m_totalShards;
-    uint32_t m_firstPacketOfNextFrame = 0;
     std::vector<std::vector<unsigned char>> m_marks;
     std::vector<char> m_frameBuffer;
     std::vector<uint32_t> m_receivedDataShards;
@@ -34,13 +35,14 @@ private:
     std::vector<bool> m_recoveredPacket;
     std::vector<char *> m_shards;
     bool m_recovered;
-    bool m_fecFailure;
     reed_solomon *m_rs = NULL;
-    uint64_t mLastSuccessfulVideoFrame = 0;
-    uint64_t mStartOfFailedVideoFrame = 0;
-    uint64_t mEndOfFailedVideoFrame = 0;
+    int64_t mLastSuccessfulVideoFrame = -1;
+    bool mIDRProcessed = false;
 
     static bool reed_solomon_initialized;
+
+    void newFrame(const VideoFrame *packet);
+    void frameLost(uint64_t currentVideoFrame, bool wholeLost);
 };
 
 #endif //ALVRCLIENT_FEC_H

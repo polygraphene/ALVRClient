@@ -5,13 +5,14 @@
 #include "fec.h"
 #include "packet_types.h"
 #include "utils.h"
+#include "udp.h"
+#include "latency_collector.h"
 
 bool FECQueue::reed_solomon_initialized = false;
 
-FECQueue::FECQueue() {
+FECQueue::FECQueue(UdpManager *udpManager) : mUdpManager(udpManager) {
     m_currentFrame.videoFrameIndex = UINT64_MAX;
     m_recovered = true;
-    m_fecFailure = false;
 
     if (!reed_solomon_initialized) {
         reed_solomon_init();
@@ -20,129 +21,43 @@ FECQueue::FECQueue() {
 }
 
 FECQueue::~FECQueue() {
-    if (m_rs != NULL) {
+    if (m_rs != nullptr) {
         reed_solomon_release(m_rs);
     }
 }
 
+void FECQueue::reset() {
+    LOG("FECQueue: Reset.");
+    m_currentFrame.videoFrameIndex = UINT64_MAX;
+    m_recovered = true;
+
+    mLastSuccessfulVideoFrame = -1;
+    mIDRProcessed = false;
+}
+
 // Add packet to queue. packet must point to buffer whose size=ALVR_MAX_PACKET_SIZE.
-void FECQueue::addVideoPacket(const VideoFrame *packet, int packetSize, bool &fecFailure) {
+void FECQueue::addVideoPacket(const VideoFrame *packet, int packetSize) {
     if (m_recovered && m_currentFrame.videoFrameIndex == packet->videoFrameIndex) {
+        // Ignore unused parity packets.
         return;
     }
+    //
+    // Check new frame.
+    //
     if (m_currentFrame.videoFrameIndex != packet->videoFrameIndex) {
-        // New frame
         if (!m_recovered) {
-            FrameLog(m_currentFrame.trackingFrameIndex,
-                     "Previous frame cannot be recovered. videoFrame=%llu shards=%u:%u frameByteSize=%d"
-                     " fecPercentage=%d m_totalShards=%u m_shardPackets=%u m_blockSize=%u",
-                     m_currentFrame.videoFrameIndex,
-                     m_totalDataShards,
-                     m_totalParityShards,
-                     m_currentFrame.frameByteSize, m_currentFrame.fecPercentage, m_totalShards,
-                     m_shardPackets, m_blockSize);
-            for (int packet = 0; packet < m_shardPackets; packet++) {
-                FrameLog(m_currentFrame.trackingFrameIndex,
-                         "packetIndex=%d, shards=%u:%u",
-                         packet, m_receivedDataShards[packet], m_receivedParityShards[packet]);
-            }
-            if(mLastSuccessfulVideoFrame != 0) {
-                fecFailure = m_fecFailure = true;
-                mStartOfFailedVideoFrame = mLastSuccessfulVideoFrame + 1;
-                mEndOfFailedVideoFrame = m_currentFrame.videoFrameIndex - 1;
-            }
+            frameLost(packet->videoFrameIndex, false);
         }
-        m_currentFrame = *packet;
-        m_recovered = false;
-        if (m_rs != NULL) {
-            reed_solomon_release(m_rs);
+        if(m_currentFrame.videoFrameIndex != UINT64_MAX && m_currentFrame.videoFrameIndex + 1 != packet->videoFrameIndex) {
+            frameLost(packet->videoFrameIndex, true);
         }
-
-        uint32_t fecDataPackets = (packet->frameByteSize + ALVR_MAX_VIDEO_BUFFER_SIZE - 1) /
-                                  ALVR_MAX_VIDEO_BUFFER_SIZE;
-        m_shardPackets = static_cast<size_t>(CalculateFECShardPackets(m_currentFrame.frameByteSize,
-                                                                      m_currentFrame.fecPercentage));
-        m_blockSize = m_shardPackets * ALVR_MAX_VIDEO_BUFFER_SIZE;
-
-        m_totalDataShards = (m_currentFrame.frameByteSize + m_blockSize - 1) / m_blockSize;
-        m_totalParityShards = static_cast<size_t>(CalculateParityShards(m_totalDataShards,
-                                                                        m_currentFrame.fecPercentage));
-        m_totalShards = m_totalDataShards + m_totalParityShards;
-
-        m_recoveredPacket.clear();
-        m_recoveredPacket.resize(m_shardPackets);
-
-        m_receivedDataShards.clear();
-        m_receivedDataShards.resize(m_shardPackets);
-        m_receivedParityShards.clear();
-        m_receivedParityShards.resize(m_shardPackets);
-
-        m_shards.resize(m_totalShards);
-
-        m_rs = reed_solomon_new(m_totalDataShards, m_totalParityShards);
-        if (m_rs == NULL) {
-            return;
-        }
-
-        m_marks.resize(m_shardPackets);
-        for (int i = 0; i < m_shardPackets; i++) {
-            m_marks[i].resize(m_totalShards);
-            memset(&m_marks[i][0], 1, m_totalShards);
-        }
-
-        if (m_frameBuffer.size() < m_totalShards * m_blockSize) {
-            // Only expand buffer for performance reason.
-            m_frameBuffer.resize(m_totalShards * m_blockSize);
-        }
-        memset(&m_frameBuffer[0], 0, m_totalShards * m_blockSize);
-
-        // Padding packets are not sent, so we can fill bitmap by default.
-        size_t padding = (m_shardPackets - fecDataPackets % m_shardPackets) % m_shardPackets;
-        for (size_t i = 0; i < padding; i++) {
-            m_marks[m_shardPackets - i - 1][m_totalDataShards - 1] = 0;
-            m_receivedDataShards[m_shardPackets - i - 1]++;
-        }
-
-        // Calculate last packet counter of current frame to detect whole frame packet loss.
-        uint32_t startPacket;
-        uint32_t nextStartPacket;
-        if(m_currentFrame.fecIndex / m_shardPackets < m_totalDataShards) {
-            // First seen packet was data packet
-            startPacket = m_currentFrame.packetCounter - m_currentFrame.fecIndex;
-            nextStartPacket = m_currentFrame.packetCounter - m_currentFrame.fecIndex + m_totalShards * m_shardPackets - padding;
-        }else{
-            // was parity packet
-            startPacket = m_currentFrame.packetCounter - (m_currentFrame.fecIndex - padding);
-            uint64_t m_startOfParityPacket = m_currentFrame.packetCounter - (m_currentFrame.fecIndex - m_totalDataShards * m_shardPackets);
-            nextStartPacket = m_startOfParityPacket + m_totalParityShards * m_shardPackets;
-        }
-        if(m_firstPacketOfNextFrame != 0 && m_firstPacketOfNextFrame != startPacket) {
-            // Whole frame packet loss
-            FrameLog(m_currentFrame.trackingFrameIndex,
-                     "Previous frame was completely lost. videoFrame=%llu shards=%u:%u frameByteSize=%d fecPercentage=%d m_totalShards=%u "
-                     "m_shardPackets=%u m_blockSize=%u m_firstPacketOfNextFrame=%u startPacket=%u currentPacket=%u",
-                     m_currentFrame.videoFrameIndex, m_totalDataShards, m_totalParityShards,
-                     m_currentFrame.frameByteSize, m_currentFrame.fecPercentage, m_totalShards,
-                     m_shardPackets, m_blockSize, m_firstPacketOfNextFrame, startPacket, m_currentFrame.packetCounter);
-            for (int packet = 0; packet < m_shardPackets; packet++) {
-                FrameLog(m_currentFrame.trackingFrameIndex,
-                         "packetIndex=%d, shards=%u:%u",
-                         packet, m_receivedDataShards[packet], m_receivedParityShards[packet]);
-            }
-            if(mLastSuccessfulVideoFrame != 0) {
-                fecFailure = m_fecFailure = true;
-                mStartOfFailedVideoFrame = mLastSuccessfulVideoFrame + 1;
-                mEndOfFailedVideoFrame = m_currentFrame.videoFrameIndex - 1;
-            }
-        }
-        m_firstPacketOfNextFrame = nextStartPacket;
-
-        FrameLog(m_currentFrame.trackingFrameIndex,
-                 "Start new frame. videoFrame=%llu frameByteSize=%d fecPercentage=%d m_totalDataShards=%u m_totalParityShards=%u"
-                 " m_totalShards=%u m_shardPackets=%u m_blockSize=%u",
-                 m_currentFrame.videoFrameIndex, m_currentFrame.frameByteSize, m_currentFrame.fecPercentage, m_totalDataShards,
-                 m_totalParityShards, m_totalShards, m_shardPackets, m_blockSize);
+        // Prepare FEC related variables.
+        newFrame(packet);
     }
+    //
+    // Process current packet.
+    //
+
     size_t shardIndex = packet->fecIndex / m_shardPackets;
     size_t packetIndex = packet->fecIndex % m_shardPackets;
     if (m_marks[packetIndex][shardIndex] == 0) {
@@ -151,7 +66,7 @@ void FECQueue::addVideoPacket(const VideoFrame *packet, int packetSize, bool &fe
              packet->fecIndex);
         return;
     }
-    LOG("FEC. packetCounter=%d fecIndex=%d shardIndex=%zu packetIndex=%zu shardPackets=%zu", packet->packetCounter,
+    LOG("[FEC]. videoFrameIndex=%" PRId64 " packetCounter=%d fecIndex=%d shardIndex=%zu packetIndex=%zu shardPackets=%zu", packet->videoFrameIndex, packet->packetCounter,
          packet->fecIndex, shardIndex, packetIndex, m_shardPackets);
     m_marks[packetIndex][shardIndex] = 0;
     if (shardIndex < m_totalDataShards) {
@@ -159,6 +74,10 @@ void FECQueue::addVideoPacket(const VideoFrame *packet, int packetSize, bool &fe
     } else {
         m_receivedParityShards[packetIndex]++;
     }
+
+    //
+    // Copy packet buffer.
+    //
 
     char *p = &m_frameBuffer[packet->fecIndex * ALVR_MAX_VIDEO_BUFFER_SIZE];
     char *payload = ((char *) packet) + sizeof(VideoFrame);
@@ -198,7 +117,7 @@ bool FECQueue::reconstruct() {
         }
 
         FrameLog(m_currentFrame.trackingFrameIndex,
-                 "Recovering. packetIndex=%d receivedDataShards=%d/%d receivedParityShards=%d/%d",
+                 "[FEC] Recovering. packetIndex=%d receivedDataShards=%d/%d receivedParityShards=%d/%d",
                  packet, m_receivedDataShards[packet], m_totalDataShards,
                  m_receivedParityShards[packet], m_totalParityShards);
 
@@ -225,8 +144,12 @@ bool FECQueue::reconstruct() {
     }
     if (ret) {
         m_recovered = true;
+        bool isIDR = !mIDRProcessed;
+        mIDRProcessed = true;
+        mUdpManager->sendVideoFrameAck(true, isIDR,
+                                       m_currentFrame.videoFrameIndex, m_currentFrame.videoFrameIndex);
         mLastSuccessfulVideoFrame = m_currentFrame.videoFrameIndex;
-        FrameLog(m_currentFrame.trackingFrameIndex, "Frame was successfully recovered by FEC.");
+        FrameLog(m_currentFrame.trackingFrameIndex, "[FEC] Frame was successfully recovered by FEC.");
     }
     return ret;
 }
@@ -239,12 +162,90 @@ int FECQueue::getFrameByteSize() {
     return m_currentFrame.frameByteSize;
 }
 
-bool FECQueue::fecFailure(uint64_t *startOfFailedFrame, uint64_t *endOfFailedFrame) {
-    *startOfFailedFrame = mStartOfFailedVideoFrame;
-    *endOfFailedFrame = mEndOfFailedVideoFrame;
-    return m_fecFailure;
+void FECQueue::frameLost(uint64_t currentVideoFrame, bool wholeLost) {
+    FrameLog(m_currentFrame.trackingFrameIndex,
+             "[FEC] Frame cannot be recovered. videoFrame=%llu(%d bytes) shards=%u:%u frameByteSize=%d"
+             " fecPercentage=%d m_totalShards=%u m_shardPackets=%u m_blockSize=%u",
+             m_currentFrame.videoFrameIndex, m_currentFrame.frameByteSize,
+             m_totalDataShards, m_totalParityShards,
+             m_currentFrame.fecPercentage, m_totalShards,
+             m_shardPackets, m_blockSize);
+    for (int packet = 0; packet < m_shardPackets; packet++) {
+        FrameLog(m_currentFrame.trackingFrameIndex,
+                 "packetIndex=%d/%d, shards=%u:%u(%u/%u) Okay=%d",
+                 packet, m_shardPackets, m_receivedDataShards[packet], m_receivedParityShards[packet],
+                 m_receivedDataShards[packet] + m_receivedParityShards[packet],
+                 m_totalShards, m_receivedDataShards[packet] + m_receivedParityShards[packet] >= m_totalShards);
+    }
+
+    LatencyCollector::Instance().fecFailure();
+
+    bool isIDR = !mIDRProcessed;
+    mUdpManager->sendVideoFrameAck(false, isIDR,
+                                   static_cast<uint64_t>(mLastSuccessfulVideoFrame + 1), currentVideoFrame - 1);
+    LOG("[FEC] VideoFrameFailed (%s lost): %" PRId64 " - %" PRId64 " IDR=%d Previous=%" PRId64 " Current=%" PRId64,
+        wholeLost ? "Whole" : "Partial", mLastSuccessfulVideoFrame + 1, currentVideoFrame - 1, isIDR, currentVideoFrame,
+        m_currentFrame.videoFrameIndex);
+
+    mLastSuccessfulVideoFrame = currentVideoFrame - 1;
 }
 
-void FECQueue::clearFecFailure() {
-    m_fecFailure = false;
+void FECQueue::newFrame(const VideoFrame *packet) {
+    m_currentFrame = *packet;
+    m_recovered = false;
+    if (m_rs != nullptr) {
+        reed_solomon_release(m_rs);
+    }
+
+    uint32_t fecDataPackets = (packet->frameByteSize + ALVR_MAX_VIDEO_BUFFER_SIZE - 1) /
+                              ALVR_MAX_VIDEO_BUFFER_SIZE;
+    m_shardPackets = static_cast<size_t>(CalculateFECShardPackets(m_currentFrame.frameByteSize,
+                                                                  m_currentFrame.fecPercentage));
+    m_blockSize = m_shardPackets * ALVR_MAX_VIDEO_BUFFER_SIZE;
+
+    m_totalDataShards = (m_currentFrame.frameByteSize + m_blockSize - 1) / m_blockSize;
+    m_totalParityShards = static_cast<size_t>(CalculateParityShards(m_totalDataShards,
+                                                                    m_currentFrame.fecPercentage));
+    m_totalShards = m_totalDataShards + m_totalParityShards;
+
+    m_recoveredPacket.clear();
+    m_recoveredPacket.resize(m_shardPackets);
+
+    m_receivedDataShards.clear();
+    m_receivedDataShards.resize(m_shardPackets);
+    m_receivedParityShards.clear();
+    m_receivedParityShards.resize(m_shardPackets);
+
+    m_shards.resize(m_totalShards);
+
+    m_rs = reed_solomon_new(static_cast<int>(m_totalDataShards),
+                            static_cast<int>(m_totalParityShards));
+    if (m_rs == nullptr) {
+        return;
+    }
+
+    m_marks.resize(m_shardPackets);
+    for (int i = 0; i < m_shardPackets; i++) {
+        m_marks[i].resize(m_totalShards);
+        memset(&m_marks[i][0], 1, m_totalShards);
+    }
+
+    if (m_frameBuffer.size() < m_totalShards * m_blockSize) {
+        // Only expand buffer for performance reason.
+        m_frameBuffer.resize(m_totalShards * m_blockSize);
+    }
+    memset(&m_frameBuffer[0], 0, m_totalShards * m_blockSize);
+
+    // Padding packets are not sent, so we can fill bitmap by default.
+    size_t padding = (m_shardPackets - fecDataPackets % m_shardPackets) % m_shardPackets;
+    for (size_t i = 0; i < padding; i++) {
+        m_marks[m_shardPackets - i - 1][m_totalDataShards - 1] = 0;
+        m_receivedDataShards[m_shardPackets - i - 1]++;
+    }
+
+    FrameLog(m_currentFrame.trackingFrameIndex,
+             "Start new frame. videoFrame=%llu frameByteSize=%d fecPercentage=%d m_totalDataShards=%u m_totalParityShards=%u"
+             " m_totalShards=%u m_shardPackets=%u m_blockSize=%u",
+             m_currentFrame.videoFrameIndex, m_currentFrame.frameByteSize, m_currentFrame.fecPercentage, m_totalDataShards,
+             m_totalParityShards, m_totalShards, m_shardPackets, m_blockSize);
 }
