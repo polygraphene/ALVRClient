@@ -19,6 +19,8 @@ public:
     bool reconstruct();
     const char *getFrameBuffer();
     int getFrameByteSize();
+
+    void OnIDRProcessed();
 private:
     UdpManager *mUdpManager;
 
@@ -35,9 +37,9 @@ private:
     std::vector<bool> m_recoveredPacket;
     std::vector<char *> m_shards;
     bool m_recovered;
-    reed_solomon *m_rs = NULL;
-    int64_t mLastSuccessfulVideoFrame = -1;
-    bool mIDRProcessed = false;
+    reed_solomon *m_rs = nullptr;
+    int64_t mLastSuccessfulVideoFrame;
+    bool mIDRProcessed;
 
     static bool reed_solomon_initialized;
 

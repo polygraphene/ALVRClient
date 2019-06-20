@@ -11,8 +11,7 @@
 bool FECQueue::reed_solomon_initialized = false;
 
 FECQueue::FECQueue(UdpManager *udpManager) : mUdpManager(udpManager) {
-    m_currentFrame.videoFrameIndex = UINT64_MAX;
-    m_recovered = true;
+    reset();
 
     if (!reed_solomon_initialized) {
         reed_solomon_init();
@@ -145,11 +144,10 @@ bool FECQueue::reconstruct() {
     if (ret) {
         m_recovered = true;
         bool isIDR = !mIDRProcessed;
-        mIDRProcessed = true;
         mUdpManager->sendVideoFrameAck(true, isIDR,
                                        m_currentFrame.videoFrameIndex, m_currentFrame.videoFrameIndex);
         mLastSuccessfulVideoFrame = m_currentFrame.videoFrameIndex;
-        FrameLog(m_currentFrame.trackingFrameIndex, "[FEC] Frame was successfully recovered by FEC.");
+        FrameLog(m_currentFrame.trackingFrameIndex, "[FEC] Frame was successfully recovered by FEC. VideoFrameIndex=%llu", m_currentFrame.videoFrameIndex);
     }
     return ret;
 }
@@ -160,6 +158,10 @@ const char *FECQueue::getFrameBuffer() {
 
 int FECQueue::getFrameByteSize() {
     return m_currentFrame.frameByteSize;
+}
+
+void FECQueue::OnIDRProcessed() {
+    mIDRProcessed = true;
 }
 
 void FECQueue::frameLost(uint64_t currentVideoFrame, bool wholeLost) {

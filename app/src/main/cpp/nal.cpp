@@ -77,6 +77,8 @@ bool NALParser::processPacket(VideoFrame *packet, int packetSize) {
         LOGI("Got frame=%d %d, Codec=%d", NALType, end, m_codec);
         push(&frameBuffer[0], end, packet->trackingFrameIndex);
         push(&frameBuffer[end], frameByteSize - end, packet->trackingFrameIndex);
+
+        m_queue.OnIDRProcessed();
     } else {
         push(&frameBuffer[0], frameByteSize, packet->trackingFrameIndex);
     }
