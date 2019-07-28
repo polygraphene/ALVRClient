@@ -4,6 +4,7 @@
     android:installLocation="auto">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-feature android:name="android.hardware.vr.headtracking" android:required="true" android:version="1"/>
 
     <application
         android:allowBackup="true"

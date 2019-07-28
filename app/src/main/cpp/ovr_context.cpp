@@ -5,6 +5,7 @@
 #include <VrApi_Helpers.h>
 #include <VrApi_SystemUtils.h>
 #include <VrApi_Input.h>
+
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES3/gl3.h>
@@ -235,27 +236,63 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
 
             ovrTracking tracking;
             if (vrapi_GetInputTrackingState(Ovr, remoteCapabilities.Header.DeviceID,
-                                            displayTime, &tracking) != ovrSuccess) {
+                                            displayTime -0.060, &tracking) != ovrSuccess) {
                 LOG("vrapi_GetInputTrackingState failed. Device was disconnected?");
             } else {
+
+                ovrQuatf quat =  toQuaternion(0.0,0.0, 36 * M_PI / 180);
+                ovrQuatf  orientation = quatMultipy(&tracking.HeadPose.Pose.Orientation, &quat);
+                tracking.HeadPose.Pose.Orientation = orientation;
+
+
                 memcpy(&c.orientation,
                        &tracking.HeadPose.Pose.Orientation,
                        sizeof(tracking.HeadPose.Pose.Orientation));
+
+
+
+                ovrMatrix4f rotMatrix = ovrMatrix4f_CreateFromQuaternion(&orientation);
+
+                ovrVector4f offset;
+                offset.x = 0;
+                offset.y = 0;
+                offset.z = -0.053;
+                offset.w = 1;
+
+
+                ovrVector4f absOffset = ovrVector4f_MultiplyMatrix4f(&rotMatrix, &offset);
+
+
+
                 memcpy(&c.position,
                        &tracking.HeadPose.Pose.Position,
                        sizeof(tracking.HeadPose.Pose.Position));
+
+                c.position.x+= absOffset.x;
+                c.position.y+= absOffset.y;
+                c.position.z+= absOffset.z;
+
+
                 memcpy(&c.angularVelocity,
                        &tracking.HeadPose.AngularVelocity,
                        sizeof(tracking.HeadPose.AngularVelocity));
                 memcpy(&c.linearVelocity,
                        &tracking.HeadPose.LinearVelocity,
                        sizeof(tracking.HeadPose.LinearVelocity));
+
+                TrackingVector3 v;
+                v.x = 0;
+                v.y = 0;
+                v.z = 0;
+
                 memcpy(&c.angularAcceleration,
-                       &tracking.HeadPose.AngularAcceleration,
-                       sizeof(tracking.HeadPose.AngularAcceleration));
+                       &v,
+                       sizeof(v));
                 memcpy(&c.linearAcceleration,
-                       &tracking.HeadPose.LinearAcceleration,
-                       sizeof(tracking.HeadPose.LinearAcceleration));
+                       &v,
+                       sizeof(v));
+
+
             }
             controller++;
         } else if (curCaps.Type == ovrControllerType_Headset) {

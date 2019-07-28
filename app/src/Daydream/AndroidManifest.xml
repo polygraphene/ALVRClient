@@ -10,6 +10,7 @@
     <uses-feature
         android:name="android.hardware.vr.high_performance"
         android:required="false" />
+    <uses-feature android:name="android.hardware.vr.headtracking" android:required="true" android:version="1"/>
 
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <application>
