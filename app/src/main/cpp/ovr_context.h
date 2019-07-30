@@ -59,6 +59,9 @@ private:
     ovrJava java;
     JNIEnv *env;
 
+    ovrVector3f lastControllerPos[2];
+    double lastStateTime = 0;
+
     jobject mVrThread = nullptr;
 
     bool UseMultiview = true;

@@ -236,9 +236,11 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
 
             ovrTracking tracking;
             if (vrapi_GetInputTrackingState(Ovr, remoteCapabilities.Header.DeviceID,
-                                            displayTime -0.060, &tracking) != ovrSuccess) {
+                                            displayTime, &tracking) != ovrSuccess) {
                 LOG("vrapi_GetInputTrackingState failed. Device was disconnected?");
             } else {
+
+
 
                 ovrQuatf quat =  toQuaternion(0.0,0.0, 36 * M_PI / 180);
                 ovrQuatf  orientation = quatMultipy(&tracking.HeadPose.Pose.Orientation, &quat);
@@ -262,11 +264,10 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
 
                 ovrVector4f absOffset = ovrVector4f_MultiplyMatrix4f(&rotMatrix, &offset);
 
-
-
                 memcpy(&c.position,
                        &tracking.HeadPose.Pose.Position,
                        sizeof(tracking.HeadPose.Pose.Position));
+
 
                 c.position.x+= absOffset.x;
                 c.position.y+= absOffset.y;
@@ -276,21 +277,49 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
                 memcpy(&c.angularVelocity,
                        &tracking.HeadPose.AngularVelocity,
                        sizeof(tracking.HeadPose.AngularVelocity));
+
+
+
+
+                //calculate new velocity
+
+
+
+
+                LOGI("DISPLAY TRACK %lf", (displayTime - lastStateTime));
+                ovrVector3f linearVelocity;
+                linearVelocity.x = (lastControllerPos[deviceIndex].x - c.position.x) / 1000 / (4);
+                linearVelocity.y = (lastControllerPos[deviceIndex].y - c.position.y) / 1000 / (4);
+                linearVelocity.z = (lastControllerPos[deviceIndex].z - c.position.z) / 1000 / (4);
+
+                LOGI("Velocity %f -  %f - %f", linearVelocity.x, linearVelocity.y, linearVelocity.z);
+
                 memcpy(&c.linearVelocity,
-                       &tracking.HeadPose.LinearVelocity,
-                       sizeof(tracking.HeadPose.LinearVelocity));
+                       &linearVelocity,
+                       sizeof(linearVelocity));
+
+
 
                 TrackingVector3 v;
                 v.x = 0;
                 v.y = 0;
                 v.z = 0;
 
+
                 memcpy(&c.angularAcceleration,
                        &v,
                        sizeof(v));
+
+
+
                 memcpy(&c.linearAcceleration,
                        &v,
                        sizeof(v));
+
+                memcpy(&lastControllerPos[deviceIndex],
+                       &c.position,
+                       sizeof(c.position));
+                lastStateTime = displayTime;
 
 
             }
