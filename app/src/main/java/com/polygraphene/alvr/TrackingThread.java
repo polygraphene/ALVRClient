@@ -25,7 +25,7 @@ class TrackingThread extends ThreadBase
     }
 
     void changeRefreshRate(int refreshRate) {
-        //mRefreshRate = refreshRate;
+        mRefreshRate = refreshRate * 3;
     }
 
     public void start(EGLContext mEGLContext, Activity activity, int cameraTexture) {

@@ -236,90 +236,34 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
 
             ovrTracking tracking;
             if (vrapi_GetInputTrackingState(Ovr, remoteCapabilities.Header.DeviceID,
-                                            displayTime, &tracking) != ovrSuccess) {
+                                            displayTime - 0.004 , &tracking) != ovrSuccess) {
                 LOG("vrapi_GetInputTrackingState failed. Device was disconnected?");
             } else {
-
-
-
-                ovrQuatf quat =  toQuaternion(0.0,0.0, 36 * M_PI / 180);
-                ovrQuatf  orientation = quatMultipy(&tracking.HeadPose.Pose.Orientation, &quat);
-                tracking.HeadPose.Pose.Orientation = orientation;
-
 
                 memcpy(&c.orientation,
                        &tracking.HeadPose.Pose.Orientation,
                        sizeof(tracking.HeadPose.Pose.Orientation));
 
-
-
-                ovrMatrix4f rotMatrix = ovrMatrix4f_CreateFromQuaternion(&orientation);
-
-                ovrVector4f offset;
-                offset.x = 0;
-                offset.y = 0;
-                offset.z = -0.053;
-                offset.w = 1;
-
-
-                ovrVector4f absOffset = ovrVector4f_MultiplyMatrix4f(&rotMatrix, &offset);
-
                 memcpy(&c.position,
                        &tracking.HeadPose.Pose.Position,
                        sizeof(tracking.HeadPose.Pose.Position));
-
-
-                c.position.x+= absOffset.x;
-                c.position.y+= absOffset.y;
-                c.position.z+= absOffset.z;
-
 
                 memcpy(&c.angularVelocity,
                        &tracking.HeadPose.AngularVelocity,
                        sizeof(tracking.HeadPose.AngularVelocity));
 
-
-
-
-                //calculate new velocity
-
-
-
-
-                LOGI("DISPLAY TRACK %lf", (displayTime - lastStateTime));
-                ovrVector3f linearVelocity;
-                linearVelocity.x = (lastControllerPos[deviceIndex].x - c.position.x) / 1000 / (4);
-                linearVelocity.y = (lastControllerPos[deviceIndex].y - c.position.y) / 1000 / (4);
-                linearVelocity.z = (lastControllerPos[deviceIndex].z - c.position.z) / 1000 / (4);
-
-                LOGI("Velocity %f -  %f - %f", linearVelocity.x, linearVelocity.y, linearVelocity.z);
-
                 memcpy(&c.linearVelocity,
-                       &linearVelocity,
-                       sizeof(linearVelocity));
-
-
-
-                TrackingVector3 v;
-                v.x = 0;
-                v.y = 0;
-                v.z = 0;
-
+                       &tracking.HeadPose.LinearVelocity,
+                       sizeof(tracking.HeadPose.LinearVelocity));
 
                 memcpy(&c.angularAcceleration,
-                       &v,
-                       sizeof(v));
-
-
+                       &tracking.HeadPose.AngularAcceleration,
+                       sizeof(tracking.HeadPose.AngularAcceleration));
 
                 memcpy(&c.linearAcceleration,
-                       &v,
-                       sizeof(v));
+                       &tracking.HeadPose.LinearAcceleration,
+                       sizeof(tracking.HeadPose.LinearAcceleration));
 
-                memcpy(&lastControllerPos[deviceIndex],
-                       &c.position,
-                       sizeof(c.position));
-                lastStateTime = displayTime;
 
 
             }
@@ -386,6 +330,20 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
         }
     }
 }
+void OvrContext::setRotatedVector(ovrVector3f *input, TrackingVector3 *target, ovrMatrix4f *rotation) {
+    ovrVector4f v;
+    v.x = input->x;
+    v.y = input->y;
+    v.z = input->z;
+    v.w = 1;
+
+    ovrVector4f rotated = ovrVector4f_MultiplyMatrix4f(rotation, &v);
+
+    target->x = rotated.x;
+    target->y = rotated.y;
+    target->z = rotated.z;
+}
+
 
 uint64_t OvrContext::mapButtons(ovrInputTrackedRemoteCapabilities *remoteCapabilities,
                                 ovrInputStateTrackedRemote *remoteInputState) {
