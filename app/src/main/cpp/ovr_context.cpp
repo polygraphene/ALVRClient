@@ -240,6 +240,8 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
                 LOG("vrapi_GetInputTrackingState failed. Device was disconnected?");
             } else {
 
+                c.deviceIndex = deviceIndex;
+
                 memcpy(&c.orientation,
                        &tracking.HeadPose.Pose.Orientation,
                        sizeof(tracking.HeadPose.Pose.Orientation));
@@ -263,7 +265,7 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
                 memcpy(&c.linearAcceleration,
                        &tracking.HeadPose.LinearAcceleration,
                        sizeof(tracking.HeadPose.LinearAcceleration));
-                
+
 
             }
             controller++;
