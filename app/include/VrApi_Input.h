@@ -12,7 +12,6 @@ Copyright   :   Copyright (c) Facebook Technologies, LLC and its affiliates. All
 #ifndef OVR_VrApi_Input_h
 #define OVR_VrApi_Input_h
 
-
 #include <stddef.h>
 #include <stdint.h>
 #include "VrApi_Config.h"
@@ -25,7 +24,7 @@ Copyright   :   Copyright (c) Facebook Technologies, LLC and its affiliates. All
 ///
 /// ovrButton_Home, ovrButton_VolUp, ovrButtonVolDown and ovrButton_Back are system buttons that are never
 /// reported to applications.
-/// ovrButton_Back button has system-level handling for long presses, but application-level handling for 
+/// ovrButton_Back button has system-level handling for long presses, but application-level handling for
 /// short-presses. Since a short-press is determined by the time interval between down and up events, the
 /// ovrButton_Back flag is only set when the back button comes up in less than the short-press time (0.25
 /// seconds). The ovrButton_Back flag always signals a short press and will only remain set for a single frame.
@@ -162,14 +161,14 @@ typedef struct ovrInputTrackedRemoteCapabilities_
 } ovrInputTrackedRemoteCapabilities;
 
 /// Capabilities for the Head Mounted Tracking device (i.e. the headset).
-/// Note that the GearVR headset firmware always sends relative coordinates 
+/// Note that the GearVR headset firmware always sends relative coordinates
 /// with the initial touch position offset by (1280,720). There is no way
-/// to get purely raw coordinates from the headset. In addition, these 
-/// coordinates get adjusted for acceleration resulting in a slow movement 
-/// from one edge to the other the having a coordinate range of about 300 
+/// to get purely raw coordinates from the headset. In addition, these
+/// coordinates get adjusted for acceleration resulting in a slow movement
+/// from one edge to the other the having a coordinate range of about 300
 /// units, while a fast movement from edge to edge may result in a range
 /// close to 900 units.
-/// This means the headset touchpad needs to be handled differently than 
+/// This means the headset touchpad needs to be handled differently than
 /// the GearVR Controller touchpad.
 typedef struct ovrInputHeadsetCapabilities_
 {
@@ -206,6 +205,7 @@ typedef struct ovrInputGamepadCapabilities_
 	uint64_t			Reserved[20];
 } ovrInputGamepadCapabilities;
 
+
 /// The buffer data for playing haptics
 typedef struct ovrHapticBuffer_
 {
@@ -232,8 +232,8 @@ typedef struct ovrInputStateHeader_
 	double				TimeInSeconds;
 } ovrInputStateHeader;
 
-/// ovrInputStateTrackedRemote describes the complete input state for the 
-/// orientation-tracked remote. The TrackpadPosition coordinates returned 
+/// ovrInputStateTrackedRemote describes the complete input state for the
+/// orientation-tracked remote. The TrackpadPosition coordinates returned
 /// for the GearVR Controller are in raw, absolute units.
 typedef struct ovrInputStateTrackedRemote_
 {
@@ -250,10 +250,10 @@ typedef struct ovrInputStateTrackedRemote_
 	ovrVector2f         TrackpadPosition;
 
 	/// The percentage of max battery charge remaining.
-	uint8_t				BatteryPercentRemaining;	
+	uint8_t				BatteryPercentRemaining;
 	/// Increments every time the remote is recentered. If this changes, the application may need
 	/// to adjust its arm model accordingly.
-	uint8_t				RecenterCount;	
+	uint8_t				RecenterCount;
 	/// Reserved for future use.
 	uint16_t			Reserved;
 
@@ -274,7 +274,7 @@ typedef struct ovrInputStateTrackedRemote_
 } ovrInputStateTrackedRemote;
 
 
-/// ovrInputStateHeadset describes the complete input state for the 
+/// ovrInputStateHeadset describes the complete input state for the
 /// GearVR headset. The TrackpadPosition coordinates return for the
 /// headset are relative coordinates, centered at (1280,720). See the
 /// comments on ovrInputHeadsetCapabilities for more information.
@@ -314,6 +314,7 @@ typedef struct ovrInputStateGamepad_
 	// Reserved for future use.
 	uint64_t			Reserved[20];
 } ovrInputStateGamepad;
+
 
 #if defined( __cplusplus )
 extern "C" {
@@ -365,7 +366,7 @@ OVR_VRAPI_EXPORT ovrResult vrapi_SetHapticVibrationBuffer( ovrMobile * ovr, cons
 ///     corresponds to the type of structure being passed.
 ///     The pointer to the ovrInputStateHeader should be a pointer to a Header field in
 ///     structure matching the value of the Type field.
-/// 
+///
 ///     ovrInputStateTrackedRemote state;
 ///     state.Header.Type = ovrControllerType_TrackedRemote;
 ///     if ( vrapi_GetCurrentInputState( ovr, remoteDeviceID, &state.Header ) >= 0 ) {
@@ -376,7 +377,7 @@ OVR_VRAPI_EXPORT ovrResult vrapi_GetCurrentInputState( ovrMobile * ovr, const ov
 /// in seconds. Pass absTime value of 0.0 to request the most recent sensor reading.
 /// Input: ovr, device ID, prediction time
 /// Output: ovrTracking structure containing the device's predicted tracking state.
-OVR_VRAPI_EXPORT ovrResult vrapi_GetInputTrackingState( ovrMobile * ovr, const ovrDeviceID deviceID, 
+OVR_VRAPI_EXPORT ovrResult vrapi_GetInputTrackingState( ovrMobile * ovr, const ovrDeviceID deviceID,
 														const double absTimeInSeconds, ovrTracking * tracking );
 
 /// Can be called from any thread while in VR mode. Recenters the tracked remote to the current yaw of the headset.
@@ -384,7 +385,7 @@ OVR_VRAPI_EXPORT ovrResult vrapi_GetInputTrackingState( ovrMobile * ovr, const o
 /// Output: None
 OVR_VRAPI_DEPRECATED( OVR_VRAPI_EXPORT void vrapi_RecenterInputPose( ovrMobile * ovr, const ovrDeviceID deviceID ) );
 
-/// Enable or disable emulation for the GearVR Controller. 
+/// Enable or disable emulation for the GearVR Controller.
 /// Emulation is false by default.
 /// If emulationOn == true, then the back button and touch events on the GearVR Controller will be sent through the Android
 /// dispatchKeyEvent and dispatchTouchEvent path as if they were from the headset back button and touchpad.
@@ -395,6 +396,5 @@ OVR_VRAPI_EXPORT ovrResult vrapi_SetRemoteEmulation( ovrMobile * ovr, const bool
 #if defined( __cplusplus )
 }   // extern "C"
 #endif
-
 
 #endif	// OVR_VrApi_Input_h

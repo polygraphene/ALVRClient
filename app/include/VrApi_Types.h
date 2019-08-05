@@ -358,6 +358,7 @@ typedef enum ovrSystemStatus_
 
 	VRAPI_SYS_STATUS_RECENTER_COUNT					= 13,	//< Returns the current HMD recenter count. Defaults to 0.
 	VRAPI_SYS_STATUS_SYSTEM_UX_ACTIVE				= 14,	//< Returns VRAPI_TRUE if a system UX layer is active
+	VRAPI_SYS_STATUS_USER_RECENTER_COUNT			= 15,	//< Returns the current HMD recenter count for user initiated recenters only. Defaults to 0.
 
 	VRAPI_SYS_STATUS_FRONT_BUFFER_PROTECTED			= 128,	//< VRAPI_TRUE if the front buffer is allocated in TrustZone memory.
 	VRAPI_SYS_STATUS_FRONT_BUFFER_565				= 129,	//< VRAPI_TRUE if the front buffer is 16-bit 5:6:5
@@ -381,9 +382,9 @@ typedef enum ovrInitializeStatus_
 /// Supported graphics APIs.
 typedef enum ovrGraphicsAPI_
 {
-	VRAPI_GRAPHICS_API_TYPE_ES		 = 0x10000,
-	VRAPI_GRAPHICS_API_OPENGL_ES_2   = ( VRAPI_GRAPHICS_API_TYPE_ES | 0x0200 ),		//< OpenGL ES 2.x context
-	VRAPI_GRAPHICS_API_OPENGL_ES_3   = ( VRAPI_GRAPHICS_API_TYPE_ES | 0x0300 ),		//< OpenGL ES 3.x context
+	VRAPI_GRAPHICS_API_TYPE_OPENGL_ES = 0x10000,
+	VRAPI_GRAPHICS_API_OPENGL_ES_2   = ( VRAPI_GRAPHICS_API_TYPE_OPENGL_ES | 0x0200 ),		//< OpenGL ES 2.x context
+	VRAPI_GRAPHICS_API_OPENGL_ES_3   = ( VRAPI_GRAPHICS_API_TYPE_OPENGL_ES | 0x0300 ),		//< OpenGL ES 3.x context
 
 	VRAPI_GRAPHICS_API_TYPE_OPENGL	 = 0x20000,
 	VRAPI_GRAPHICS_API_OPENGL_COMPAT = ( VRAPI_GRAPHICS_API_TYPE_OPENGL | 0x0100 ), //< OpenGL Compatibility Profile
@@ -470,7 +471,7 @@ typedef struct ovrModeParms_
 	/// packageName, systemService, etc.
 	ovrJava				Java;
 
-	OVR_VRAPI_PADDING_32_BIT( 4 );
+	OVR_VRAPI_PADDING_32_BIT( 4 )
 
 	/// Display to use for asynchronous time warp rendering.
 	/// Using EGL this is an EGLDisplay.
@@ -521,7 +522,7 @@ typedef struct ovrRigidBodyPosef_
 	ovrVector3f		LinearVelocity;
 	ovrVector3f		AngularAcceleration;
 	ovrVector3f		LinearAcceleration;
-	OVR_VRAPI_PADDING( 4 );
+	OVR_VRAPI_PADDING( 4 )
 	double			TimeInSeconds;			//< Absolute time of this pose.
 	double			PredictionInSeconds;	//< Seconds this pose was predicted ahead.
 } ovrRigidBodyPosef;
@@ -544,15 +545,15 @@ typedef struct ovrTracking2_
 	/// Sensor status described by ovrTrackingStatus flags.
 	unsigned int		Status;
 
-	OVR_VRAPI_PADDING( 4 );
+	OVR_VRAPI_PADDING( 4 )
 
 	/// Predicted head configuration at the requested absolute time.
 	/// The pose describes the head orientation and center eye position.
 	ovrRigidBodyPosef	HeadPose;
 	struct
 	{
-		ovrMatrix4f			ProjectionMatrix;
-		ovrMatrix4f			ViewMatrix;
+		ovrMatrix4f		ProjectionMatrix;
+		ovrMatrix4f		ViewMatrix;
 	} Eye[ VRAPI_EYE_COUNT ];
 } ovrTracking2;
 
@@ -564,7 +565,7 @@ typedef struct ovrTracking_
 	/// Sensor status described by ovrTrackingStatus flags.
 	unsigned int		Status;
 
-	OVR_VRAPI_PADDING( 4 );
+	OVR_VRAPI_PADDING( 4 )
 
 	/// Predicted head configuration at the requested absolute time.
 	/// The pose describes the head orientation and center eye position.
@@ -605,16 +606,16 @@ typedef enum ovrTrackedDeviceTypeId_
 typedef struct ovrBoundaryTriggerResult_
 {
 	/// Closest point on the boundary surface.
-	ovrVector3f				closestPoint;
+	ovrVector3f				ClosestPoint;
 
 	/// Normal of the closest point on the boundary surface.
-	ovrVector3f				closestPointNormal;
+	ovrVector3f				ClosestPointNormal;
 
 	/// Distance to the closest guardian boundary surface.
-	float					closestDistance;
+	float					ClosestDistance;
 
 	/// True if the boundary system is being triggered. Note that due to fade in/out effects this may not exactly match visibility.
-	bool 					isTriggering;
+	bool 					IsTriggering;
 } ovrBoundaryTriggerResult;
 
 OVR_VRAPI_ASSERT_TYPE_SIZE( ovrBoundaryTriggerResult, 32 );
@@ -646,6 +647,7 @@ typedef enum ovrTextureFormat_
 	VRAPI_TEXTURE_FORMAT_DEPTH_16			= 7,
 	VRAPI_TEXTURE_FORMAT_DEPTH_24			= 8,
 	VRAPI_TEXTURE_FORMAT_DEPTH_24_STENCIL_8	= 9,
+	VRAPI_TEXTURE_FORMAT_RG16				= 10,
 
 } ovrTextureFormat;
 
@@ -724,6 +726,11 @@ typedef enum ovrFrameLayerFlags_
 	VRAPI_FRAME_LAYER_FLAG_INHIBIT_SRGB_FRAMEBUFFER								= 1 << 8,
 
 
+	/// Allow Layer to use an expensive filtering mode. Only useful for 2D layers that are high
+	/// resolution (e.g. a remote desktop layer), typically double or more the target resolution.
+	VRAPI_FRAME_LAYER_FLAG_FILTER_EXPENSIVE										= 1 << 19,
+
+
 } ovrFrameLayerFlags;
 
 /// The user's eye (left or right) that can see a layer.
@@ -792,7 +799,7 @@ typedef struct ovrFrameLayerTexture_
 	/// This is a sub-rectangle of the [(0,0)-(1,1)] texture coordinate range.
 	ovrRectf				TextureRect;
 
-	OVR_VRAPI_PADDING( 4 );
+	OVR_VRAPI_PADDING( 4 )
 
 	/// The tracking state for which ModelViewMatrix is correct.
 	/// It is ok to update the orientation for each eye, which
@@ -824,7 +831,7 @@ typedef struct ovrFrameLayer_
 	float					ColorScale;
 
 	/// padding for deprecated variable.
-	OVR_VRAPI_PADDING( 4 );
+	OVR_VRAPI_PADDING( 4 )
 
 	/// Layer blend function.
 	ovrFrameLayerBlend		SrcBlend;
@@ -832,6 +839,9 @@ typedef struct ovrFrameLayer_
 
 	/// Combination of ovrFrameLayerFlags flags.
 	int						Flags;
+
+	/// explicit padding for x86
+	OVR_VRAPI_PADDING_32_BIT( 4 )
 } ovrFrameLayer;
 
 OVR_VRAPI_ASSERT_TYPE_SIZE_32_BIT( ovrFrameLayer, 432 );
@@ -860,7 +870,7 @@ typedef struct ovrFrameParms_
 {
 	ovrStructureType		Type;
 
-	OVR_VRAPI_PADDING( 4 );
+	OVR_VRAPI_PADDING( 4 )
 
 	/// Layers composited in the time warp.
 	ovrFrameLayer	 		Layers[VRAPI_FRAME_LAYER_TYPE_MAX];
@@ -940,6 +950,7 @@ typedef struct ovrLayerProjection2_
 {
 	/// Header.Type must be VRAPI_LAYER_TYPE_PROJECTION2.
 	ovrLayerHeader2			Header;
+	OVR_VRAPI_PADDING_32_BIT( 4 )
 
 	ovrRigidBodyPosef		HeadPose;
 
@@ -975,6 +986,7 @@ typedef struct ovrLayerCylinder2_
 {
 	/// Header.Type must be VRAPI_LAYER_TYPE_CYLINDER2.
 	ovrLayerHeader2			Header;
+	OVR_VRAPI_PADDING_32_BIT( 4 )
 
 	ovrRigidBodyPosef		HeadPose;
 
@@ -1029,6 +1041,7 @@ typedef struct ovrLayerCube2_
 {
 	/// Header.Type must be VRAPI_LAYER_TYPE_CUBE2.
 	ovrLayerHeader2			Header;
+	OVR_VRAPI_PADDING_32_BIT( 4 )
 
 	ovrRigidBodyPosef		HeadPose;
 	ovrMatrix4f				TexCoordsFromTanAngles;
@@ -1041,6 +1054,9 @@ typedef struct ovrLayerCube2_
 		ovrTextureSwapChain * ColorSwapChain;
 		int					SwapChainIndex;
 	} Textures[VRAPI_FRAME_LAYER_EYE_MAX];
+#ifdef __i386__
+	uint32_t			Padding;
+#endif
 } ovrLayerCube2;
 
 OVR_VRAPI_ASSERT_TYPE_SIZE_32_BIT( ovrLayerCube2, 232 );
@@ -1066,6 +1082,7 @@ typedef struct ovrLayerEquirect2_
 {
 	/// Header.Type must be VRAPI_LAYER_TYPE_EQUIRECT2.
 	ovrLayerHeader2			Header;
+	OVR_VRAPI_PADDING_32_BIT( 4 )
 
 	ovrRigidBodyPosef		HeadPose;
 	ovrMatrix4f				TexCoordsFromTanAngles;

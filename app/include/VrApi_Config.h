@@ -86,7 +86,7 @@ OVR_VRAPI_ASSERT_TYPE_SIZE_64_BIT( type, bytes )	// assert the size of a type on
 	#define OVR_VRAPI_PADDING( bytes )						OVR_VRAPI_PADDING_ID( bytes, __LINE__ )
 #endif
 #define OVR_VRAPI_PADDING_ID( bytes, id )					OVR_VRAPI_PADDING_ID_EXPANDED( bytes, id )
-#define OVR_VRAPI_PADDING_ID_EXPANDED( bytes, id )			unsigned char dead##id[(bytes)]
+#define OVR_VRAPI_PADDING_ID_EXPANDED( bytes, id )			unsigned char dead##id[(bytes)];
 
 #define OVR_VRAPI_ASSERT_TYPE_SIZE( type, bytes	)			OVR_VRAPI_STATIC_ASSERT( sizeof( type ) == (bytes) )
 
@@ -97,7 +97,7 @@ OVR_VRAPI_ASSERT_TYPE_SIZE_64_BIT( type, bytes )	// assert the size of a type on
 	#else
 		#define OVR_VRAPI_PADDING_64_BIT( bytes )				OVR_VRAPI_PADDING_ID( bytes, __LINE__ )
 	#endif
-	#define OVR_VRAPI_ASSERT_TYPE_SIZE_32_BIT( type, bytes	)
+	#define OVR_VRAPI_ASSERT_TYPE_SIZE_32_BIT( type, bytes	)	OVR_VRAPI_STATIC_ASSERT( true )
 	#define OVR_VRAPI_ASSERT_TYPE_SIZE_64_BIT( type, bytes	)	OVR_VRAPI_STATIC_ASSERT( sizeof( type ) == (bytes) )
 #else
 	#define OVR_VRAPI_ASSERT_TYPE_SIZE( type, bytes )			OVR_VRAPI_STATIC_ASSERT( sizeof( type ) == (bytes) )
@@ -108,7 +108,7 @@ OVR_VRAPI_ASSERT_TYPE_SIZE_64_BIT( type, bytes )	// assert the size of a type on
 	#endif
 	#define OVR_VRAPI_PADDING_64_BIT( bytes )
 	#define OVR_VRAPI_ASSERT_TYPE_SIZE_32_BIT( type, bytes	)	OVR_VRAPI_STATIC_ASSERT( sizeof( type ) == (bytes) )
-	#define OVR_VRAPI_ASSERT_TYPE_SIZE_64_BIT( type, bytes	)
+	#define OVR_VRAPI_ASSERT_TYPE_SIZE_64_BIT( type, bytes	)	OVR_VRAPI_STATIC_ASSERT( true )
 #endif
 
 #endif	// !OVR_VrApi_Config_h	

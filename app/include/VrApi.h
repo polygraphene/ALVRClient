@@ -736,7 +736,13 @@ OVR_VRAPI_EXPORT ovrTextureSwapChain * vrapi_CreateTextureSwapChain( ovrTextureT
 /// the default size of the image buffers.
 /// Note that the image producer may override the buffer size, in which case the default values provided
 /// here will not be used (ie both video decompression or camera preview override the size automatically).
+///
+/// If isProtected is true, the surface swapchain will be created as a protected surface, ie for supporting
+/// secure video playback.
+///
+/// NOTE: These paths are not currently supported under Vulkan.
 OVR_VRAPI_EXPORT ovrTextureSwapChain * vrapi_CreateAndroidSurfaceSwapChain( int width, int height );
+OVR_VRAPI_EXPORT ovrTextureSwapChain * vrapi_CreateAndroidSurfaceSwapChain2( int width, int height, bool isProtected );
 
 
 /// Destroy the given texture swap chain.
@@ -753,9 +759,11 @@ OVR_VRAPI_EXPORT unsigned int vrapi_GetTextureSwapChainHandle( ovrTextureSwapCha
 /// Get the Android Surface object associated with the swap chain.
 OVR_VRAPI_EXPORT jobject vrapi_GetTextureSwapChainAndroidSurface( ovrTextureSwapChain * chain );
 
+
 //-----------------------------------------------------------------
 // Frame Submission
 //-----------------------------------------------------------------
+
 
 /// Accepts new eye images plus poses that will be used for future warps.
 /// The parms are copied, and are not referenced after the function returns.
