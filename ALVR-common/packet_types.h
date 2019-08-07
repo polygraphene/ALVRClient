@@ -207,8 +207,6 @@ struct TrackingInfo {
 		static const uint32_t FLAG_CONTROLLER_OCULUS_GO      = (1 << 3);
 		static const uint32_t FLAG_CONTROLLER_OCULUS_QUEST   = (1 << 4);
 		uint32_t flags;
-		uint32_t deviceIndex = -1;
-
 		uint64_t buttons;
 
 		struct {
