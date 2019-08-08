@@ -126,7 +126,6 @@ private:
 
     void setInitialRefreshRate(int initialRefreshRate);
 
-    void setRotatedVector(ovrVector3f *input, TrackingVector3 *target, ovrMatrix4f *rotation);
 
     void onVrModeChange();
     void enterVrMode();

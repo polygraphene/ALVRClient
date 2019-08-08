@@ -267,82 +267,9 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
 
             }
             controller++;
-        } else if (curCaps.Type == ovrControllerType_Headset) {
-            // Gear VR Headset
-            ovrInputHeadsetCapabilities capabilities;
-            capabilities.Header = curCaps;
-            result = vrapi_GetInputDeviceCapabilities(Ovr, &capabilities.Header);
-            if (result == ovrSuccess) {
-                LOG("Device(Headset) %d: Type=%d ID=%d Cap=%08X Buttons=%08X Max=%d,%d Size=%f,%f",
-                    deviceIndex, curCaps.Type, curCaps.DeviceID,
-                    capabilities.ControllerCapabilities, capabilities.ButtonCapabilities,
-                    capabilities.TrackpadMaxX, capabilities.TrackpadMaxY,
-                    capabilities.TrackpadSizeX, capabilities.TrackpadSizeY);
-
-                ovrInputStateHeadset remoteInputState;
-                remoteInputState.Header.ControllerType = capabilities.Header.Type;
-                result = vrapi_GetCurrentInputState(Ovr,
-                                                    capabilities.Header.DeviceID,
-                                                    &remoteInputState.Header);
-
-                if (result == ovrSuccess) {
-                    float normalized_x =
-                            remoteInputState.TrackpadPosition.x / capabilities.TrackpadMaxX;
-                    float normalized_y =
-                            remoteInputState.TrackpadPosition.y / capabilities.TrackpadMaxY;
-                    LOG("Headset trackpad: status=%d %f, %f (%f, %f) (%08X)",
-                        remoteInputState.TrackpadStatus, remoteInputState.TrackpadPosition.x,
-                        remoteInputState.TrackpadPosition.y, normalized_x, normalized_y,
-                        remoteInputState.Buttons);
-
-                    // Change overlay mode and height on AR mode by the trackpad of headset.
-                    if (m_ARMode) {
-                        if (previousHeadsetTrackpad && remoteInputState.TrackpadStatus != 0) {
-                            position_offset_y += (normalized_y - previousHeadsetY) * 2.0f;
-                            LOG("Changing position_offset_y: %f", position_offset_y);
-                        }
-
-                        if (previousHeadsetTrackpad && remoteInputState.TrackpadStatus == 0) {
-                            if (normalized_x < 0.4) {
-                                if (g_AROverlayMode > 0) {
-                                    g_AROverlayMode--;
-                                } else {
-                                    g_AROverlayMode = 3;
-                                }
-                                LOG("Changing AROverlayMode. New=%d", g_AROverlayMode);
-                            }
-                            if (normalized_x > 0.6) {
-                                if (g_AROverlayMode < 3) {
-                                    g_AROverlayMode++;
-                                } else {
-                                    g_AROverlayMode = 0;
-                                }
-                                LOG("Changing AROverlayMode. New=%d", g_AROverlayMode);
-                            }
-                        }
-                    }
-
-                    previousHeadsetTrackpad = remoteInputState.TrackpadStatus != 0;
-                    previousHeadsetY = normalized_y;
-                }
-            }
         }
     }
 }
-void OvrContext::setRotatedVector(ovrVector3f *input, TrackingVector3 *target, ovrMatrix4f *rotation) {
-    ovrVector4f v;
-    v.x = input->x;
-    v.y = input->y;
-    v.z = input->z;
-    v.w = 1;
-
-    ovrVector4f rotated = ovrVector4f_MultiplyMatrix4f(rotation, &v);
-
-    target->x = rotated.x;
-    target->y = rotated.y;
-    target->z = rotated.z;
-}
-
 
 uint64_t OvrContext::mapButtons(ovrInputTrackedRemoteCapabilities *remoteCapabilities,
                                 ovrInputStateTrackedRemote *remoteInputState) {
@@ -442,6 +369,7 @@ void OvrContext::sendTrackingInfo(TrackingInfo *packet, double displayTime, ovrT
     memcpy(&packet->HeadPose_Pose_Orientation, &tracking->HeadPose.Pose.Orientation,
            sizeof(ovrQuatf));
     memcpy(&packet->HeadPose_Pose_Position, &tracking->HeadPose.Pose.Position, sizeof(ovrVector3f));
+
 
     if (other_tracking_position && other_tracking_orientation) {
         packet->flags |= TrackingInfo::FLAG_OTHER_TRACKING_SOURCE;
