@@ -28,8 +28,7 @@ public:
     void render(uint64_t renderedFrameIndex);
     void renderLoading();
 
-    void fetchTrackingInfo(JNIEnv *env_, jobject udpReceiverThread,
-                           ovrVector3f *position, ovrQuatf *orientation);
+    void sendTrackingInfo(JNIEnv *env_, jobject udpReceiverThread);
 
     void setFrameGeometry(int width, int height);
 
@@ -116,13 +115,11 @@ private:
 
     // Previous trigger button state.
     bool mButtonPressed;
-
-    void setControllerInfo(TrackingInfo *packet, double displayTime);
     uint64_t mapButtons(ovrInputTrackedRemoteCapabilities *remoteCapabilities, ovrInputStateTrackedRemote *remoteInputState);
 
-    void sendTrackingInfo(TrackingInfo *packet, double displayTime, ovrTracking2 *tracking,
-                          const ovrVector3f *other_tracking_position,
-                          const ovrQuatf *other_tracking_orientation);
+    void setControllerInfo(TrackingInfo *packet, double displayTime);
+
+    void setTrackingInfo(TrackingInfo *packet, double displayTime, ovrTracking2 *tracking  );
 
     void setInitialRefreshRate(int initialRefreshRate);
 

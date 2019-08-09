@@ -72,7 +72,7 @@ class OvrThread {
             mLauncherSocket = new LauncherSocket(mLauncherSocketCallback);
             mLauncherSocket.listen();
 
-            mReceiverThread = new UdpReceiverThread(mUdpReceiverCallback);
+            mReceiverThread = new UdpReceiverThread(mUdpReceiverConnectionListener);
 
             PersistentConfig.ConnectionState connectionState = new PersistentConfig.ConnectionState();
             PersistentConfig.loadConnectionState(mActivity, connectionState);
@@ -237,7 +237,7 @@ class OvrThread {
         }
     }
 
-    private UdpReceiverThread.Callback mUdpReceiverCallback = new UdpReceiverThread.Callback() {
+    private UdpReceiverThread.ConnectionListener mUdpReceiverConnectionListener = new UdpReceiverThread.ConnectionListener() {
         @Override
         public void onConnected(final int width, final int height, final int codec, final int frameQueueSize, final int refreshRate) {
             // We must wait completion of notifyGeometryChange
@@ -266,9 +266,9 @@ class OvrThread {
         }
 
         @Override
-        public void onTracking(float[] position, float[] orientation) {
+        public void onTracking() {
             if (mOvrContext.isVrMode()) {
-                mOvrContext.fetchTrackingInfo(mReceiverThread, position, orientation);
+                mOvrContext.sendTrackingInfo(mReceiverThread);
             }
         }
 

@@ -11,7 +11,7 @@ class TrackingThread extends ThreadBase
     private static final String TAG = "TrackingThread";
     private int mRefreshRate = 72*3;
     interface TrackingCallback {
-        void onTracking(float[] position, float[] orientation);
+        void onTracking();
     }
 
     private TrackingCallback mCallback;
@@ -55,7 +55,7 @@ class TrackingThread extends ThreadBase
     public void run() {
         long previousFetchTime = System.nanoTime();
         while (!isStopped()) {
-            mCallback.onTracking(null, null);
+            mCallback.onTracking();
             try {
                 previousFetchTime += 1000 * 1000 * 1000 / mRefreshRate;
                 long next = previousFetchTime - System.nanoTime();

@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 
-class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCallback
+class UdpReceiverThread extends ThreadBase
 {
     private static final String TAG = "UdpReceiverThread";
 
@@ -33,7 +33,7 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
     private String mPreviousServerAddress;
     private int mPreviousServerPort;
 
-    interface Callback {
+    interface ConnectionListener {
         void onConnected(int width, int height, int codec, int frameQueueSize, int refreshRate);
 
         void onChangeSettings(int suspend, int frameQueueSize);
@@ -42,12 +42,12 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
 
         void onDisconnect();
 
-        void onTracking(float[] position, float[] orientation);
+        void onTracking();
 
         void onHapticsFeedback(long startTime, float amplitude, float duration, float frequency, boolean hand);
     }
 
-    private Callback mCallback;
+    private ConnectionListener mConnectionListener;
 
     public interface NALCallback {
         NAL obtainNAL(int length);
@@ -59,9 +59,9 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
     private long mNativeHandle = 0;
     private final Object mWaiter = new Object();
 
-    UdpReceiverThread(Callback callback)
+    UdpReceiverThread(ConnectionListener connectionListener)
     {
-        mCallback = callback;
+        mConnectionListener = connectionListener;
     }
 
     private String getDeviceName()
@@ -94,7 +94,11 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
     public boolean start(EGLContext mEGLContext, Activity activity, DeviceDescriptor deviceDescriptor, int cameraTexture, NALCallback nalCallback)
     {
         mTrackingThread = new TrackingThread();
-        mTrackingThread.setCallback(this);
+        mTrackingThread.setCallback(() -> {
+            if (isConnectedNative(mNativeHandle)) {
+                mConnectionListener.onTracking();
+            }
+        });
 
         mDeviceDescriptor = deviceDescriptor;
 
@@ -157,7 +161,7 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
 
             runLoop(mNativeHandle, mPreviousServerAddress, mPreviousServerPort);
         } finally {
-            mCallback.onShutdown(getServerAddress(mNativeHandle), getServerPort(mNativeHandle));
+            mConnectionListener.onShutdown(getServerAddress(mNativeHandle), getServerPort(mNativeHandle));
             closeSocket(mNativeHandle);
             mNativeHandle = 0;
         }
@@ -208,13 +212,6 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
         return ret.toArray(new String[]{});
     }
 
-    @Override
-    public void onTracking(float[] position, float[] orientation)
-    {
-        if (isConnectedNative(mNativeHandle)) {
-            mCallback.onTracking(position, orientation);
-        }
-    }
 
 //    public String getErrorMessage() {
 //        return mTrackingThread.getErrorMessage();
@@ -228,14 +225,14 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
     @SuppressWarnings("unused")
     public void onConnected(int width, int height, int codec, int frameQueueSize, int refreshRate) {
         Utils.logi(TAG, () -> "onConnected is called.");
-        mCallback.onConnected(width, height, codec, frameQueueSize, refreshRate);
+        mConnectionListener.onConnected(width, height, codec, frameQueueSize, refreshRate);
         mTrackingThread.onConnect();
     }
 
     @SuppressWarnings("unused")
     public void onDisconnected() {
         Utils.logi(TAG, () -> "onDisconnected is called.");
-        mCallback.onDisconnect();
+        mConnectionListener.onDisconnect();
         mTrackingThread.onDisconnect();
     }
 
@@ -243,12 +240,12 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
     public void onChangeSettings(long debugFlags, int suspend, int frameQueueSize) {
         PersistentConfig.sDebugFlags = debugFlags;
         PersistentConfig.saveCurrentConfig();
-        mCallback.onChangeSettings(suspend, frameQueueSize);
+        mConnectionListener.onChangeSettings(suspend, frameQueueSize);
     }
 
     @SuppressWarnings("unused")
     public void onHapticsFeedback(long startTime, float amplitude, float duration, float frequency, boolean hand) {
-        mCallback.onHapticsFeedback(startTime, amplitude, duration, frequency, hand);
+        mConnectionListener.onHapticsFeedback(startTime, amplitude, duration, frequency, hand);
     }
 
     @SuppressWarnings("unused")

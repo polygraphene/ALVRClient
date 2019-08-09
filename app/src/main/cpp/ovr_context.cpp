@@ -353,9 +353,7 @@ uint64_t OvrContext::mapButtons(ovrInputTrackedRemoteCapabilities *remoteCapabil
 
 
 // Called TrackingThread. So, we can't use this->env.
-void OvrContext::sendTrackingInfo(TrackingInfo *packet, double displayTime, ovrTracking2 *tracking,
-                                  const ovrVector3f *other_tracking_position,
-                                  const ovrQuatf *other_tracking_orientation) {
+void OvrContext::setTrackingInfo(TrackingInfo *packet, double displayTime, ovrTracking2 *tracking) {
     memset(packet, 0, sizeof(TrackingInfo));
 
     uint64_t clientTime = getTimestampUs();
@@ -371,22 +369,13 @@ void OvrContext::sendTrackingInfo(TrackingInfo *packet, double displayTime, ovrT
     memcpy(&packet->HeadPose_Pose_Position, &tracking->HeadPose.Pose.Position, sizeof(ovrVector3f));
 
 
-    if (other_tracking_position && other_tracking_orientation) {
-        packet->flags |= TrackingInfo::FLAG_OTHER_TRACKING_SOURCE;
-        memcpy(&packet->Other_Tracking_Source_Position, other_tracking_position,
-               sizeof(ovrVector3f));
-        memcpy(&packet->Other_Tracking_Source_Orientation, other_tracking_orientation,
-               sizeof(ovrQuatf));
-    }
-
     setControllerInfo(packet, displayTime);
 
     FrameLog(FrameIndex, "Sending tracking info.");
 }
 
 // Called TrackingThread. So, we can't use this->env.
-void OvrContext::fetchTrackingInfo(JNIEnv *env_, jobject udpReceiverThread, ovrVector3f *position,
-                                   ovrQuatf *orientation) {
+void OvrContext::sendTrackingInfo(JNIEnv *env_, jobject udpReceiverThread) {
     std::shared_ptr<TrackingFrame> frame(new TrackingFrame());
 
     FrameIndex++;
@@ -414,26 +403,8 @@ void OvrContext::fetchTrackingInfo(JNIEnv *env_, jobject udpReceiverThread, ovrV
     }
 
     TrackingInfo info;
-    if (position != nullptr) {
-        // AR mode
+    setTrackingInfo(&info, frame->displayTime, &frame->tracking);
 
-        // Rotate PI/2 around (0, 0, -1)
-        // Orientation provided by ARCore is portrait mode orientation.
-        ovrQuatf quat;
-        quat.x = 0;
-        quat.y = 0;
-        quat.z = -sqrtf(0.5);
-        quat.w = sqrtf(0.5);
-        ovrQuatf orientation_rotated = quatMultipy(orientation, &quat);
-
-        position->y += position_offset_y;
-
-        sendTrackingInfo(&info, frame->displayTime, &frame->tracking, position,
-                         &orientation_rotated);
-    } else {
-        // Non AR
-        sendTrackingInfo(&info, frame->displayTime, &frame->tracking, nullptr, nullptr);
-    }
     LatencyCollector::Instance().tracking(frame->frameIndex);
 
     env_->CallVoidMethod(udpReceiverThread, mUdpReceiverThread_send, reinterpret_cast<jlong>(&info),
@@ -1054,27 +1025,11 @@ Java_com_polygraphene_alvr_OvrContext_renderLoadingNative(JNIEnv *env, jobject i
 // Called from TrackingThread
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_polygraphene_alvr_OvrContext_fetchTrackingInfoNative(JNIEnv *env, jobject instance,
+Java_com_polygraphene_alvr_OvrContext_sendTrackingInfoNative(JNIEnv *env, jobject instance,
                                                               jlong handle,
-                                                              jobject udpReceiverThread,
-                                                              jfloatArray position_,
-                                                              jfloatArray orientation_) {
-    if (position_ != nullptr && orientation_ != nullptr) {
-        ovrVector3f position;
-        ovrQuatf orientation;
-
-        jfloat *position_c = env->GetFloatArrayElements(position_, nullptr);
-        memcpy(&position, position_c, sizeof(float) * 3);
-        env->ReleaseFloatArrayElements(position_, position_c, 0);
-
-        jfloat *orientation_c = env->GetFloatArrayElements(orientation_, nullptr);
-        memcpy(&orientation, orientation_c, sizeof(float) * 4);
-        env->ReleaseFloatArrayElements(orientation_, orientation_c, 0);
-
-        ((OvrContext *) handle)->fetchTrackingInfo(env, udpReceiverThread, &position, &orientation);
-    } else {
-        ((OvrContext *) handle)->fetchTrackingInfo(env, udpReceiverThread, nullptr, nullptr);
-    }
+                                                              jobject udpReceiverThread
+                                                             ) {
+        ((OvrContext *) handle)->sendTrackingInfo(env, udpReceiverThread);
 }
 
 extern "C"

@@ -48,8 +48,8 @@ public class OvrContext {
         renderLoadingNative(handle);
     }
 
-    public void fetchTrackingInfo(UdpReceiverThread udpReceiverThread, float[] position, float[] orientation) {
-        fetchTrackingInfoNative(handle, udpReceiverThread, position, orientation);
+    public void sendTrackingInfo(UdpReceiverThread udpReceiverThread) {
+        sendTrackingInfoNative(handle, udpReceiverThread);
     }
 
     public void onChangeSettings(int suspend) {
@@ -103,7 +103,7 @@ public class OvrContext {
     private native void onSurfaceDestroyedNative(long handle);
     private native void renderNative(long handle, long renderedFrameIndex);
     private native void renderLoadingNative(long handle);
-    private native void fetchTrackingInfoNative(long handle, UdpReceiverThread udpReceiverThread, float[] position, float[] orientation);
+    private native void sendTrackingInfoNative(long handle, UdpReceiverThread udpReceiverThread);
 
     private native void onChangeSettingsNative(long handle, int suspend);
 
