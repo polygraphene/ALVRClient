@@ -112,10 +112,11 @@ void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager,
                         GL_CLAMP_TO_EDGE);
     }
 
-    FrameBufferWidth = vrapi_GetSystemPropertyInt(&java,
-                                                  VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_WIDTH);
-    FrameBufferHeight = vrapi_GetSystemPropertyInt(&java,
-                                                   VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_HEIGHT);
+    //use the quest panel resolution and not the downscaled suggestion
+    FrameBufferWidth = 1440;//vrapi_GetSystemPropertyInt(&java,VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_WIDTH);
+    FrameBufferHeight = 1600;//vrapi_GetSystemPropertyInt(&java,VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_HEIGHT);
+
+
     ovrRenderer_Create(&Renderer, UseMultiview, FrameBufferWidth, FrameBufferHeight,
                        SurfaceTextureID, loadingTexture, CameraTexture, m_ARMode);
     ovrRenderer_CreateScene(&Renderer);
@@ -712,11 +713,9 @@ void OvrContext::leaveVrMode() {
 
 // Fill device descriptor.
 void OvrContext::getDeviceDescriptor(JNIEnv *env, jobject deviceDescriptor) {
-    int renderWidth = vrapi_GetSystemPropertyInt(&java,
-                                                 VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_WIDTH);
+    int renderWidth = 1440;//vrapi_GetSystemPropertyInt(&java,VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_WIDTH);
     renderWidth *= 2;
-    int renderHeight = vrapi_GetSystemPropertyInt(&java,
-                                                  VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_HEIGHT);
+    int renderHeight = 1600;//vrapi_GetSystemPropertyInt(&java,VRAPI_SYS_PROP_SUGGESTED_EYE_TEXTURE_HEIGHT);
 
     int deviceType = ALVR_DEVICE_TYPE_OCULUS_MOBILE;
     int deviceSubType = 0;
