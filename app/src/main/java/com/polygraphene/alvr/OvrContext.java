@@ -84,6 +84,10 @@ public class OvrContext {
         setRefreshRateNative(handle, refreshRate);
     }
 
+    public void setStreamMic(boolean streamMic) {
+        setStreamMicNative(handle, streamMic);
+    }
+
     public void onHapticsFeedback(long startTime, float amplitude, float duration, float frequency, boolean hand) {
         onHapticsFeedbackNative(handle, startTime, amplitude, duration, frequency, hand);
     }
@@ -116,6 +120,7 @@ public class OvrContext {
 
     private native void setFrameGeometryNative(long handle, int width, int height);
     private native void setRefreshRateNative(long handle, int refreshRate);
+    private native void setStreamMicNative(long handle, boolean streamMic);
     private native void onHapticsFeedbackNative(long handle, long startTime, float amplitude, float duration, float frequency, boolean hand);
 
     private native boolean getButtonDownNative(long handle);

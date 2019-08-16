@@ -161,6 +161,7 @@ struct ConnectionMessage {
 	uint32_t bufferSize; // in bytes
 	uint32_t frameQueueSize;
 	uint8_t refreshRate;
+	bool streamMic;
 };
 struct RecoverConnection {
 	uint32_t type; // ALVR_PACKET_TYPE_RECOVER_CONNECTION

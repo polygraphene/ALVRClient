@@ -370,7 +370,7 @@ void UdpManager::onConnect(const ConnectionMessage &connectionMessage) {
 
     m_env->CallVoidMethod(m_instance, mOnConnectMethodID, m_connectionMessage.videoWidth
             , m_connectionMessage.videoHeight, m_connectionMessage.codec
-            , m_connectionMessage.frameQueueSize, m_connectionMessage.refreshRate);
+            , m_connectionMessage.frameQueueSize, m_connectionMessage.refreshRate, m_connectionMessage.streamMic);
 
     if (mSinkPrepared) {
         LOGSOCKETI("onConnect: Send stream start packet.");

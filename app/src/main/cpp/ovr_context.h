@@ -10,6 +10,7 @@
 #include "render.h"
 #include "utils.h"
 #include "UdpManager.h"
+#include "OVR_Platform.h"
 
 uint32_t ovrButton_Unknown1 = 0x01000000;
 
@@ -52,16 +53,27 @@ public:
 
     bool getButtonDown();
 
+    void micDataCallback(void* userdata);
+
+    void setStreamMic(bool streamMic);
+
 private:
     ANativeWindow *window = NULL;
     ovrMobile *Ovr;
     ovrJava java;
     JNIEnv *env;
 
+
+    int16_t* micBuffer;
+    bool mStreamMic;
+
+    ovrMicrophoneHandle mMicHandle;
+
     ovrVector3f lastControllerPos[2];
     double lastStateTime = 0;
 
     jobject mVrThread = nullptr;
+    jobject mUdpReceiverThread = nullptr;
 
     bool UseMultiview = true;
     GLuint SurfaceTextureID = 0;

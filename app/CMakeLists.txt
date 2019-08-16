@@ -4,6 +4,7 @@
 # Sets the minimum version of CMake required to build the native library.
 
 cmake_minimum_required(VERSION 3.4.1)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)
 
 # Creates and names a library, sets it as either STATIC
 # or SHARED, and provides the relative paths to its source code.
@@ -49,10 +50,18 @@ add_library( # Sets the name of the library.
 find_library( # Sets the name of the path variable.
               log-lib
 
+
               # Specifies the name of the NDK library that
               # you want CMake to locate.
               log
 )
+
+find_library(OVR_LIBRARY
+        libovrplatformloader.so
+        PATHS src/main/jniLibs/${ANDROID_ABI})
+if (NOT OVR_LIBRARY)
+    message(FATAL_ERROR "OVR lib not found!")
+endif()
 
 # Specifies libraries CMake should link to your target library. You
 # can link multiple libraries, such as libraries you define in this
@@ -64,12 +73,13 @@ target_link_libraries( # Specifies the target library.
                        # Links the target library to the log library
                        # included in the NDK.
                        ${log-lib}
-
                        ${VRLIBS}
                        GLESv3
                        EGL
                        android
-                       OpenSLES)
+                       OpenSLES
+                         libovrplatformloader.so
+        )
 
 include_directories(include)
 include_directories(../ALVR-common)

@@ -22,7 +22,13 @@
 #include "packet_types.h"
 #include "UdpManager.h"
 #include "asset.h"
+#include <inttypes.h>
 
+
+
+void micCB(void* userdata) {
+    ((OvrContext*)userdata)->micDataCallback(userdata);
+}
 
 void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager, jobject vrThread,
                             bool ARMode, int initialRefreshRate) {
@@ -128,6 +134,42 @@ void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager,
     env->DeleteLocalRef(clazz);
 
     memset(mHapticsState, 0, sizeof(mHapticsState));
+
+
+    ovrPlatformInitializeResult res = ovr_PlatformInitializeAndroid("", activity, env);
+
+    LOGI("ovrPlatformInitializeResult %s", ovrPlatformInitializeResult_ToString(res));
+
+
+    ovrRequest req;
+    req = ovr_User_GetLoggedInUser();
+
+
+    LOGI("Logged in user is %" PRIu64  "\n", req);
+
+    //init mic
+    mMicHandle = ovr_Microphone_Create();
+    ovr_Microphone_Start(mMicHandle);
+
+
+
+
+    size_t maxElements = ovr_Microphone_GetOutputBufferMaxSize(mMicHandle);
+    LOGI("Mic_maxElements %zu", maxElements);
+
+    micBuffer = new int16_t[maxElements];
+    MicrophoneDataAvailableCallback cb = &micCB;
+    ovr_Microphone_SetAudioDataAvailableCallback(mMicHandle,cb, this);
+
+
+}
+
+void OvrContext::micDataCallback(void* userdata) {
+    if(Resumed && mStreamMic) {
+        size_t outputBufferNumElements;
+        ovr_Microphone_GetPCM(mMicHandle, micBuffer, outputBufferNumElements);
+        LOGI("Mic_elements %zu", outputBufferNumElements);
+    }
 }
 
 
@@ -142,12 +184,20 @@ void OvrContext::destroy(JNIEnv *env) {
         glDeleteTextures(1, &CameraTexture);
     }
 
+    if (mMicHandle){
+        ovr_Microphone_Destroy(mMicHandle);
+    }
+
     eglDestroy();
 
     vrapi_Shutdown();
 
     env->DeleteGlobalRef(mVrThread);
     env->DeleteGlobalRef(java.ActivityObject);
+
+    free (micBuffer);
+
+
 }
 
 
@@ -458,12 +508,20 @@ void OvrContext::onResume() {
     LOG("onResume called. Resumed=%d Window=%p Ovr=%p", Resumed, window, Ovr);
     Resumed = true;
     onVrModeChange();
+
+    if(mMicHandle && mStreamMic) {
+        ovr_Microphone_Start(mMicHandle);
+    }
 }
 
 void OvrContext::onPause() {
     LOG("onPause called. Resumed=%d Window=%p Ovr=%p", Resumed, window, Ovr);
     Resumed = false;
     onVrModeChange();
+
+    if(mMicHandle && mStreamMic) {
+        ovr_Microphone_Stop(mMicHandle);
+    }
 }
 
 void OvrContext::render(uint64_t renderedFrameIndex) {
@@ -636,6 +694,11 @@ void OvrContext::setRefreshRate(int refreshRate, bool forceChange) {
     }
 }
 
+void OvrContext::setStreamMic(bool streamMic) {
+    mStreamMic = streamMic;
+}
+
+
 void OvrContext::setInitialRefreshRate(int initialRefreshRate) {
     setRefreshRate(initialRefreshRate, false);
 }
@@ -671,9 +734,9 @@ void OvrContext::enterVrMode() {
         return;
     }
 
-    LOG("Setting refresh rate. %d Hz", m_currentRefreshRate);
+    LOGI("Setting refresh rate. %d Hz", m_currentRefreshRate);
     ovrResult result = vrapi_SetDisplayRefreshRate(Ovr, m_currentRefreshRate);
-    LOG("vrapi_SetDisplayRefreshRate: Result=%d", result);
+    LOGI("vrapi_SetDisplayRefreshRate: Result=%d", result);
 
     int CpuLevel = 3;
     int GpuLevel = 3;
@@ -1103,6 +1166,13 @@ JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_OvrContext_setRefreshRateNative(JNIEnv *env, jobject instance,
                                                            jlong handle, jint refreshRate) {
     return ((OvrContext *) handle)->setRefreshRate(refreshRate);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_polygraphene_alvr_OvrContext_setStreamMicNative(JNIEnv *env, jobject instance,
+                                                           jlong handle, jboolean streamMic) {
+    return ((OvrContext *) handle)->setStreamMic(streamMic);
 }
 
 extern "C"
