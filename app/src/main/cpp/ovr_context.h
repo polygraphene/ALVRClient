@@ -19,6 +19,8 @@ public:
     void initialize(JNIEnv *env, jobject activity, jobject assetManager, jobject vrThread, bool ARMode, int initialRefreshRate);
     void destroy(JNIEnv *env);
 
+    void setUdpReceiverThread(jobject udpReceiverThread);
+
     void onChangeSettings(int Suspend);
     void onSurfaceCreated(jobject surface);
     void onSurfaceDestroyed();
@@ -66,6 +68,7 @@ private:
 
     int16_t* micBuffer;
     bool mStreamMic;
+    size_t mMicMaxElements;
 
     ovrMicrophoneHandle mMicHandle;
 

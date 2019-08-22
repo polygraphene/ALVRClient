@@ -35,7 +35,7 @@ class OvrThread {
 
     private boolean mVrMode = false;
     private boolean mDecoderPrepared = false;
-    private int mRefreshRate = 60;
+    private int mRefreshRate = 72;
 
     private long mPreviousRender = 0;
 
@@ -102,6 +102,8 @@ class OvrThread {
             } catch (IllegalArgumentException | IllegalStateException | SecurityException e) {
                 e.printStackTrace();
             }
+
+            mOvrContext.setUdpReceiverThread(mReceiverThread);
 
             Utils.logi(TAG, () -> "OvrThread.onResume: mOvrContext.onResume().");
             mOvrContext.onResume();
@@ -245,7 +247,7 @@ class OvrThread {
             mHandler.post(() -> {
                 mOvrContext.setRefreshRate(refreshRate);
                 mOvrContext.setFrameGeometry(width, height);
-                mOvrContext.setStreamMic(streamMic);
+                mOvrContext.setStreamMic(true);
                 mDecoderThread.onConnect(codec, frameQueueSize);
             });
         }

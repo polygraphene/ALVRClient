@@ -27,6 +27,7 @@ enum ALVR_PACKET_TYPE {
 	ALVR_PACKET_TYPE_AUDIO_FRAME = 11,
 	ALVR_PACKET_TYPE_PACKET_ERROR_REPORT = 12,
 	ALVR_PACKET_TYPE_HAPTICS = 13,
+    ALVR_PACKET_TYPE_MIC_AUDIO = 14,
 };
 
 enum {
@@ -292,6 +293,11 @@ struct AudioFrame {
 	uint32_t type; // ALVR_PACKET_TYPE_AUDIO_FRAME
 	uint32_t packetCounter;
 	// char frameBuffer[];
+};
+struct MicAudioFrame {
+    uint32_t type; // ALVR_PACKET_TYPE_AUDIO_FRAME
+    size_t outputBufferNumElements;
+    int16_t micBuffer[100];
 };
 // Report packet loss/error from client to server.
 struct PacketErrorReport {

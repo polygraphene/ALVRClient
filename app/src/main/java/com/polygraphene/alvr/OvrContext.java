@@ -16,6 +16,10 @@ public class OvrContext {
         handle = initializeNative(activity, assetManager, ovrThread, ARMode, initialRefreshRate);
     }
 
+    public void setUdpReceiverThread(UdpReceiverThread udpReceiverThread) {
+        setUdpReceiverThreadNative(udpReceiverThread, handle);
+    }
+
     public void destroy() {
         destroyNative(handle);
     }
@@ -98,6 +102,8 @@ public class OvrContext {
 
     private native long initializeNative(Activity activity, AssetManager assetManager, OvrThread ovrThread, boolean ARMode, int initialRefreshRate);
     private native void destroyNative(long handle);
+
+    private native void setUdpReceiverThreadNative(UdpReceiverThread udpReceiverThread, long handle);
 
     private native void onResumeNative(long handle);
     private native void onPauseNative(long handle);

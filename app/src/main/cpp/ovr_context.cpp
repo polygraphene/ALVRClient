@@ -149,27 +149,48 @@ void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager,
 
     //init mic
     mMicHandle = ovr_Microphone_Create();
-    ovr_Microphone_Start(mMicHandle);
 
 
 
 
-    size_t maxElements = ovr_Microphone_GetOutputBufferMaxSize(mMicHandle);
-    LOGI("Mic_maxElements %zu", maxElements);
 
-    micBuffer = new int16_t[maxElements];
-    MicrophoneDataAvailableCallback cb = &micCB;
-    ovr_Microphone_SetAudioDataAvailableCallback(mMicHandle,cb, this);
+    mMicMaxElements = ovr_Microphone_GetOutputBufferMaxSize(mMicHandle);
+    LOGI("Mic_maxElements %zu", mMicMaxElements);
+
+    micBuffer = new int16_t[mMicMaxElements];
+   // MicrophoneDataAvailableCallback cb = &micCB;
+   // ovr_Microphone_SetAudioDataAvailableCallback(mMicHandle,cb, this);
 
 
 }
 
+void OvrContext::setUdpReceiverThread(jobject udpReceiverThread ) {
+     mUdpReceiverThread = udpReceiverThread;
+}
+
+
 void OvrContext::micDataCallback(void* userdata) {
-    if(Resumed && mStreamMic) {
-        size_t outputBufferNumElements;
-        ovr_Microphone_GetPCM(mMicHandle, micBuffer, outputBufferNumElements);
+        size_t outputBufferNumElements = ovr_Microphone_GetPCM(mMicHandle, micBuffer, mMicMaxElements);
         LOGI("Mic_elements %zu", outputBufferNumElements);
-    }
+
+
+
+      MicAudioFrame frame;
+      memset(&frame, 0, sizeof(MicAudioFrame));
+
+
+      frame.type = ALVR_PACKET_TYPE_MIC_AUDIO;
+      frame.outputBufferNumElements = outputBufferNumElements;
+
+      /*
+      memcpy(&frame.micBuffer,
+             micBuffer,
+             sizeof(int16_t) * outputBufferNumElements);
+*/
+
+      this->env->CallVoidMethod(mUdpReceiverThread, mUdpReceiverThread_send, reinterpret_cast<jlong>(&frame),
+                           static_cast<jint>(sizeof(frame)));
+
 }
 
 
@@ -194,8 +215,10 @@ void OvrContext::destroy(JNIEnv *env) {
 
     env->DeleteGlobalRef(mVrThread);
     env->DeleteGlobalRef(java.ActivityObject);
+    env->DeleteGlobalRef(mUdpReceiverThread);
 
-    free (micBuffer);
+
+    delete[] micBuffer;
 
 
 }
@@ -460,6 +483,46 @@ void OvrContext::sendTrackingInfo(JNIEnv *env_, jobject udpReceiverThread) {
 
     env_->CallVoidMethod(udpReceiverThread, mUdpReceiverThread_send, reinterpret_cast<jlong>(&info),
                          static_cast<jint>(sizeof(info)));
+
+
+
+    size_t outputBufferNumElements = ovr_Microphone_GetPCM(mMicHandle, micBuffer, mMicMaxElements);
+    if(outputBufferNumElements > 0) {
+        LOGI("Mic_elements %zu", outputBufferNumElements);
+
+        int count =0;
+
+        for (int i = 0; i <outputBufferNumElements; i+=100) {
+            int rest = outputBufferNumElements - count*100;
+
+            MicAudioFrame audio;
+            memset(&audio, 0, sizeof(MicAudioFrame));
+
+            audio.type = ALVR_PACKET_TYPE_MIC_AUDIO;
+
+            if(rest >= 100) {
+                audio.outputBufferNumElements = 100;
+            } else {
+                audio.outputBufferNumElements = rest;
+            }
+
+            memcpy(&audio.micBuffer + count*100,
+                   micBuffer,
+                   sizeof(int16_t) * audio.outputBufferNumElements);
+
+            LOGI("Sendig mic frame %d", count);
+
+            env_->CallVoidMethod(udpReceiverThread, mUdpReceiverThread_send,
+                                 reinterpret_cast<jlong>(&audio),
+                                 static_cast<jint>(sizeof(audio)));
+
+            count++;
+        }
+
+
+
+
+    }
 }
 
 
@@ -695,7 +758,17 @@ void OvrContext::setRefreshRate(int refreshRate, bool forceChange) {
 }
 
 void OvrContext::setStreamMic(bool streamMic) {
+    LOGI("Setting mic streaming %d", streamMic);
     mStreamMic = streamMic;
+    if(mMicHandle) {
+        if(mStreamMic) {
+            LOG("Starting mic");
+            ovr_Microphone_Start(mMicHandle);
+        } else {
+            ovr_Microphone_Stop(mMicHandle);
+        }
+    }
+
 }
 
 
@@ -1046,6 +1119,12 @@ extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_OvrContext_destroyNative(JNIEnv *env, jobject instance, jlong handle) {
     ((OvrContext *) handle)->destroy(env);
+}
+
+extern "C"
+JNIEXPORT jlong JNICALL
+Java_com_polygraphene_alvr_OvrContext_setUdpReceiverThreadNative(JNIEnv *env, jobject udpReceiverThread, jlong handle) {
+    ((OvrContext *) handle)->setUdpReceiverThread(udpReceiverThread);
 }
 
 

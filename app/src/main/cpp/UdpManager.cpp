@@ -532,7 +532,7 @@ void UdpManager::sendStreamStartPacket() {
 void UdpManager::initializeJNICallbacks(JNIEnv *env, jobject instance) {
     jclass clazz = env->GetObjectClass(instance);
 
-    mOnConnectMethodID = env->GetMethodID(clazz, "onConnected", "(IIIII)V");
+    mOnConnectMethodID = env->GetMethodID(clazz, "onConnected", "(IIIIIZ)V");
     mOnChangeSettingsMethodID = env->GetMethodID(clazz, "onChangeSettings", "(JII)V");
     mOnDisconnectedMethodID = env->GetMethodID(clazz, "onDisconnected", "()V");
     mOnHapticsFeedbackID = env->GetMethodID(clazz, "onHapticsFeedback", "(JFFFZ)V");
