@@ -488,7 +488,7 @@ void OvrContext::sendTrackingInfo(JNIEnv *env_, jobject udpReceiverThread) {
 
     size_t outputBufferNumElements = ovr_Microphone_GetPCM(mMicHandle, micBuffer, mMicMaxElements);
     if(outputBufferNumElements > 0) {
-        LOGI("Mic_elements %zu", outputBufferNumElements);
+        LOGI("Mic_elements %zu first val %"  SCNd16 " argh", outputBufferNumElements, micBuffer[0]);
 
         int count =0;
 
@@ -506,11 +506,11 @@ void OvrContext::sendTrackingInfo(JNIEnv *env_, jobject udpReceiverThread) {
                 audio.outputBufferNumElements = rest;
             }
 
-            memcpy(&audio.micBuffer + count*100,
-                   micBuffer,
+            memcpy(&audio.micBuffer ,
+                   micBuffer + count * 100,
                    sizeof(int16_t) * audio.outputBufferNumElements);
 
-            LOGI("Sendig mic frame %d", count);
+            LOGI("Sendig mic frame %d  %" SCNd16 "argh" , count, audio.micBuffer[audio.outputBufferNumElements - 1]);
 
             env_->CallVoidMethod(udpReceiverThread, mUdpReceiverThread_send,
                                  reinterpret_cast<jlong>(&audio),
