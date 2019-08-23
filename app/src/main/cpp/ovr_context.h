@@ -19,7 +19,6 @@ public:
     void initialize(JNIEnv *env, jobject activity, jobject assetManager, jobject vrThread, bool ARMode, int initialRefreshRate);
     void destroy(JNIEnv *env);
 
-    void setUdpReceiverThread(jobject udpReceiverThread);
 
     void onChangeSettings(int Suspend);
     void onSurfaceCreated(jobject surface);
@@ -32,6 +31,7 @@ public:
     void renderLoading();
 
     void sendTrackingInfo(JNIEnv *env_, jobject udpReceiverThread);
+    void sendMicData(JNIEnv *env_, jobject udpReceiverThread);
 
     void setFrameGeometry(int width, int height);
 
@@ -54,8 +54,6 @@ public:
     void onHapticsFeedback(uint64_t startTime, float amplitude, float duration, float frequency, int hand);
 
     bool getButtonDown();
-
-    void micDataCallback(void* userdata);
 
     void setStreamMic(bool streamMic);
 

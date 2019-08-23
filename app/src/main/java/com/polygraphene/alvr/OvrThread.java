@@ -103,8 +103,6 @@ class OvrThread {
                 e.printStackTrace();
             }
 
-            mOvrContext.setUdpReceiverThread(mReceiverThread);
-
             Utils.logi(TAG, () -> "OvrThread.onResume: mOvrContext.onResume().");
             mOvrContext.onResume();
         });
@@ -247,7 +245,7 @@ class OvrThread {
             mHandler.post(() -> {
                 mOvrContext.setRefreshRate(refreshRate);
                 mOvrContext.setFrameGeometry(width, height);
-                mOvrContext.setStreamMic(true);
+                mOvrContext.setStreamMic(streamMic);
                 mDecoderThread.onConnect(codec, frameQueueSize);
             });
         }
@@ -272,6 +270,9 @@ class OvrThread {
         public void onTracking() {
             if (mOvrContext.isVrMode()) {
                 mOvrContext.sendTrackingInfo(mReceiverThread);
+
+                //TODO: baybe use own thread, but works fine with tracking
+                mOvrContext.sendMicData(mReceiverThread);
             }
         }
 

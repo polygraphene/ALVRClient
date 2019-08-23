@@ -297,6 +297,8 @@ struct AudioFrame {
 struct MicAudioFrame {
     uint32_t type; // ALVR_PACKET_TYPE_AUDIO_FRAME
     size_t outputBufferNumElements;
+    size_t completeSize;
+    int packetIndex;
     int16_t micBuffer[100];
 };
 // Report packet loss/error from client to server.

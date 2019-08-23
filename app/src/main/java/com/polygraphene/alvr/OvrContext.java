@@ -16,10 +16,6 @@ public class OvrContext {
         handle = initializeNative(activity, assetManager, ovrThread, ARMode, initialRefreshRate);
     }
 
-    public void setUdpReceiverThread(UdpReceiverThread udpReceiverThread) {
-        setUdpReceiverThreadNative(udpReceiverThread, handle);
-    }
-
     public void destroy() {
         destroyNative(handle);
     }
@@ -54,6 +50,10 @@ public class OvrContext {
 
     public void sendTrackingInfo(UdpReceiverThread udpReceiverThread) {
         sendTrackingInfoNative(handle, udpReceiverThread);
+    }
+
+    public void sendMicData(UdpReceiverThread udpReceiverThread) {
+        sendMicDataNative(handle, udpReceiverThread);
     }
 
     public void onChangeSettings(int suspend) {
@@ -103,8 +103,6 @@ public class OvrContext {
     private native long initializeNative(Activity activity, AssetManager assetManager, OvrThread ovrThread, boolean ARMode, int initialRefreshRate);
     private native void destroyNative(long handle);
 
-    private native void setUdpReceiverThreadNative(UdpReceiverThread udpReceiverThread, long handle);
-
     private native void onResumeNative(long handle);
     private native void onPauseNative(long handle);
 
@@ -114,6 +112,7 @@ public class OvrContext {
     private native void renderNative(long handle, long renderedFrameIndex);
     private native void renderLoadingNative(long handle);
     private native void sendTrackingInfoNative(long handle, UdpReceiverThread udpReceiverThread);
+    private native void sendMicDataNative(long handle, UdpReceiverThread udpReceiverThread);
 
     private native void onChangeSettingsNative(long handle, int suspend);
 
