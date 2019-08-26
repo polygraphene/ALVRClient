@@ -71,6 +71,8 @@ private:
     bool Resumed = false;
     int FrameBufferWidth = 0;
     int FrameBufferHeight = 0;
+    float mFoveationStrengthMean = 0;
+    float mFoveationShapeRatio = 0;
     bool mExtraLatencyMode = false;
 
     static const int DEFAULT_REFRESH_RATE = 60;
@@ -129,7 +131,7 @@ private:
     void leaveVrMode();
 
     void getRefreshRates(JNIEnv *env_, jintArray refreshRates);
-    void getFov(JNIEnv *env, jfloatArray fov);
+    std::pair<EyeFov, EyeFov> getFov();
 
     void updateHapticsState();
     void finishHapticsBuffer(ovrDeviceID DeviceID);

@@ -118,7 +118,7 @@ void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager,
 
 
     ovrRenderer_Create(&Renderer, UseMultiview, FrameBufferWidth, FrameBufferHeight,
-                       SurfaceTextureID, loadingTexture, CameraTexture, m_ARMode);
+                       SurfaceTextureID, loadingTexture, CameraTexture, m_ARMode, {0});
     ovrRenderer_CreateScene(&Renderer);
 
     position_offset_y = 0.0;
@@ -576,14 +576,23 @@ void OvrContext::renderLoading() {
 
 void OvrContext::setFrameGeometry(int width, int height) {
     int eye_width = width / 2;
-    if (eye_width != FrameBufferWidth || height != FrameBufferHeight) {
+
+    //todo: receive these parameters from server
+    float foveationStrengthMean = 10;
+    float foveationShapeRatio = 1.5;
+
+    if (eye_width != FrameBufferWidth || height != FrameBufferHeight ||
+            foveationStrengthMean != mFoveationStrengthMean ||
+            foveationShapeRatio != mFoveationShapeRatio) {
         LOG("Changing FrameBuffer geometry. Old=%dx%d New=%dx%d", FrameBufferWidth,
             FrameBufferHeight, eye_width, height);
         FrameBufferWidth = eye_width;
         FrameBufferHeight = height;
         ovrRenderer_Destroy(&Renderer);
         ovrRenderer_Create(&Renderer, UseMultiview, FrameBufferWidth, FrameBufferHeight,
-                           SurfaceTextureID, loadingTexture, CameraTexture, m_ARMode);
+                           SurfaceTextureID, loadingTexture, CameraTexture, m_ARMode,
+                           {(uint32_t)FrameBufferWidth, (uint32_t)FrameBufferHeight,
+                            getFov().first, foveationStrengthMean, foveationShapeRatio});
         ovrRenderer_CreateScene(&Renderer);
     } else {
         LOG("Not Changing FrameBuffer geometry. %dx%d", FrameBufferWidth,
@@ -758,10 +767,14 @@ void OvrContext::getDeviceDescriptor(JNIEnv *env, jobject deviceDescriptor) {
     env->SetIntField(deviceDescriptor, fieldID, renderHeight);
 
     fieldID = env->GetFieldID(clazz, "mFov", "[F");
-    jfloatArray fov = reinterpret_cast<jfloatArray>(env->GetObjectField(deviceDescriptor, fieldID));
-    getFov(env, fov);
-    env->SetObjectField(deviceDescriptor, fieldID, fov);
-    env->DeleteLocalRef(fov);
+    jfloatArray fovField = reinterpret_cast<jfloatArray>(
+            env->GetObjectField(deviceDescriptor, fieldID));
+    jfloat *fovArray = env->GetFloatArrayElements(fovField, nullptr);
+    auto fov = getFov();
+    memcpy(fovArray, &fov, sizeof(fov));
+    env->ReleaseFloatArrayElements(fovField, fovArray, 0);
+    env->SetObjectField(deviceDescriptor, fieldID, fovField);
+    env->DeleteLocalRef(fovField);
 
     fieldID = env->GetFieldID(clazz, "mDeviceType", "I");
     env->SetIntField(deviceDescriptor, fieldID, deviceType);
@@ -775,14 +788,15 @@ void OvrContext::getDeviceDescriptor(JNIEnv *env, jobject deviceDescriptor) {
     env->DeleteLocalRef(clazz);
 }
 
-void OvrContext::getFov(JNIEnv *env, jfloatArray fov) {
-    jfloat *array = env->GetFloatArrayElements(fov, nullptr);
+std::pair<EyeFov, EyeFov> OvrContext::getFov() {
     float fovX = vrapi_GetSystemPropertyFloat(&java, VRAPI_SYS_PROP_SUGGESTED_EYE_FOV_DEGREES_X);
     float fovY = vrapi_GetSystemPropertyFloat(&java, VRAPI_SYS_PROP_SUGGESTED_EYE_FOV_DEGREES_Y);
     LOGI("OvrContext::getFov: X=%f Y=%f", fovX, fovY);
 
     double displayTime = vrapi_GetPredictedDisplayTime(Ovr, 0);
     ovrTracking2 tracking = vrapi_GetPredictedTracking2(Ovr, displayTime);
+
+    EyeFov fov[2];
 
     for (int eye = 0; eye < 2; eye++) {
         auto projection = tracking.Eye[eye].ProjectionMatrix;
@@ -804,15 +818,16 @@ void OvrContext::getFov(JNIEnv *env, jfloatArray fov) {
         double rr = 180 / M_PI;
         LOGI("getFov maxX=%f minX=%f maxY=%f minY=%f a=%f b=%f c=%f d=%f n=%f", maxX, minX, maxY,
              minY, a, b, c, d, n);
-        array[eye * 4 + 0] = static_cast<jfloat>(atan(minX / -n) * rr); // left (minX)
-        array[eye * 4 + 1] = static_cast<jfloat>(-atan(maxX / -n) * rr); // right (maxX)
-        array[eye * 4 + 2] = static_cast<jfloat>(atan(minY / -n) * rr); // top (minY)
-        array[eye * 4 + 3] = static_cast<jfloat>(-atan(maxY / -n) * rr); // bottom (maxY)
-        LOGI("getFov[%d](D) r=%f l=%f t=%f b=%f", eye, array[eye * 4 + 0], array[eye * 4 + 1],
-             array[eye * 4 + 2], array[eye * 4 + 3]);
-    }
 
-    env->ReleaseFloatArrayElements(fov, array, 0);
+        fov[eye].left = (float) (atan(minX / -n) * rr);
+        fov[eye].right = (float) (-atan(maxX / -n) * rr);
+        fov[eye].top = (float) (atan(minY / -n) * rr);
+        fov[eye].bottom = (float) (-atan(maxY / -n) * rr);
+
+        LOGI("getFov[%d](D) r=%f l=%f t=%f b=%f", eye, fov[eye].left, fov[eye].right,
+             fov[eye].top, fov[eye].bottom);
+    }
+    return {fov[0], fov[1]};
 }
 
 

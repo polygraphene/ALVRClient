@@ -182,7 +182,7 @@ static const char FRAGMENT_SHADER[] =
                 "in lowp vec2 uv;\n"
                 "in lowp vec4 fragmentColor;\n"
                 "out lowp vec4 outColor;\n"
-                "uniform samplerExternalOES Texture0;\n"
+                "uniform %s Texture0;\n"
                 "void main()\n"
                 "{\n"
                 "    outColor = texture(Texture0, uv);\n"
@@ -195,7 +195,7 @@ static const char FRAGMENT_SHADER_AR[] =
                 "in lowp vec4 fragmentColor;\n"
                 "out lowp vec4 outColor;\n"
                 "uniform samplerExternalOES Texture0;\n"
-                "uniform samplerExternalOES Texture1;\n"
+                "uniform %s Texture1;\n"
                 "uniform lowp float alpha;\n"
                 "void main()\n"
                 "{\n"
@@ -912,9 +912,17 @@ void ovrProgram_Destroy(ovrProgram *program) {
 
 void
 ovrRenderer_Create(ovrRenderer *renderer, const bool useMultiview, int width, int height
-        , int SurfaceTextureID, int LoadingTexture, int CameraTexture, bool ARMode) {
+        , int SurfaceTextureID, int LoadingTexture, int CameraTexture, bool ARMode, FFRData ffrData) {
     renderer->NumBuffers = useMultiview ? 1 : VRAPI_FRAME_LAYER_EYE_MAX;
     renderer->UseMultiview = useMultiview;
+
+
+    renderer->enableFFR = ffrData.foveationStrengthMean > 0;
+    if (renderer->enableFFR) {
+        renderer->ffrSourceTexture = std::make_unique<gl_render_utils::Texture>(SurfaceTextureID, true);
+        renderer->ffr = std::make_unique<FFR>(renderer->ffrSourceTexture.get());
+        renderer->ffr->Initialize(ffrData);
+    }
 
 #ifdef OVR_SDK
     // Create the frame buffers.
@@ -941,11 +949,16 @@ void ovrRenderer_CreateScene(ovrRenderer *renderer) {
     if(renderer->SceneCreated) {
         return;
     }
-    const char *fragment_shader = FRAGMENT_SHADER;
+    const char *fragment_shader_fmt = FRAGMENT_SHADER;
     if(renderer->ARMode) {
-        fragment_shader = FRAGMENT_SHADER_AR;
+        fragment_shader_fmt = FRAGMENT_SHADER_AR;
     }
-    ovrProgram_Create(&renderer->Program, VERTEX_SHADER, fragment_shader, renderer->UseMultiview);
+
+    std::string fragment_shader;
+    fragment_shader = string_format(fragment_shader_fmt,
+            renderer->enableFFR ? "sampler2D" : "samplerExternalOES");
+
+    ovrProgram_Create(&renderer->Program, VERTEX_SHADER, fragment_shader.c_str(), renderer->UseMultiview);
     ovrProgram_Create(&renderer->ProgramLoading, VERTEX_SHADER_LOADING, FRAGMENT_SHADER_LOADING,
                       renderer->UseMultiview);
     ovrGeometry_CreatePanel(&renderer->Panel);
@@ -975,6 +988,10 @@ void ovrRenderer_Destroy(ovrRenderer *renderer) {
 
 ovrLayerProjection2 ovrRenderer_RenderFrame(ovrRenderer *renderer, const ovrTracking2 *tracking,
                                                    bool loading, int AROverlayMode) {
+    if (renderer->enableFFR) {
+        renderer->ffr->Render();
+    }
+
     const ovrTracking2& updatedTracking = *tracking;
 
     ovrLayerProjection2 layer = vrapi_DefaultLayerProjection2();
@@ -1090,7 +1107,12 @@ void renderEye(int eye, ovrMatrix4f mvpMatrix[2], Recti *viewport, ovrRenderer *
             // VR 100%
             GL(glUniform1f(renderer->Program.UniformLocation[UNIFORM_ALPHA], 2.0f));
             GL(glActiveTexture(GL_TEXTURE0));
-            GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->SurfaceTextureID));
+            if (renderer->enableFFR) {
+                GL(glBindTexture(GL_TEXTURE_2D,
+                                 renderer->ffr->GetOutputTexture()->GetGLTexture()));
+            } else {
+                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->SurfaceTextureID));
+            }
 
             GL(glDrawElements(GL_TRIANGLES, renderer->Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
         }else {
@@ -1105,7 +1127,12 @@ void renderEye(int eye, ovrMatrix4f mvpMatrix[2], Recti *viewport, ovrRenderer *
                 GL(glUniform1f(renderer->Program.UniformLocation[UNIFORM_ALPHA], -2.0f));
             }
             GL(glActiveTexture(GL_TEXTURE0));
-            GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->SurfaceTextureID));
+            if (renderer->enableFFR) {
+                GL(glBindTexture(GL_TEXTURE_2D,
+                                 renderer->ffr->GetOutputTexture()->GetGLTexture()));
+            } else {
+                GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->SurfaceTextureID));
+            }
             GL(glActiveTexture(GL_TEXTURE1));
             GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->CameraTexture));
             GL(glDrawElements(GL_TRIANGLES, renderer->Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
