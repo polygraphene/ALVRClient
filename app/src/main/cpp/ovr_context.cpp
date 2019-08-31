@@ -578,7 +578,7 @@ void OvrContext::setFrameGeometry(int width, int height) {
     int eye_width = width / 2;
 
     //todo: receive these parameters from server
-    float foveationStrengthMean = 10;
+    float foveationStrengthMean = 5;
     float foveationShapeRatio = 1.5;
 
     if (eye_width != FrameBufferWidth || height != FrameBufferHeight ||

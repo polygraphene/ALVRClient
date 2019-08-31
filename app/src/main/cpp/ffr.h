@@ -22,7 +22,7 @@ public:
 
     void Render();
 
-    gl_render_utils::Texture *GetOutputTexture() { return mSharpenedTexture.get(); }
+    gl_render_utils::Texture *GetOutputTexture() { return mDistortedTexture.get(); }
 
 private:
 

@@ -257,11 +257,11 @@ void FFR::Initialize(FFRData ffrData) {
 
     mUndistortPipeline.reset(new RenderPipeline({mInputSurface}, undistortShaderStr,
                                                 mDistortedTexture.get()));
-    mSharpeningPipeline.reset(new RenderPipeline({mDistortedTexture.get()}, sharpeningShaderStr,
-                                                 mSharpenedTexture.get()));
+//    mSharpeningPipeline.reset(new RenderPipeline({mDistortedTexture.get()}, sharpeningShaderStr,
+//                                                 mSharpenedTexture.get()));
 }
 
 void FFR::Render() {
     mUndistortPipeline->Render();
-    mSharpeningPipeline->Render();
+//    mSharpeningPipeline->Render();
 }
