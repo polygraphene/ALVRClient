@@ -34,7 +34,7 @@ class UdpReceiverThread extends ThreadBase
     private int mPreviousServerPort;
 
     interface ConnectionListener {
-        void onConnected(int width, int height, int codec, int frameQueueSize, int refreshRate, boolean streamMic);
+        void onConnected(int width, int height, int codec, int frameQueueSize, int refreshRate, boolean streamMic,  float foveationStrengthMean, float foveationShapeRatio);
 
         void onChangeSettings(int suspend, int frameQueueSize);
 
@@ -223,9 +223,9 @@ class UdpReceiverThread extends ThreadBase
 
     // called from native
     @SuppressWarnings("unused")
-    public void onConnected(int width, int height, int codec, int frameQueueSize, int refreshRate, boolean streamMic) {
+    public void onConnected(int width, int height, int codec, int frameQueueSize, int refreshRate, boolean streamMic,  float foveationStrengthMean, float foveationShapeRatio) {
         Utils.logi(TAG, () -> "onConnected is called.");
-        mConnectionListener.onConnected(width, height, codec, frameQueueSize, refreshRate, streamMic);
+        mConnectionListener.onConnected(width, height, codec, frameQueueSize, refreshRate, streamMic, foveationStrengthMean, foveationShapeRatio);
         mTrackingThread.onConnect();
     }
 

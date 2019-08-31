@@ -104,7 +104,7 @@ namespace gl_render_utils {
             GL(glBufferSubData(GL_UNIFORM_BUFFER, 0, mUniformBlockSize, uniformBlockData));
         }
 
-        LOGE("%d", glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER));
+       // LOGE("%d", glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER));
 
         GL(glDrawArrays(GL_TRIANGLE_STRIP, 0, 4));
     }

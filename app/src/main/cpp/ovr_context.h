@@ -57,6 +57,8 @@ public:
 
     void setStreamMic(bool streamMic);
 
+   void setFFRParams( float foveationStrengthMean, float foveationShapeRatio);
+
 private:
     ANativeWindow *window = NULL;
     ovrMobile *Ovr;
@@ -84,14 +86,20 @@ private:
     bool Resumed = false;
     int FrameBufferWidth = 0;
     int FrameBufferHeight = 0;
-    float mFoveationStrengthMean = 0;
-    float mFoveationShapeRatio = 0;
+    float mFoveationStrengthMean = 5;
+    float mFoveationShapeRatio = 1.5;
+    float usedFoveationStrengthMean = 0;
+    float usedFoveationShapeRatio = 0;
+
     bool mExtraLatencyMode = false;
 
     static const int DEFAULT_REFRESH_RATE = 60;
     int m_currentRefreshRate = DEFAULT_REFRESH_RATE;
 
     uint64_t FrameIndex = 0;
+
+
+
 
     // For ARCore
     bool m_ARMode = false;

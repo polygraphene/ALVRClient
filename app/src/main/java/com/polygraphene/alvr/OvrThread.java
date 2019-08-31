@@ -239,11 +239,12 @@ class OvrThread {
 
     private UdpReceiverThread.ConnectionListener mUdpReceiverConnectionListener = new UdpReceiverThread.ConnectionListener() {
         @Override
-        public void onConnected(final int width, final int height, final int codec, final int frameQueueSize, final int refreshRate, final boolean streamMic) {
+        public void onConnected(final int width, final int height, final int codec, final int frameQueueSize, final int refreshRate, final boolean streamMic,  float foveationStrengthMean, float foveationShapeRatio) {
             // We must wait completion of notifyGeometryChange
             // to ensure the first video frame arrives after notifyGeometryChange.
             mHandler.post(() -> {
                 mOvrContext.setRefreshRate(refreshRate);
+                mOvrContext.setFFRParams(foveationStrengthMean,foveationShapeRatio);
                 mOvrContext.setFrameGeometry(width, height);
                 mOvrContext.setStreamMic(streamMic);
                 mDecoderThread.onConnect(codec, frameQueueSize);
