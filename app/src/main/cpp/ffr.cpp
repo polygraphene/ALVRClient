@@ -11,6 +11,7 @@ namespace {
     const std::string FFR_COMMON_SHADER_FORMAT = R"glsl(
         #version 300 es
         #extension GL_OES_EGL_image_external_essl3 : enable
+        precision highp float;
 
         // https://www.shadertoy.com/view/3l2GRR
 
@@ -75,8 +76,8 @@ namespace {
 
 
         vec2 InverseRadialDistortion(vec2 xy) {
-            highp vec2 scaledXY = xy * FOVEATION_SCALE;
-            highp float scaledRadius = length(scaledXY);
+            vec2 scaledXY = xy * FOVEATION_SCALE;
+            float scaledRadius = length(scaledXY);
             return INVERSE_DISTORTION_FN(scaledRadius) * scaledXY / scaledRadius;
         }
 
