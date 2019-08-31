@@ -11,6 +11,7 @@
 #include <EGL/eglext.h>
 #include "gltf_model.h"
 #include "utils.h"
+#include "ffr.h"
 
 // Must use EGLSyncKHR because the VrApi still supports OpenGL ES 2.0
 #define EGL_SYNC
@@ -134,10 +135,14 @@ typedef struct {
     GLuint LoadingTexture;
     bool ARMode;
     GltfModel *loadingScene;
+    std::unique_ptr<FFR> ffr;
+    std::unique_ptr<gl_render_utils::Texture> ffrSourceTexture;
+    bool enableFFR;
 } ovrRenderer;
 
 void ovrRenderer_Create(ovrRenderer *renderer, const bool useMultiview, int width, int height,
-                        int SurfaceTextureID, int LoadingTexture, int CameraTexture, bool ARMode);
+                        int SurfaceTextureID, int LoadingTexture, int CameraTexture, bool ARMode,
+                        FFRData ffrData);
 void ovrRenderer_Destroy(ovrRenderer *renderer);
 void ovrRenderer_CreateScene(ovrRenderer *renderer);
 // Set up an OVR frame, render it, and submit it.
