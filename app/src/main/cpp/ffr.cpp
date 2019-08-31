@@ -75,8 +75,8 @@ namespace {
 
 
         vec2 InverseRadialDistortion(vec2 xy) {
-            vec2 scaledXY = xy * FOVEATION_SCALE;
-            float scaledRadius = length(scaledXY);
+            highp vec2 scaledXY = xy * FOVEATION_SCALE;
+            highp float scaledRadius = length(scaledXY);
             return INVERSE_DISTORTION_FN(scaledRadius) * scaledXY / scaledRadius;
         }
 
@@ -122,8 +122,8 @@ namespace {
         out vec4 color;
         void main() {
             bool isRightEye = uv.x > 0.5;
-            vec2 undistedUV = Undistort(TextureToEyeUV(uv, isRightEye));
-            color = texture(tex0, EyeToTextureUV(undistedUV, isRightEye));
+            vec2 undistortedUV = Undistort(TextureToEyeUV(uv, isRightEye));
+            color = texture(tex0, EyeToTextureUV(undistortedUV, isRightEye));
 
 //            color = texture(tex0, uv);
         }
@@ -257,11 +257,11 @@ void FFR::Initialize(FFRData ffrData) {
 
     mUndistortPipeline.reset(new RenderPipeline({mInputSurface}, undistortShaderStr,
                                                 mDistortedTexture.get()));
-    mSharpeningPipeline.reset(new RenderPipeline({mDistortedTexture.get()}, sharpeningShaderStr,
-                                                 mSharpenedTexture.get()));
+//    mSharpeningPipeline.reset(new RenderPipeline({mDistortedTexture.get()}, sharpeningShaderStr,
+//                                                 mSharpenedTexture.get()));
 }
 
 void FFR::Render() {
     mUndistortPipeline->Render();
-    mSharpeningPipeline->Render();
+//    mSharpeningPipeline->Render();
 }
