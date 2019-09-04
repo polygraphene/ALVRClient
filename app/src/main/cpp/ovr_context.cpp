@@ -20,7 +20,7 @@
 #include "ovr_context.h"
 #include "latency_collector.h"
 #include "packet_types.h"
-#include "UdpManager.h"
+#include "ServerConnectionNative.h"
 #include "asset.h"
 #include <inttypes.h>
 
@@ -123,8 +123,8 @@ void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager,
 
     position_offset_y = 0.0;
 
-    jclass clazz = env->FindClass("com/polygraphene/alvr/UdpReceiverThread");
-    mUdpReceiverThread_send = env->GetMethodID(clazz, "send", "(JI)V");
+    jclass clazz = env->FindClass("com/polygraphene/alvr/ServerConnection");
+    mServerConnection_send = env->GetMethodID(clazz, "send", "(JI)V");
     env->DeleteLocalRef(clazz);
 
     memset(mHapticsState, 0, sizeof(mHapticsState));
@@ -172,7 +172,7 @@ void OvrContext::destroy(JNIEnv *env) {
 
     env->DeleteGlobalRef(mVrThread);
     env->DeleteGlobalRef(java.ActivityObject);
-    env->DeleteGlobalRef(mUdpReceiverThread);
+    env->DeleteGlobalRef(mServerConnection);
 
     delete[] micBuffer;
 
@@ -437,7 +437,7 @@ void OvrContext::sendTrackingInfo(JNIEnv *env_, jobject udpReceiverThread) {
 
     LatencyCollector::Instance().tracking(frame->frameIndex);
 
-    env_->CallVoidMethod(udpReceiverThread, mUdpReceiverThread_send, reinterpret_cast<jlong>(&info),
+    env_->CallVoidMethod(udpReceiverThread, mServerConnection_send, reinterpret_cast<jlong>(&info),
                          static_cast<jint>(sizeof(info)));
 
 
@@ -476,7 +476,7 @@ void OvrContext::sendMicData(JNIEnv *env_, jobject udpReceiverThread) {
                    micBuffer + count * 100,
                    sizeof(int16_t) * audio.outputBufferNumElements);
 
-            env_->CallVoidMethod(udpReceiverThread, mUdpReceiverThread_send,
+            env_->CallVoidMethod(udpReceiverThread, mServerConnection_send,
                                  reinterpret_cast<jlong>(&audio),
                                  static_cast<jint>(sizeof(audio)));
             count++;

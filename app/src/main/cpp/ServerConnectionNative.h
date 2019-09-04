@@ -18,10 +18,10 @@
 #include "sound.h"
 #include "UdpSocket.h"
 
-class UdpManager {
+class ServerConnectionNative {
 public:
-    UdpManager();
-    ~UdpManager();
+    ServerConnectionNative();
+    ~ServerConnectionNative();
     void initialize(JNIEnv *env, jobject instance, jint helloPort, jint port, jstring deviceName_,
                         jobjectArray broadcastAddrList_, jintArray refreshRates_, jint renderWidth,
                         jint renderHeight, jfloatArray fov, jint deviceType, jint deviceSubType,

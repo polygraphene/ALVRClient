@@ -48,12 +48,12 @@ public class OvrContext {
         renderLoadingNative(handle);
     }
 
-    public void sendTrackingInfo(UdpReceiverThread udpReceiverThread) {
-        sendTrackingInfoNative(handle, udpReceiverThread);
+    public void sendTrackingInfo(ServerConnection serverConnection) {
+        sendTrackingInfoNative(handle, serverConnection);
     }
 
-    public void sendMicData(UdpReceiverThread udpReceiverThread) {
-        sendMicDataNative(handle, udpReceiverThread);
+    public void sendMicData(ServerConnection serverConnection) {
+        sendMicDataNative(handle, serverConnection);
     }
 
     public void onChangeSettings(int suspend) {
@@ -115,8 +115,8 @@ public class OvrContext {
     private native void onSurfaceDestroyedNative(long handle);
     private native void renderNative(long handle, long renderedFrameIndex);
     private native void renderLoadingNative(long handle);
-    private native void sendTrackingInfoNative(long handle, UdpReceiverThread udpReceiverThread);
-    private native void sendMicDataNative(long handle, UdpReceiverThread udpReceiverThread);
+    private native void sendTrackingInfoNative(long handle, ServerConnection serverConnection);
+    private native void sendMicDataNative(long handle, ServerConnection serverConnection);
 
     private native void onChangeSettingsNative(long handle, int suspend);
 

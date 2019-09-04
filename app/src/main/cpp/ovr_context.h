@@ -9,7 +9,7 @@
 #include "packet_types.h"
 #include "render.h"
 #include "utils.h"
-#include "UdpManager.h"
+#include "ServerConnectionNative.h"
 #include "OVR_Platform.h"
 
 uint32_t ovrButton_Unknown1 = 0x01000000;
@@ -76,7 +76,7 @@ private:
     double lastStateTime = 0;
 
     jobject mVrThread = nullptr;
-    jobject mUdpReceiverThread = nullptr;
+    jobject mServerConnection = nullptr;
 
     bool UseMultiview = true;
     GLuint SurfaceTextureID = 0;
@@ -123,7 +123,7 @@ private:
 
     ovrRenderer Renderer;
 
-    jmethodID mUdpReceiverThread_send;
+    jmethodID mServerConnection_send;
 
     struct HapticsState {
         uint64_t startUs;

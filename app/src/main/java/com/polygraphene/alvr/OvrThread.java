@@ -9,10 +9,11 @@ import android.os.HandlerThread;
 import android.os.Looper;
 import android.util.Log;
 import android.view.Surface;
+import android.view.SurfaceHolder;
 
 import java.util.concurrent.TimeUnit;
 
-class OvrThread {
+class OvrThread implements SurfaceHolder.Callback {
     private static final String TAG = "OvrThread";
 
     private Activity mActivity;
@@ -28,7 +29,7 @@ class OvrThread {
 
     // Worker threads
     private DecoderThread mDecoderThread;
-    private UdpReceiverThread mReceiverThread;
+    private ServerConnection mReceiverThread;
     private LauncherSocket mLauncherSocket;
 
     private EGLContext mEGLContext;
@@ -39,6 +40,10 @@ class OvrThread {
 
     private long mPreviousRender = 0;
 
+    private Runnable mRenderRunnable = () -> render();
+    private Runnable mIdleRenderRunnable = () -> render();
+
+
     public OvrThread(Activity activity) {
         this.mActivity = activity;
 
@@ -48,21 +53,28 @@ class OvrThread {
         mHandler.post(() -> startup());
     }
 
-    public void onSurfaceCreated(final Surface surface) {
+    //SurfaceHolder Callbacks
+
+    @Override
+    public void surfaceCreated(final SurfaceHolder holder) {
         Utils.logi(TAG, () -> "OvrThread.onSurfaceCreated.");
-        mHandler.post(() -> mOvrContext.onSurfaceCreated(surface));
+        mHandler.post(() -> mOvrContext.onSurfaceCreated(holder.getSurface()));
     }
 
-    public void onSurfaceChanged(final Surface surface) {
+    @Override
+    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
         Utils.logi(TAG, () -> "OvrThread.onSurfaceChanged.");
-        mHandler.post(() -> mOvrContext.onSurfaceChanged(surface));
+        mHandler.post(() -> mOvrContext.onSurfaceChanged(holder.getSurface()));
     }
 
-    public void onSurfaceDestroyed() {
+    @Override
+    public void surfaceDestroyed(SurfaceHolder holder) {
         Utils.logi(TAG, () -> "OvrThread.onSurfaceDestroyed.");
         mHandler.post(() -> mOvrContext.onSurfaceDestroyed());
     }
 
+
+    //Activity callbacks
     public void onResume() {
         Utils.logi(TAG, () -> "OvrThread.onResume: Starting worker threads.");
         // Sometimes previous decoder output remains not updated (when previous call of waitFrame() didn't call updateTexImage())
@@ -72,7 +84,7 @@ class OvrThread {
             mLauncherSocket = new LauncherSocket(mLauncherSocketCallback);
             mLauncherSocket.listen();
 
-            mReceiverThread = new UdpReceiverThread(mUdpReceiverConnectionListener);
+            mReceiverThread = new ServerConnection(mUdpReceiverConnectionListener);
 
             PersistentConfig.ConnectionState connectionState = new PersistentConfig.ConnectionState();
             PersistentConfig.loadConnectionState(mActivity, connectionState);
@@ -131,11 +143,7 @@ class OvrThread {
         });
     }
 
-    private Runnable mRenderRunnable = () -> render();
-    private Runnable mIdleRenderRunnable = () -> render();
-
-    // Called from onDestroy
-    public void quit() {
+    public void onDestroy() {
         mHandler.post(() -> {
             mLoadingTexture.destroyTexture();
             Utils.logi(TAG, () -> "Destroying vrapi state.");
@@ -144,6 +152,9 @@ class OvrThread {
         mHandlerThread.quitSafely();
     }
 
+
+
+    //called from constructor
     public void startup() {
         Utils.logi(TAG, () -> "OvrThread started.");
 
@@ -237,9 +248,12 @@ class OvrThread {
         }
     }
 
-    private UdpReceiverThread.ConnectionListener mUdpReceiverConnectionListener = new UdpReceiverThread.ConnectionListener() {
+    private ServerConnection.ConnectionListener mUdpReceiverConnectionListener = new ServerConnection.ConnectionListener() {
         @Override
-        public void onConnected(final int width, final int height, final int codec, final int frameQueueSize, final int refreshRate, final boolean streamMic,  float foveationStrengthMean, float foveationShapeRatio) {
+        public void onConnected(final int width, final int height, final int codec, final int frameQueueSize,
+                                final int refreshRate, final boolean streamMic,
+                                final float foveationStrengthMean,final float foveationShapeRatio) {
+
             // We must wait completion of notifyGeometryChange
             // to ensure the first video frame arrives after notifyGeometryChange.
             mHandler.post(() -> {
@@ -272,7 +286,7 @@ class OvrThread {
             if (mOvrContext.isVrMode()) {
                 mOvrContext.sendTrackingInfo(mReceiverThread);
 
-                //TODO: baybe use own thread, but works fine with tracking
+                //TODO: maybe use own thread, but works fine with tracking
                 mOvrContext.sendMicData(mReceiverThread);
             }
         }
@@ -286,6 +300,8 @@ class OvrThread {
             });
         }
     };
+
+
 
     private DecoderThread.DecoderCallback mDecoderCallback = new DecoderThread.DecoderCallback() {
         @Override

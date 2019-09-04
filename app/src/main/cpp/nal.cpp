@@ -27,7 +27,7 @@ NALParser::NALParser(JNIEnv *env, jobject udpManager)
     NAL_buf = env->GetFieldID(NAL_clazz, "buf", "[B");
     env->DeleteLocalRef(NAL_clazz);
 
-    jclass udpManagerClazz = env->FindClass("com/polygraphene/alvr/UdpReceiverThread");
+    jclass udpManagerClazz = env->FindClass("com/polygraphene/alvr/ServerConnection");
     mObtainNALMethodID = env->GetMethodID(udpManagerClazz, "obtainNAL",
                                           "(I)Lcom/polygraphene/alvr/NAL;");
     mPushNALMethodID = env->GetMethodID(udpManagerClazz, "pushNAL",

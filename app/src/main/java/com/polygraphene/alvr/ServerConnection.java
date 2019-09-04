@@ -11,9 +11,9 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 
-class UdpReceiverThread extends ThreadBase
+class ServerConnection extends ThreadBase
 {
-    private static final String TAG = "UdpReceiverThread";
+    private static final String TAG = "ServerConnection";
 
     static {
         System.loadLibrary("native-lib");
@@ -59,7 +59,7 @@ class UdpReceiverThread extends ThreadBase
     private long mNativeHandle = 0;
     private final Object mWaiter = new Object();
 
-    UdpReceiverThread(ConnectionListener connectionListener)
+    ServerConnection(ConnectionListener connectionListener)
     {
         mConnectionListener = connectionListener;
     }
@@ -157,7 +157,7 @@ class UdpReceiverThread extends ThreadBase
                 mInitialized = true;
                 notifyAll();
             }
-            Utils.logi(TAG, () -> "UdpReceiverThread initialized.");
+            Utils.logi(TAG, () -> "ServerConnection initialized.");
 
             runLoop(mNativeHandle, mPreviousServerAddress, mPreviousServerPort);
         } finally {
@@ -166,7 +166,7 @@ class UdpReceiverThread extends ThreadBase
             mNativeHandle = 0;
         }
 
-        Utils.logi(TAG, () -> "UdpReceiverThread stopped.");
+        Utils.logi(TAG, () -> "ServerConnection stopped.");
     }
 
     // List broadcast address from all interfaces except for mobile network.
@@ -267,6 +267,8 @@ class UdpReceiverThread extends ThreadBase
     public void pushNAL(NAL nal) {
         mNALCallback.pushNAL(nal);
     }
+
+
 
     private native long initializeSocket(int helloPort, int port, String deviceName, String[] broadcastAddrList,
                                          int[] refreshRates, int renderWidth, int renderHeight, float[] fov,

@@ -8,7 +8,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.support.annotation.NonNull;
-import android.util.Log;
 import android.view.Surface;
 
 import java.io.FileOutputStream;
@@ -17,7 +16,7 @@ import java.nio.ByteBuffer;
 import java.util.LinkedList;
 import java.util.Queue;
 
-public class DecoderThread extends ThreadBase implements UdpReceiverThread.NALCallback, Handler.Callback {
+public class DecoderThread extends ThreadBase implements ServerConnection.NALCallback, Handler.Callback {
     private static final String TAG = "DecoderThread";
 
     private static final int CODEC_H264 = 0;

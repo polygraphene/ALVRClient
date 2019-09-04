@@ -20,22 +20,6 @@ public class OvrActivity extends BaseActivity {
 
     private OvrThread mOvrThread = null;
 
-    private final SurfaceHolder.Callback mCallback = new SurfaceHolder.Callback() {
-        @Override
-        public void surfaceCreated(final SurfaceHolder holder) {
-            mOvrThread.onSurfaceCreated(holder.getSurface());
-        }
-
-        @Override
-        public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-            mOvrThread.onSurfaceChanged(holder.getSurface());
-        }
-
-        @Override
-        public void surfaceDestroyed(SurfaceHolder holder) {
-            mOvrThread.onSurfaceDestroyed();
-        }
-    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,11 +32,13 @@ public class OvrActivity extends BaseActivity {
         setContentView(R.layout.activity_main);
         SurfaceView surfaceView = findViewById(R.id.surfaceview);
 
-        SurfaceHolder holder = surfaceView.getHolder();
-        holder.addCallback(mCallback);
-
         Utils.logi(TAG, () -> "onCreate: Starting OvrThread");
         mOvrThread = new OvrThread(this);
+
+
+        SurfaceHolder holder = surfaceView.getHolder();
+        holder.addCallback(mOvrThread);
+
 
         requestAudioPermissions();
     }
@@ -81,7 +67,7 @@ public class OvrActivity extends BaseActivity {
 
         Utils.logi(TAG, () -> "onDestroy: Stopping OvrThread.");
         if(mOvrThread != null) {
-            mOvrThread.quit();
+            mOvrThread.onDestroy();
             mOvrThread = null;
         }
         Utils.logi(TAG, () -> "onDestroy: OvrThread has stopped.");
