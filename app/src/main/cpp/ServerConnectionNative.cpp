@@ -230,6 +230,10 @@ void ServerConnectionNative::sendTimeSyncLocked()
 
 void ServerConnectionNative::sendBroadcastLocked()
 {
+    if(m_socket.isConnected()) {
+        return;
+    }
+
     time_t current = time(nullptr);
     if (m_prevSentBroadcast != current) {
         LOGI("Sending broadcast hello.");

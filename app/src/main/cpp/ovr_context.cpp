@@ -78,7 +78,7 @@ void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager,
     glBindTexture(GL_TEXTURE_EXTERNAL_OES, SurfaceTextureID);
 
     glTexParameterf(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER,
-                    GL_NEAREST);
+                    GL_LINEAR);
     glTexParameterf(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER,
                     GL_LINEAR);
     glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S,
