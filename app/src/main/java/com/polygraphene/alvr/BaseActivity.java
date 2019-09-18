@@ -11,7 +11,7 @@ abstract class BaseActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        PersistentConfig.loadCurrentConfig(this);
+        PersistentConfig.loadCurrentConfig(this, true);
         super.onCreate(savedInstanceState);
         ArThread.requestPermissions(this);
     }

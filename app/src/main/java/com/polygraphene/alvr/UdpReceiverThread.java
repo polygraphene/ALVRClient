@@ -126,6 +126,10 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
         try {
             String[] targetList = getTargetAddressList();
 
+            for (String target: targetList) {
+                Utils.logi(TAG, () -> "Target IP address for hello datagrams: " + target);
+            }
+
             mNativeHandle = initializeSocket(HELLO_PORT, PORT, getDeviceName(), targetList,
                     mDeviceDescriptor.mRefreshRates, mDeviceDescriptor.mRenderWidth, mDeviceDescriptor.mRenderHeight, mDeviceDescriptor.mFov,
                     mDeviceDescriptor.mDeviceType, mDeviceDescriptor.mDeviceSubType, mDeviceDescriptor.mDeviceCapabilityFlags,
@@ -239,7 +243,7 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
     @SuppressWarnings("unused")
     public void onChangeSettings(long debugFlags, int suspend, int frameQueueSize) {
         PersistentConfig.sDebugFlags = debugFlags;
-        PersistentConfig.saveCurrentConfig();
+        PersistentConfig.saveCurrentConfig(true);
         mCallback.onChangeSettings(suspend, frameQueueSize);
     }
 
