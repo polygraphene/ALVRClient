@@ -9,7 +9,7 @@ public class ChangeSettings extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        PersistentConfig.loadCurrentConfig(this);
+        PersistentConfig.loadCurrentConfig(this, false);
 
         Utils.logi(TAG, () -> "Config setting " + PersistentConfig.KEY_TARGET_SERVERS + " has value: " + PersistentConfig.sTargetServers);
 
@@ -20,7 +20,7 @@ public class ChangeSettings extends Service {
             PersistentConfig.sTargetServers = targetServers;
         }
 
-        PersistentConfig.saveCurrentConfig();
+        PersistentConfig.saveCurrentConfig(false);
         stopSelf(startId);
         return Service.START_NOT_STICKY;
     }
