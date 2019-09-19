@@ -3,9 +3,18 @@
     package="com.polygraphene.alvr"
     android:installLocation="auto">
 
+    <!--
+        Request the system to provide us the 6DoF tracking headset features
+        Latest versions of Oculus Quest firmware run in Oculus Go compatibility mode without this,
+        which makes only one of the controllers available at a time
+    -->
+    <uses-feature android:name="android.hardware.vr.headtracking"
+        android:version="1" android:required="false" />
+
     <uses-feature
         android:glEsVersion="0x00030001"
         android:required="true" />
+
     <application>
 
         <meta-data
