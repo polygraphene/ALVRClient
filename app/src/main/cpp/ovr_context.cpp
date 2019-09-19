@@ -443,6 +443,8 @@ void OvrContext::fetchTrackingInfo(JNIEnv *env_, jobject udpReceiverThread, ovrV
     frame->frameIndex = FrameIndex;
     frame->fetchTime = getTimestampUs();
 
+    //If VRAPI_TRACKING_SPACE_STAGE is not set, the coordinate origin OpenVR receives will not be consistent when the headset state changes or user recenters
+    vrapi_SetTrackingSpace(Ovr, VRAPI_TRACKING_SPACE_STAGE);
     frame->displayTime = vrapi_GetPredictedDisplayTime(Ovr, FrameIndex);
     frame->tracking = vrapi_GetPredictedTracking2(Ovr, frame->displayTime);
 
