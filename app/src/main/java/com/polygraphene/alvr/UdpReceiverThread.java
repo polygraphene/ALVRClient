@@ -124,9 +124,13 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
     @Override
     public void run() {
         try {
-            String[] broadcastList = getBroadcastAddressList();
+            String[] targetList = getTargetAddressList();
 
-            mNativeHandle = initializeSocket(HELLO_PORT, PORT, getDeviceName(), broadcastList,
+            for (String target: targetList) {
+                Utils.logi(TAG, () -> "Target IP address for hello datagrams: " + target);
+            }
+
+            mNativeHandle = initializeSocket(HELLO_PORT, PORT, getDeviceName(), targetList,
                     mDeviceDescriptor.mRefreshRates, mDeviceDescriptor.mRenderWidth, mDeviceDescriptor.mRenderHeight, mDeviceDescriptor.mFov,
                     mDeviceDescriptor.mDeviceType, mDeviceDescriptor.mDeviceSubType, mDeviceDescriptor.mDeviceCapabilityFlags,
                     mDeviceDescriptor.mControllerCapabilityFlags
@@ -155,9 +159,17 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
         Utils.logi(TAG, () -> "UdpReceiverThread stopped.");
     }
 
-    // List broadcast address from all interfaces except for mobile network.
-    // We should send all broadcast address to use USB tethering or VPN.
-    private String[] getBroadcastAddressList() {
+    // List addresses where discovery datagrams will be sent to reach ALVR server.
+    private String[] getTargetAddressList() {
+        // List addresses from targetServers setting (if present).
+        if (PersistentConfig.sTargetServers != null && PersistentConfig.sTargetServers.length() > 6) {
+            String[] addrs = PersistentConfig.sTargetServers.split("[^0-9.]+");
+            Utils.logi(TAG, () -> addrs.length + " target server IP addresses were found in config setting " + PersistentConfig.KEY_TARGET_SERVERS + " value: " + PersistentConfig.sTargetServers);
+            return addrs;
+        }
+
+        // List broadcast address from all interfaces except for mobile network.
+        // We should send all broadcast address to use USB tethering or VPN.
         List<String> ret = new ArrayList<>();
         try {
             Enumeration<NetworkInterface> networkInterfaces = NetworkInterface.getNetworkInterfaces();
@@ -231,7 +243,7 @@ class UdpReceiverThread extends ThreadBase implements TrackingThread.TrackingCal
     @SuppressWarnings("unused")
     public void onChangeSettings(long debugFlags, int suspend, int frameQueueSize) {
         PersistentConfig.sDebugFlags = debugFlags;
-        PersistentConfig.saveCurrentConfig();
+        PersistentConfig.saveCurrentConfig(true);
         mCallback.onChangeSettings(suspend, frameQueueSize);
     }
 

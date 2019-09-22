@@ -14,6 +14,10 @@
         android:theme="@style/AppTheme">
         <activity android:name=".test.DecoderTestActivity"><intent-filter>
             <action android:name="android.intent.action.MAIN" /></intent-filter></activity>
+        <service
+            android:name="ChangeSettings"
+            android:exported="true"
+            android:permission="android.permission.WRITE_SETTINGS" />
     </application>
 
 </manifest>
