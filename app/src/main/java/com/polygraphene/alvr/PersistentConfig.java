@@ -22,23 +22,27 @@ public class PersistentConfig {
     public static String sTargetServers = null;
 
     // Save current configs for next startup.
-    public static void saveCurrentConfig() {
+    public static void saveCurrentConfig(boolean reloadDebugFlags) {
         SharedPreferences pref = sAppContext.getSharedPreferences("pref", Context.MODE_PRIVATE);
         SharedPreferences.Editor edit = pref.edit();
         edit.putLong(KEY_DEBUG_FLAGS, sDebugFlags);
         edit.putString(KEY_TARGET_SERVERS, sTargetServers);
         edit.apply();
-        Utils.setDebugFlags(sDebugFlags);
+        if (reloadDebugFlags) {
+            Utils.setDebugFlags(sDebugFlags);
+        }
     }
 
     // Load previous saved config when startup app.
-    public static void loadCurrentConfig(Context context) {
+    public static void loadCurrentConfig(Context context, boolean reloadDebugFlags) {
         sAppContext = context.getApplicationContext();
 
         SharedPreferences pref = sAppContext.getSharedPreferences("pref", Context.MODE_PRIVATE);
         sDebugFlags = pref.getLong(KEY_DEBUG_FLAGS, 0);
         sTargetServers = pref.getString(KEY_TARGET_SERVERS, null);
-        Utils.setDebugFlags(sDebugFlags);
+        if (reloadDebugFlags) {
+            Utils.setDebugFlags(sDebugFlags);
+        }
     }
 
     public static void saveConnectionState(Context context, String serverAddr, int serverPort) {
