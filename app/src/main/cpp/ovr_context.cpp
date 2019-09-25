@@ -118,7 +118,7 @@ void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager,
 
 
     ovrRenderer_Create(&Renderer, UseMultiview, FrameBufferWidth, FrameBufferHeight,
-                       SurfaceTextureID, loadingTexture, CameraTexture, m_ARMode, {0});
+                       SurfaceTextureID, loadingTexture, CameraTexture, m_ARMode, {FFR_MODE_DISABLED});
     ovrRenderer_CreateScene(&Renderer);
 
     position_offset_y = 0.0;
@@ -671,11 +671,12 @@ void OvrContext::setFrameGeometry(int width, int height) {
 
         usedFoveationStrengthMean = mFoveationStrengthMean;
         usedFoveationShapeRatio = mFoveationShapeRatio;
+        auto usedFoveationMode = FFR_MODE_SLICES;//FFR_MODE_WARP;//
 
         ovrRenderer_Destroy(&Renderer);
         ovrRenderer_Create(&Renderer, UseMultiview, FrameBufferWidth, FrameBufferHeight,
                            SurfaceTextureID, loadingTexture, CameraTexture, m_ARMode,
-                           {(uint32_t)FrameBufferWidth, (uint32_t)FrameBufferHeight,
+                           {usedFoveationMode, (uint32_t)FrameBufferWidth, (uint32_t)FrameBufferHeight,
                             getFov().first, usedFoveationStrengthMean, usedFoveationShapeRatio});
         ovrRenderer_CreateScene(&Renderer);
     } else {
