@@ -118,7 +118,7 @@ void OvrContext::initialize(JNIEnv *env, jobject activity, jobject assetManager,
 
 
     ovrRenderer_Create(&Renderer, UseMultiview, FrameBufferWidth, FrameBufferHeight,
-                       SurfaceTextureID, loadingTexture, CameraTexture, m_ARMode, {FFR_MODE_DISABLED});
+                       SurfaceTextureID, loadingTexture, CameraTexture, m_ARMode, {FOVEATION_MODE_DISABLED});
     ovrRenderer_CreateScene(&Renderer);
 
     position_offset_y = 0.0;
@@ -661,23 +661,24 @@ void OvrContext::setFrameGeometry(int width, int height) {
     int eye_width = width / 2;
 
     if (eye_width != FrameBufferWidth || height != FrameBufferHeight ||
-    usedFoveationStrengthMean != mFoveationStrengthMean ||
-    usedFoveationShapeRatio != mFoveationShapeRatio) {
+    usedFoveationMode != mFoveationMode ||
+    usedFoveationStrength != mFoveationStrength ||
+    usedFoveationShape != mFoveationShape) {
 
         LOG("Changing FrameBuffer geometry. Old=%dx%d New=%dx%d", FrameBufferWidth,
             FrameBufferHeight, eye_width, height);
         FrameBufferWidth = eye_width;
         FrameBufferHeight = height;
 
-        usedFoveationStrengthMean = mFoveationStrengthMean;
-        usedFoveationShapeRatio = mFoveationShapeRatio;
-        auto usedFoveationMode = FFR_MODE_SLICES;//FFR_MODE_WARP;//
+        usedFoveationMode = mFoveationMode;
+        usedFoveationStrength = mFoveationStrength;
+        usedFoveationShape = mFoveationShape;
 
         ovrRenderer_Destroy(&Renderer);
         ovrRenderer_Create(&Renderer, UseMultiview, FrameBufferWidth, FrameBufferHeight,
                            SurfaceTextureID, loadingTexture, CameraTexture, m_ARMode,
                            {usedFoveationMode, (uint32_t)FrameBufferWidth, (uint32_t)FrameBufferHeight,
-                            getFov().first, usedFoveationStrengthMean, usedFoveationShapeRatio});
+                            getFov().first, usedFoveationStrength, usedFoveationShape});
         ovrRenderer_CreateScene(&Renderer);
     } else {
         LOG("Not Changing FrameBuffer geometry. %dx%d", FrameBufferWidth,
@@ -744,10 +745,12 @@ void OvrContext::setStreamMic(bool streamMic) {
 
 }
 
-void OvrContext::setFFRParams( float foveationStrengthMean, float foveationShapeRatio) {
-    LOGI("SSetting FFR params %f %f", foveationStrengthMean,foveationShapeRatio );
-    mFoveationStrengthMean = foveationStrengthMean;
-    mFoveationShapeRatio = foveationShapeRatio;
+void OvrContext::setFFRParams(int foveationMode, float foveationStrength, float foveationShape) {
+    LOGI("SSetting FFR params %d %f %f", foveationMode, foveationStrength, foveationShape);
+
+    mFoveationMode = (FOVEATION_MODE)foveationMode;
+    mFoveationStrength = foveationStrength;
+    mFoveationShape = foveationShape;
 
 }
 
@@ -1248,8 +1251,8 @@ Java_com_polygraphene_alvr_OvrContext_setStreamMicNative(JNIEnv *env, jobject in
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_OvrContext_setFFRParamsNative(JNIEnv *env, jobject instance,
-                                                         jlong handle, jfloat foveationStrengthMean, jfloat foveationShapeRatio) {
-    return ((OvrContext *) handle)->setFFRParams(foveationStrengthMean, foveationShapeRatio);
+                                                         jlong handle, jint foveationMode, jfloat foveationStrength, jfloat foveationShape) {
+    return ((OvrContext *) handle)->setFFRParams(foveationMode, foveationStrength, foveationShape);
 }
 
 extern "C"

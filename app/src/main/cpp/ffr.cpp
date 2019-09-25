@@ -259,7 +259,7 @@ namespace {
         // foveated center X assuming screen plane with unit width
         float focusPositionX = leftHalfWidth / (leftHalfWidth + rightHalfWidth);
         // align focus position to a number of pixel multiple of 4 to avoid blur and artifacts
-        if (data.mode == FFR_MODE_SLICES) {
+        if (data.mode == FOVEATION_MODE_SLICES) {
             focusPositionX = Align4Normalized(focusPositionX, targetEyeWidth);
         }
 
@@ -267,7 +267,7 @@ namespace {
         float topHalfHeight = tan(data.leftEyeFov.bottom * DEG_TO_RAD);
         float bottomHalfHeight = tan(data.leftEyeFov.top * DEG_TO_RAD);
         float focusPositionY = topHalfHeight / (topHalfHeight + bottomHalfHeight);
-        if (data.mode == FFR_MODE_SLICES) {
+        if (data.mode == FOVEATION_MODE_SLICES) {
             focusPositionY = Align4Normalized(focusPositionY, targetEyeHeight);
         }
 
@@ -276,16 +276,16 @@ namespace {
         // /{ foveationScaleX * foveationScaleY = (mFoveationStrengthMean)^2
         // \{ foveationScaleX / foveationScaleY = 1 / mFoveationShapeRatio
         // then foveationScaleX := foveationScaleX / (targetEyeWidth / targetEyeHeight) to compensate for non square frame.
-        float strengthMean = data.foveationStrengthMean;
-        float strengthRatio = data.foveationShapeRatio;
-        if (data.mode == FFR_MODE_SLICES) {
-            strengthMean = 1.f / (strengthMean + 1.f);
-            strengthRatio = 1.f / strengthRatio;
+        float foveationStrength = data.foveationStrength;
+        float foveationShape = data.foveationShape;
+        if (data.mode == FOVEATION_MODE_SLICES) {
+            foveationStrength = 1.f / (foveationStrength / 2.f + 1.f);
+            foveationShape = 1.f / foveationShape;
         }
-        float scaleCoeff = strengthMean * sqrt(strengthRatio);
-        float foveationScaleX = scaleCoeff / strengthRatio / (targetEyeWidth / targetEyeHeight);
+        float scaleCoeff = foveationStrength * sqrt(foveationShape);
+        float foveationScaleX = scaleCoeff / foveationShape / (targetEyeWidth / targetEyeHeight);
         float foveationScaleY = scaleCoeff;
-        if (data.mode == FFR_MODE_SLICES) {
+        if (data.mode == FOVEATION_MODE_SLICES) {
             foveationScaleX = Align4Normalized(foveationScaleX, targetEyeWidth);
             foveationScaleY = Align4Normalized(foveationScaleY, targetEyeHeight);
         }
@@ -297,11 +297,11 @@ namespace {
         float distortedWidth = 0;
         float distortedHeight = 0;
 
-        if (data.mode == FFR_MODE_SLICES) {
+        if (data.mode == FOVEATION_MODE_SLICES) {
             optimizedEyeWidth = CalcOptimalDimensionForSlicing(foveationScaleX, targetEyeWidth);
             optimizedEyeHeight = CalcOptimalDimensionForSlicing(foveationScaleY, targetEyeHeight);
 
-        } else if (data.mode == FFR_MODE_WARP) {
+        } else if (data.mode == FOVEATION_MODE_WARP) {
             boundStartX = CalcBoundStart(focusPositionX, foveationScaleX);
             boundStartY = CalcBoundStart(focusPositionY, foveationScaleY);
 
@@ -342,10 +342,10 @@ void FFR::Initialize(FFRData ffrData) {
 
 
     switch (ffrData.mode) {
-        case FFR_MODE_DISABLED:
+        case FOVEATION_MODE_DISABLED:
             mExpandedTexture.reset(mInputSurface);
             break;
-        case FFR_MODE_SLICES: {
+        case FOVEATION_MODE_SLICES: {
             auto decompressSlicesShaderStr = ffrCommonShaderStr + DECOMPRESS_SLICES_FRAGMENT_SHADER;
             auto decompressSlicesPipeline = new RenderPipeline(
                     {mInputSurface}, decompressSlicesShaderStr, mExpandedTexture.get());
@@ -353,7 +353,7 @@ void FFR::Initialize(FFRData ffrData) {
             mPipelines.push_back(std::unique_ptr<RenderPipeline>(decompressSlicesPipeline));
             break;
         }
-        case FFR_MODE_WARP:
+        case FOVEATION_MODE_WARP:
             //mSharpenedTexture = std::make_unique<Texture>(false, ffrData.eyeWidth * 2, ffrData.eyeHeight,
             //                                              GL_RGB8);
 
