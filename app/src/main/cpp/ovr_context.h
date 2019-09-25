@@ -11,6 +11,7 @@
 #include "utils.h"
 #include "ServerConnectionNative.h"
 #include "OVR_Platform.h"
+#include "ffr.h"
 
 uint32_t ovrButton_Unknown1 = 0x01000000;
 
@@ -57,7 +58,7 @@ public:
 
     void setStreamMic(bool streamMic);
 
-   void setFFRParams( float foveationStrengthMean, float foveationShapeRatio);
+   void setFFRParams(int foveationMode, float foveationStrength, float foveationShape);
 
 private:
     ANativeWindow *window = NULL;
@@ -86,10 +87,12 @@ private:
     bool Resumed = false;
     int FrameBufferWidth = 0;
     int FrameBufferHeight = 0;
-    float mFoveationStrengthMean = 5;
-    float mFoveationShapeRatio = 1.5;
-    float usedFoveationStrengthMean = 0;
-    float usedFoveationShapeRatio = 0;
+    FOVEATION_MODE mFoveationMode = FOVEATION_MODE_DISABLED;
+    float mFoveationStrength = 5;
+    float mFoveationShape = 1.5;
+    FOVEATION_MODE usedFoveationMode = FOVEATION_MODE_DISABLED;
+    float usedFoveationStrength = 0;
+    float usedFoveationShape = 0;
 
     bool mExtraLatencyMode = false;
 
