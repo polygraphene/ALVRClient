@@ -20,6 +20,7 @@ struct FFRData {
     EyeFov leftEyeFov;
     float foveationStrength;
     float foveationShape;
+    float foveationVerticalOffset;
 };
 
 class FFR {

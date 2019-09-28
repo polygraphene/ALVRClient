@@ -267,6 +267,7 @@ namespace {
         float topHalfHeight = tan(data.leftEyeFov.bottom * DEG_TO_RAD);
         float bottomHalfHeight = tan(data.leftEyeFov.top * DEG_TO_RAD);
         float focusPositionY = topHalfHeight / (topHalfHeight + bottomHalfHeight);
+        focusPositionY += data.foveationVerticalOffset;
         if (data.mode == FOVEATION_MODE_SLICES) {
             focusPositionY = Align4Normalized(focusPositionY, targetEyeHeight);
         }

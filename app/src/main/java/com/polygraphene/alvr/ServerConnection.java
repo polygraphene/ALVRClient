@@ -34,7 +34,7 @@ class ServerConnection extends ThreadBase
     private int mPreviousServerPort;
 
     interface ConnectionListener {
-        void onConnected(int width, int height, int codec, int frameQueueSize, int refreshRate, boolean streamMic, int foveationMode, float foveationStrength, float foveationShape);
+        void onConnected(int width, int height, int codec, int frameQueueSize, int refreshRate, boolean streamMic, int foveationMode, float foveationStrength, float foveationShape, float foveationVerticalOffset);
 
         void onChangeSettings(int suspend, int frameQueueSize);
 
@@ -231,9 +231,9 @@ class ServerConnection extends ThreadBase
 
     // called from native
     @SuppressWarnings("unused")
-    public void onConnected(int width, int height, int codec, int frameQueueSize, int refreshRate, boolean streamMic, int foveationMode, float foveationStrength, float foveationShape) {
+    public void onConnected(int width, int height, int codec, int frameQueueSize, int refreshRate, boolean streamMic, int foveationMode, float foveationStrength, float foveationShape, float foveationVerticalOffset) {
         Utils.logi(TAG, () -> "onConnected is called.");
-        mConnectionListener.onConnected(width, height, codec, frameQueueSize, refreshRate, streamMic, foveationMode, foveationStrength, foveationShape);
+        mConnectionListener.onConnected(width, height, codec, frameQueueSize, refreshRate, streamMic, foveationMode, foveationStrength, foveationShape, foveationVerticalOffset);
         mTrackingThread.onConnect();
     }
 

@@ -92,8 +92,8 @@ public class OvrContext {
         setStreamMicNative(handle, streamMic);
     }
 
-    public void setFFRParams(int foveationMode, float foveationStrength, float foveationShape) {
-        setFFRParamsNative(handle, foveationMode, foveationStrength, foveationShape);
+    public void setFFRParams(int foveationMode, float foveationStrength, float foveationShape, float foveationVerticalOffset) {
+        setFFRParamsNative(handle, foveationMode, foveationStrength, foveationShape,  foveationVerticalOffset);
     }
 
     public void onHapticsFeedback(long startTime, float amplitude, float duration, float frequency, boolean hand) {
@@ -130,7 +130,7 @@ public class OvrContext {
     private native void setFrameGeometryNative(long handle, int width, int height);
     private native void setRefreshRateNative(long handle, int refreshRate);
     private native void setStreamMicNative(long handle, boolean streamMic);
-    private native void setFFRParamsNative(long handle, int foveationMode, float foveationStrength, float foveationShape);
+    private native void setFFRParamsNative(long handle, int foveationMode, float foveationStrength, float foveationShape, float foveationVerticalOffset);
     private native void onHapticsFeedbackNative(long handle, long startTime, float amplitude, float duration, float frequency, boolean hand);
 
     private native boolean getButtonDownNative(long handle);
