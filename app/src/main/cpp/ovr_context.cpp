@@ -661,9 +661,10 @@ void OvrContext::setFrameGeometry(int width, int height) {
     int eye_width = width / 2;
 
     if (eye_width != FrameBufferWidth || height != FrameBufferHeight ||
-    usedFoveationMode != mFoveationMode ||
-    usedFoveationStrength != mFoveationStrength ||
-    usedFoveationShape != mFoveationShape) {
+            usedFoveationMode != mFoveationMode ||
+            usedFoveationStrength != mFoveationStrength ||
+            usedFoveationShape != mFoveationShape ||
+            usedFoveationVerticalOffset != mFoveationVerticalOffset) {
 
         LOG("Changing FrameBuffer geometry. Old=%dx%d New=%dx%d", FrameBufferWidth,
             FrameBufferHeight, eye_width, height);
@@ -673,12 +674,13 @@ void OvrContext::setFrameGeometry(int width, int height) {
         usedFoveationMode = mFoveationMode;
         usedFoveationStrength = mFoveationStrength;
         usedFoveationShape = mFoveationShape;
+        usedFoveationVerticalOffset = mFoveationVerticalOffset;
 
         ovrRenderer_Destroy(&Renderer);
         ovrRenderer_Create(&Renderer, UseMultiview, FrameBufferWidth, FrameBufferHeight,
                            SurfaceTextureID, loadingTexture, CameraTexture, m_ARMode,
                            {usedFoveationMode, (uint32_t)FrameBufferWidth, (uint32_t)FrameBufferHeight,
-                            getFov().first, usedFoveationStrength, usedFoveationShape});
+                            getFov().first, usedFoveationStrength, usedFoveationShape, usedFoveationVerticalOffset});
         ovrRenderer_CreateScene(&Renderer);
     } else {
         LOG("Not Changing FrameBuffer geometry. %dx%d", FrameBufferWidth,
@@ -745,13 +747,13 @@ void OvrContext::setStreamMic(bool streamMic) {
 
 }
 
-void OvrContext::setFFRParams(int foveationMode, float foveationStrength, float foveationShape) {
-    LOGI("SSetting FFR params %d %f %f", foveationMode, foveationStrength, foveationShape);
+void OvrContext::setFFRParams(int foveationMode, float foveationStrength, float foveationShape, float foveationVerticalOffset) {
+    LOGI("SSetting FFR params %d %f %f %f", foveationMode, foveationStrength, foveationShape, foveationVerticalOffset);
 
     mFoveationMode = (FOVEATION_MODE)foveationMode;
     mFoveationStrength = foveationStrength;
     mFoveationShape = foveationShape;
-
+    mFoveationVerticalOffset = foveationVerticalOffset;
 }
 
 
@@ -1251,8 +1253,8 @@ Java_com_polygraphene_alvr_OvrContext_setStreamMicNative(JNIEnv *env, jobject in
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_polygraphene_alvr_OvrContext_setFFRParamsNative(JNIEnv *env, jobject instance,
-                                                         jlong handle, jint foveationMode, jfloat foveationStrength, jfloat foveationShape) {
-    return ((OvrContext *) handle)->setFFRParams(foveationMode, foveationStrength, foveationShape);
+                                                         jlong handle, jint foveationMode, jfloat foveationStrength, jfloat foveationShape, jfloat foveationVerticalOffset) {
+    return ((OvrContext *) handle)->setFFRParams(foveationMode, foveationStrength, foveationShape, foveationVerticalOffset);
 }
 
 extern "C"

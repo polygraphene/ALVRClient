@@ -377,7 +377,8 @@ void ServerConnectionNative::onConnect(const ConnectionMessage &connectionMessag
             , m_connectionMessage.frameQueueSize, m_connectionMessage.refreshRate, m_connectionMessage.streamMic,
             m_connectionMessage.foveationMode,
             m_connectionMessage.foveationStrength,
-            m_connectionMessage.foveationShape);
+            m_connectionMessage.foveationShape,
+            m_connectionMessage.foveationVerticalOffset);
 
     if (mSinkPrepared) {
         LOGSOCKETI("onConnect: Send stream start packet.");
@@ -539,7 +540,7 @@ void ServerConnectionNative::sendStreamStartPacket() {
 void ServerConnectionNative::initializeJNICallbacks(JNIEnv *env, jobject instance) {
     jclass clazz = env->GetObjectClass(instance);
 
-    mOnConnectMethodID = env->GetMethodID(clazz, "onConnected", "(IIIIIZIFF)V");
+    mOnConnectMethodID = env->GetMethodID(clazz, "onConnected", "(IIIIIZIFFF)V");
     mOnChangeSettingsMethodID = env->GetMethodID(clazz, "onChangeSettings", "(JII)V");
     mOnDisconnectedMethodID = env->GetMethodID(clazz, "onDisconnected", "()V");
     mOnHapticsFeedbackID = env->GetMethodID(clazz, "onHapticsFeedback", "(JFFFZ)V");

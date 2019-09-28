@@ -252,13 +252,14 @@ class OvrThread implements SurfaceHolder.Callback {
         @Override
         public void onConnected(final int width, final int height, final int codec, final int frameQueueSize,
                                 final int refreshRate, final boolean streamMic, final int foveationMode,
-                                final float foveationStrength, final float foveationShape) {
+                                final float foveationStrength, final float foveationShape,
+                                final float foveationVerticalOffset) {
 
             // We must wait completion of notifyGeometryChange
             // to ensure the first video frame arrives after notifyGeometryChange.
             mHandler.post(() -> {
                 mOvrContext.setRefreshRate(refreshRate);
-                mOvrContext.setFFRParams(foveationMode, foveationStrength, foveationShape);
+                mOvrContext.setFFRParams(foveationMode, foveationStrength, foveationShape, foveationVerticalOffset);
                 mOvrContext.setFrameGeometry(width, height);
                 mOvrContext.setStreamMic(streamMic);
                 mDecoderThread.onConnect(codec, frameQueueSize);
