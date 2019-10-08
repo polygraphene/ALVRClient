@@ -7,6 +7,7 @@ import android.util.Log;
 
 public class Utils {
     public static boolean sEnableLog = false;
+    public static long gDebugFlags = 0;
 
     public static native void setFrameLogEnabled(long debugFlags);
 
@@ -65,5 +66,6 @@ public class Utils {
         sEnableLog = (debugFlags & 1) != 0;
         Log.i("ALVR", "DebugFlags is changed. New=" + debugFlags);
         setFrameLogEnabled(debugFlags);
+        gDebugFlags = debugFlags;
     }
 }

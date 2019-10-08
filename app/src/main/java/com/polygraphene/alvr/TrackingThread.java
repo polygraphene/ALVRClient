@@ -55,7 +55,10 @@ class TrackingThread extends ThreadBase
     public void run() {
         long previousFetchTime = System.nanoTime();
         while (!isStopped()) {
-            mCallback.onTracking();
+
+            if(Utils.gDebugFlags!= 10)
+                mCallback.onTracking();
+
             try {
                 previousFetchTime += 1000 * 1000 * 1000 / mRefreshRate;
                 long next = previousFetchTime - System.nanoTime();

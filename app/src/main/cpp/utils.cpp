@@ -5,6 +5,8 @@ int gGeneralLogLevel = ANDROID_LOG_INFO;
 int gSoundLogLevel = ANDROID_LOG_INFO;
 int gSocketLogLevel = ANDROID_LOG_INFO;
 bool gDisableExtraLatencyMode = false;
+long gDebugFlags = 0;
+
 
 enum DEBUG_FLAGS {
     DEBUG_FLAGS_ENABLE_FRAME_LOG = 1 << 0,
@@ -29,4 +31,5 @@ Java_com_polygraphene_alvr_Utils_setFrameLogEnabled(JNIEnv *env, jclass type, jl
     gSocketLogLevel = (debugFlags & DEBUG_FLAGS_ENABLE_SOCKET_LOG) ?
                        ANDROID_LOG_VERBOSE : ANDROID_LOG_INFO ;
     gDisableExtraLatencyMode = (debugFlags & DEBUG_FLAGS_DISABLE_EXTRA_LATENCY_MODE) != 0;
+    gDebugFlags = debugFlags;
 }
