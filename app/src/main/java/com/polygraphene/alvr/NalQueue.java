@@ -16,7 +16,7 @@ public class NalQueue {
         }
     }
 
-    public NAL obtain(int length) {
+    synchronized public NAL obtain(int length) {
         NAL nal = mUnusedList.poll();
         if (nal == null) {
             return null;
@@ -36,12 +36,12 @@ public class NalQueue {
         return mNalQueue.peek();
     }
 
-    public void remove() {
+    synchronized public void remove() {
         NAL nal = mNalQueue.remove();
         mUnusedList.add(nal);
     }
 
-    public void clear() {
+    synchronized public void clear() {
         mUnusedList.addAll(mNalQueue);
         mNalQueue.clear();
     }
