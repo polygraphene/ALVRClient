@@ -797,8 +797,8 @@ void OvrContext::enterVrMode() {
     ovrResult result = vrapi_SetDisplayRefreshRate(Ovr, m_currentRefreshRate);
     LOGI("vrapi_SetDisplayRefreshRate: Result=%d", result);
 
-    int CpuLevel = 3;
-    int GpuLevel = 3;
+    int CpuLevel = 0;
+    int GpuLevel = 0;
     vrapi_SetClockLevels(Ovr, CpuLevel, GpuLevel);
     vrapi_SetPerfThread(Ovr, VRAPI_PERF_THREAD_TYPE_MAIN, gettid());
 
@@ -809,7 +809,7 @@ void OvrContext::enterVrMode() {
     // After enabling ExtraLatencyMode:
     //    I/VrApi: FPS=71,Prd=76ms,Tear=0,Early=66,Stale=0,VSnc=1,Lat=1,Fov=0,CPU4/GPU=3/3,1958/515MHz,OC=FF,TA=0/E0/0,SP=N/N/N,Mem=1804MHz,Free=906MB,PSM=0,PLS=0,Temp=38.0C/0.0C,TW=1.93ms,App=1.46ms,GD=0.00ms
     // We need to set ExtraLatencyMode On to workaround for this issue.
-    reflectExtraLatencyMode(true);
+    reflectExtraLatencyMode(false);
 
     // Calling back VrThread to notify Vr state change.
     jclass clazz = env->GetObjectClass(mVrThread);
