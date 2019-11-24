@@ -797,8 +797,8 @@ void OvrContext::enterVrMode() {
     ovrResult result = vrapi_SetDisplayRefreshRate(Ovr, m_currentRefreshRate);
     LOGI("vrapi_SetDisplayRefreshRate: Result=%d", result);
 
-    int CpuLevel = 0;
-    int GpuLevel = 0;
+    int CpuLevel = 3;
+    int GpuLevel = 3;
     vrapi_SetClockLevels(Ovr, CpuLevel, GpuLevel);
     vrapi_SetPerfThread(Ovr, VRAPI_PERF_THREAD_TYPE_MAIN, gettid());
 
