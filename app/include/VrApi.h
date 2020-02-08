@@ -16,6 +16,7 @@ Copyright   :   Copyright (c) Facebook Technologies, LLC and its affiliates. All
 #include "VrApi_Version.h"
 #include "VrApi_Types.h"
 
+// clang-format off
 /** \mainpage
 
 VrApi
@@ -413,18 +414,19 @@ The ATW brings this down to 8-16 milliseconds.
 \endverbatim
 
 */
+// clang-format on
 
-#if defined( __cplusplus )
+#if defined(__cplusplus)
 extern "C" {
 #endif
 
 /// Returns the version + compile time stamp as a string.
 /// Can be called any time from any thread.
-OVR_VRAPI_EXPORT const char * vrapi_GetVersionString();
+OVR_VRAPI_EXPORT const char* vrapi_GetVersionString();
 
 /// Returns global, absolute high-resolution time in seconds. This is the same value
 /// as used in sensor messages and on Android also the same as Java's system.nanoTime(),
-/// which is what the Choreographer V-sync timestamp is based on.
+/// which is what the V-sync timestamp is based on.
 /// \warning Do not use this time as a seed for simulations, animations or other logic.
 /// An animation, for instance, should not be updated based on the "real time" the
 /// animation code is executed. Instead, an animation should be updated based on the
@@ -444,7 +446,7 @@ OVR_VRAPI_EXPORT double vrapi_GetTimeInSeconds();
 /// This is typically called from onCreate() or shortly thereafter.
 /// Can be called from any thread.
 /// Returns a non-zero value from ovrInitializeStatus on error.
-OVR_VRAPI_EXPORT ovrInitializeStatus vrapi_Initialize( const ovrInitParms * initParms );
+OVR_VRAPI_EXPORT ovrInitializeStatus vrapi_Initialize(const ovrInitParms* initParms);
 
 /// Shuts down the API on application exit.
 /// This is typically called from onDestroy() or shortly thereafter.
@@ -457,11 +459,14 @@ OVR_VRAPI_EXPORT void vrapi_Shutdown();
 
 /// Returns a VrApi property.
 /// These functions can be called any time from any thread once the VrApi is initialized.
-OVR_VRAPI_EXPORT void vrapi_SetPropertyInt( const ovrJava * java, const ovrProperty propType, const int intVal );
-OVR_VRAPI_EXPORT void vrapi_SetPropertyFloat( const ovrJava * java, const ovrProperty propType, const float floatVal );
+OVR_VRAPI_EXPORT void
+vrapi_SetPropertyInt(const ovrJava* java, const ovrProperty propType, const int intVal);
+OVR_VRAPI_EXPORT void
+vrapi_SetPropertyFloat(const ovrJava* java, const ovrProperty propType, const float floatVal);
 
 /// Returns false if the property cannot be read.
-OVR_VRAPI_EXPORT bool vrapi_GetPropertyInt( const ovrJava * java, const ovrProperty propType, int * intVal );
+OVR_VRAPI_EXPORT bool
+vrapi_GetPropertyInt(const ovrJava* java, const ovrProperty propType, int* intVal);
 
 //-----------------------------------------------------------------
 // System Properties
@@ -469,16 +474,29 @@ OVR_VRAPI_EXPORT bool vrapi_GetPropertyInt( const ovrJava * java, const ovrPrope
 
 /// Returns a system property. These are constants for a particular device.
 /// These functions can be called any time from any thread once the VrApi is initialized.
-OVR_VRAPI_EXPORT int vrapi_GetSystemPropertyInt( const ovrJava * java, const ovrSystemProperty propType );
-OVR_VRAPI_EXPORT float vrapi_GetSystemPropertyFloat( const ovrJava * java, const ovrSystemProperty propType );
+OVR_VRAPI_EXPORT int vrapi_GetSystemPropertyInt(
+    const ovrJava* java,
+    const ovrSystemProperty propType);
+OVR_VRAPI_EXPORT float vrapi_GetSystemPropertyFloat(
+    const ovrJava* java,
+    const ovrSystemProperty propType);
 /// Returns the number of elements written to values array.
-OVR_VRAPI_EXPORT int vrapi_GetSystemPropertyFloatArray( const ovrJava * java, const ovrSystemProperty propType,
-														float * values, int numArrayValues );
-OVR_VRAPI_EXPORT int vrapi_GetSystemPropertyInt64Array( const ovrJava * java, const ovrSystemProperty propType,
-														int64_t * values, int numArrayValues );
+OVR_VRAPI_EXPORT int vrapi_GetSystemPropertyFloatArray(
+    const ovrJava* java,
+    const ovrSystemProperty propType,
+    float* values,
+    int numArrayValues);
+OVR_VRAPI_EXPORT int vrapi_GetSystemPropertyInt64Array(
+    const ovrJava* java,
+    const ovrSystemProperty propType,
+    int64_t* values,
+    int numArrayValues);
 
-/// The return memory is guaranteed to be valid until the next call to vrapi_GetSystemPropertyString.
-OVR_VRAPI_EXPORT const char * vrapi_GetSystemPropertyString( const ovrJava * java, const ovrSystemProperty propType );
+/// The return memory is guaranteed to be valid until the next call to
+/// vrapi_GetSystemPropertyString.
+OVR_VRAPI_EXPORT const char* vrapi_GetSystemPropertyString(
+    const ovrJava* java,
+    const ovrSystemProperty propType);
 
 //-----------------------------------------------------------------
 // System Status
@@ -486,8 +504,12 @@ OVR_VRAPI_EXPORT const char * vrapi_GetSystemPropertyString( const ovrJava * jav
 
 /// Returns a system status. These are variables that may change at run-time.
 /// This function can be called any time from any thread once the VrApi is initialized.
-OVR_VRAPI_EXPORT int vrapi_GetSystemStatusInt( const ovrJava * java, const ovrSystemStatus statusType );
-OVR_VRAPI_EXPORT float vrapi_GetSystemStatusFloat( const ovrJava * java, const ovrSystemStatus statusType );
+OVR_VRAPI_EXPORT int vrapi_GetSystemStatusInt(
+    const ovrJava* java,
+    const ovrSystemStatus statusType);
+OVR_VRAPI_EXPORT float vrapi_GetSystemStatusFloat(
+    const ovrJava* java,
+    const ovrSystemStatus statusType);
 
 //-----------------------------------------------------------------
 // Enter/Leave VR mode
@@ -531,7 +553,7 @@ OVR_VRAPI_EXPORT float vrapi_GetSystemStatusFloat( const ovrJava * java, const o
 /// new ANativeWindow (through SurfaceCreated). If another API is already connected to
 /// the ANativeWindow ("BufferQueueProducer: already connected"), then the app has to first
 /// disconnect whatever is connected to the ANativeWindow (typically an EGLSurface).
-OVR_VRAPI_EXPORT ovrMobile * vrapi_EnterVrMode( const ovrModeParms * parms );
+OVR_VRAPI_EXPORT ovrMobile* vrapi_EnterVrMode(const ovrModeParms* parms);
 
 /// Shut everything down for window destruction or when the activity is paused.
 /// The ovrMobile object is freed by this function.
@@ -543,7 +565,7 @@ OVR_VRAPI_EXPORT ovrMobile * vrapi_EnterVrMode( const ovrModeParms * parms );
 /// the time warp gives up ownership of the Android window surface, and on return,
 /// the context from the calling thread will be current again on the Android window
 /// surface.
-OVR_VRAPI_EXPORT void vrapi_LeaveVrMode( ovrMobile * ovr );
+OVR_VRAPI_EXPORT void vrapi_LeaveVrMode(ovrMobile* ovr);
 
 //-----------------------------------------------------------------
 // Tracking
@@ -565,15 +587,15 @@ OVR_VRAPI_EXPORT void vrapi_LeaveVrMode( ovrMobile * ovr );
 /// once every frame before calling this function.
 ///
 /// Can be called from any thread while in VR mode.
-OVR_VRAPI_EXPORT double vrapi_GetPredictedDisplayTime( ovrMobile * ovr, long long frameIndex );
+OVR_VRAPI_EXPORT double vrapi_GetPredictedDisplayTime(ovrMobile* ovr, long long frameIndex);
 
 /// Returns the predicted sensor state based on the specified absolute system time
 /// in seconds. Pass absTime value of 0.0 to request the most recent sensor reading.
 ///
 /// Can be called from any thread while in VR mode.
-OVR_VRAPI_EXPORT ovrTracking2 vrapi_GetPredictedTracking2( ovrMobile * ovr, double absTimeInSeconds );
+OVR_VRAPI_EXPORT ovrTracking2 vrapi_GetPredictedTracking2(ovrMobile* ovr, double absTimeInSeconds);
 
-OVR_VRAPI_EXPORT ovrTracking vrapi_GetPredictedTracking( ovrMobile * ovr, double absTimeInSeconds );
+OVR_VRAPI_EXPORT ovrTracking vrapi_GetPredictedTracking(ovrMobile* ovr, double absTimeInSeconds);
 
 /// Recenters the orientation on the yaw axis and will recenter the position
 /// when position tracking is available.
@@ -588,7 +610,7 @@ OVR_VRAPI_EXPORT ovrTracking vrapi_GetPredictedTracking( ovrMobile * ovr, double
 // vrapi_RecenterPose() is being deprecated because it is supported at the user
 // level via system interaction, and at the app level, the app is free to use
 // any means it likes to control the mapping of virtual space to physical space.
-OVR_VRAPI_DEPRECATED( OVR_VRAPI_EXPORT void vrapi_RecenterPose( ovrMobile * ovr ) );
+OVR_VRAPI_DEPRECATED(OVR_VRAPI_EXPORT void vrapi_RecenterPose(ovrMobile* ovr));
 
 //-----------------------------------------------------------------
 // Tracking Transform
@@ -629,16 +651,18 @@ OVR_VRAPI_DEPRECATED( OVR_VRAPI_EXPORT void vrapi_RecenterPose( ovrMobile * ovr 
 /// TrackingSpace API. The key difference in the TrackingSpace API is that LOCAL
 /// and LOCAL_FLOOR spaces are mutable, so user/system recentering is transparently
 /// applied without app intervention.
-OVR_VRAPI_DEPRECATED( OVR_VRAPI_EXPORT ovrPosef  vrapi_GetTrackingTransform( ovrMobile * ovr, ovrTrackingTransform whichTransform ) );
+OVR_VRAPI_DEPRECATED(OVR_VRAPI_EXPORT ovrPosef vrapi_GetTrackingTransform(
+    ovrMobile* ovr,
+    ovrTrackingTransform whichTransform));
 
-/// Sets the transform used convert between tracking coordinates and a canonical
+/// Sets the transform used to convert between tracking coordinates and a canonical
 /// application-defined space.
 /// Only the yaw component of the orientation is used.
-OVR_VRAPI_DEPRECATED( OVR_VRAPI_EXPORT void vrapi_SetTrackingTransform( ovrMobile * ovr, ovrPosef pose ) );
-
+OVR_VRAPI_DEPRECATED(
+    OVR_VRAPI_EXPORT void vrapi_SetTrackingTransform(ovrMobile* ovr, ovrPosef pose));
 
 /// Returns the current tracking space
-OVR_VRAPI_EXPORT ovrTrackingSpace vrapi_GetTrackingSpace( ovrMobile * ovr );
+OVR_VRAPI_EXPORT ovrTrackingSpace vrapi_GetTrackingSpace(ovrMobile* ovr);
 
 /// Set the tracking space. There are currently two options:
 ///   * VRAPI_TRACKING_SPACE_LOCAL (default)
@@ -650,49 +674,62 @@ OVR_VRAPI_EXPORT ovrTrackingSpace vrapi_GetTrackingSpace( ovrMobile * ovr );
 ///         space, except its origin is translated down to the floor. The local
 ///         floor space differs from the local space only in its y translation.
 ///         This space is volatile and will change when system recentering occurs.
-OVR_VRAPI_EXPORT ovrResult vrapi_SetTrackingSpace( ovrMobile * ovr, ovrTrackingSpace whichSpace );
+OVR_VRAPI_EXPORT ovrResult vrapi_SetTrackingSpace(ovrMobile* ovr, ovrTrackingSpace whichSpace);
 
 /// Returns pose of the requested space relative to the current space.
 /// The returned value is not affected by the current tracking transform.
-OVR_VRAPI_EXPORT ovrPosef vrapi_LocateTrackingSpace( ovrMobile * ovr, ovrTrackingSpace target );
+OVR_VRAPI_EXPORT ovrPosef vrapi_LocateTrackingSpace(ovrMobile* ovr, ovrTrackingSpace target);
 
 //-----------------------------------------------------------------
 // Guardian System
 //
 //-----------------------------------------------------------------
 
-/// Get the geometry of the Guardian System as a list of points that define the outer boundary space.
-/// You can choose to get just the number of points by passing in a null value for points or
+/// Get the geometry of the Guardian System as a list of points that define the outer boundary
+/// space. You can choose to get just the number of points by passing in a null value for points or
 /// by passing in a pointsCountInput size of 0.  Otherwise pointsCountInput will be used to fetch
 /// as many points as possible from the Guardian points data.  If the input size exceeds the
 /// number of points that are currently stored off we only copy up to the number of points that we
 /// have and pointsCountOutput will return the number of copied points
-OVR_VRAPI_EXPORT ovrResult vrapi_GetBoundaryGeometry( ovrMobile * ovr, const uint32_t pointsCountInput, uint32_t * pointsCountOutput, ovrVector3f * points );
+OVR_VRAPI_EXPORT ovrResult vrapi_GetBoundaryGeometry(
+    ovrMobile* ovr,
+    const uint32_t pointsCountInput,
+    uint32_t* pointsCountOutput,
+    ovrVector3f* points);
 
 /// Gets the dimension of the Oriented Bounding box for the Guardian System.  This is the largest
-/// fit rectangle within the Guardian System boundary geometry. The pose value contains the forward facing
-/// direction as well as the translation for the oriented box.  The scale return value returns a
-/// scalar value for the width, height, and depth of the box.  These values are half the actual size
-/// as they are scalars and in meters."
-OVR_VRAPI_EXPORT ovrResult vrapi_GetBoundaryOrientedBoundingBox( ovrMobile * ovr, ovrPosef * pose, ovrVector3f * scale );
+/// fit rectangle within the Guardian System boundary geometry. The pose value contains the forward
+/// facing direction as well as the translation for the oriented box.  The scale return value
+/// returns a scalar value for the width, height, and depth of the box.  These values are half the
+/// actual size as they are scalars and in meters."
+OVR_VRAPI_EXPORT ovrResult
+vrapi_GetBoundaryOrientedBoundingBox(ovrMobile* ovr, ovrPosef* pose, ovrVector3f* scale);
 
-/// Tests collision/proximity of a 3D point against the Guardian System Boundary and returns whether or not a
-/// given point is inside or outside of the boundary.  If a more detailed set of boundary
+/// Tests collision/proximity of a 3D point against the Guardian System Boundary and returns whether
+/// or not a given point is inside or outside of the boundary.  If a more detailed set of boundary
 /// trigger information is requested a ovrBoundaryTriggerResult may be passed in.  However null may
 /// also be passed in to just return whether a point is inside the boundary or not.
-OVR_VRAPI_EXPORT ovrResult vrapi_TestPointIsInBoundary( ovrMobile * ovr, const ovrVector3f point, bool * pointInsideBoundary, ovrBoundaryTriggerResult * result );
+OVR_VRAPI_EXPORT ovrResult vrapi_TestPointIsInBoundary(
+    ovrMobile* ovr,
+    const ovrVector3f point,
+    bool* pointInsideBoundary,
+    ovrBoundaryTriggerResult* result);
 
 /// Tests collision/proximity of position tracked devices (e.g. HMD and/or Controllers) against the
-/// Guardian System boundary. This function returns an ovrGuardianTriggerResult which contains information
-/// such as distance and closest point based on collision/proximity test
-OVR_VRAPI_EXPORT ovrResult vrapi_GetBoundaryTriggerState( ovrMobile * ovr, const ovrTrackedDeviceTypeId deviceId, ovrBoundaryTriggerResult * result );
+/// Guardian System boundary. This function returns an ovrGuardianTriggerResult which contains
+/// information such as distance and closest point based on collision/proximity test
+OVR_VRAPI_EXPORT ovrResult vrapi_GetBoundaryTriggerState(
+    ovrMobile* ovr,
+    const ovrTrackedDeviceTypeId deviceId,
+    ovrBoundaryTriggerResult* result);
 
 /// Used to force Guardian System mesh visibility to true.  Forcing to false will set the Guardian
 /// System back to normal operation.
-OVR_VRAPI_EXPORT ovrResult vrapi_RequestBoundaryVisible( ovrMobile * ovr, const bool visible );
+OVR_VRAPI_EXPORT ovrResult vrapi_RequestBoundaryVisible(ovrMobile* ovr, const bool visible);
 
 /// Used to access whether or not the Guardian System is visible or not
-OVR_VRAPI_EXPORT ovrResult vrapi_GetBoundaryVisible( ovrMobile * ovr, bool * visible );
+OVR_VRAPI_EXPORT ovrResult vrapi_GetBoundaryVisible(ovrMobile* ovr, bool* visible);
+
 
 //-----------------------------------------------------------------
 // Texture Swap Chains
@@ -718,46 +755,66 @@ OVR_VRAPI_EXPORT ovrResult vrapi_GetBoundaryVisible( ovrMobile * ovr, bool * vis
 /// If an unsupported format is provided, swapchain creation will fail.
 ///
 /// SwapChain creation failures result in a return value of 'nullptr'.
-OVR_VRAPI_EXPORT ovrTextureSwapChain * vrapi_CreateTextureSwapChain3( ovrTextureType type, int64_t format,
-																int width, int height, int levels, int bufferCount );
+OVR_VRAPI_EXPORT ovrTextureSwapChain* vrapi_CreateTextureSwapChain3(
+    ovrTextureType type,
+    int64_t format,
+    int width,
+    int height,
+    int levels,
+    int bufferCount);
 
-OVR_VRAPI_EXPORT ovrTextureSwapChain * vrapi_CreateTextureSwapChain2( ovrTextureType type, ovrTextureFormat format,
-																int width, int height, int levels, int bufferCount );
+OVR_VRAPI_EXPORT ovrTextureSwapChain* vrapi_CreateTextureSwapChain2(
+    ovrTextureType type,
+    ovrTextureFormat format,
+    int width,
+    int height,
+    int levels,
+    int bufferCount);
 
-OVR_VRAPI_EXPORT ovrTextureSwapChain * vrapi_CreateTextureSwapChain( ovrTextureType type, ovrTextureFormat format,
-                                                                int width, int height, int levels, bool buffered );
+OVR_VRAPI_EXPORT ovrTextureSwapChain* vrapi_CreateTextureSwapChain(
+    ovrTextureType type,
+    ovrTextureFormat format,
+    int width,
+    int height,
+    int levels,
+    bool buffered);
 
-/// Create an Android SurfaceTexture based texture swap chain suitable for use with vrapi_SubmitFrame.
-/// Updating of the SurfaceTexture is handled through normal Android platform specific mechanisms
-/// from within the Compositor. A reference to the Android Surface object associated with the SurfaceTexture
-/// may be obtained by calling vrapi_GetTextureSwapChainAndroidSurface.
+/// Create an Android SurfaceTexture based texture swap chain suitable for use with
+/// vrapi_SubmitFrame. Updating of the SurfaceTexture is handled through normal Android platform
+/// specific mechanisms from within the Compositor. A reference to the Android Surface object
+/// associated with the SurfaceTexture may be obtained by calling
+/// vrapi_GetTextureSwapChainAndroidSurface.
 ///
-/// An optional width and height (ie width and height do not equal zero) may be provided in order to set
-/// the default size of the image buffers.
-/// Note that the image producer may override the buffer size, in which case the default values provided
-/// here will not be used (ie both video decompression or camera preview override the size automatically).
+/// An optional width and height (ie width and height do not equal zero) may be provided in order to
+/// set the default size of the image buffers. Note that the image producer may override the buffer
+/// size, in which case the default values provided here will not be used (ie both video
+/// decompression or camera preview override the size automatically).
 ///
-/// If isProtected is true, the surface swapchain will be created as a protected surface, ie for supporting
-/// secure video playback.
+/// If isProtected is true, the surface swapchain will be created as a protected surface, ie for
+/// supporting secure video playback.
 ///
 /// NOTE: These paths are not currently supported under Vulkan.
-OVR_VRAPI_EXPORT ovrTextureSwapChain * vrapi_CreateAndroidSurfaceSwapChain( int width, int height );
-OVR_VRAPI_EXPORT ovrTextureSwapChain * vrapi_CreateAndroidSurfaceSwapChain2( int width, int height, bool isProtected );
+OVR_VRAPI_EXPORT ovrTextureSwapChain* vrapi_CreateAndroidSurfaceSwapChain(int width, int height);
+OVR_VRAPI_EXPORT ovrTextureSwapChain*
+vrapi_CreateAndroidSurfaceSwapChain2(int width, int height, bool isProtected);
 
 
 /// Destroy the given texture swap chain.
-/// Must be called from a thread with the same OpenGL ES context current when vrapi_CreateTextureSwapChain was called.
-OVR_VRAPI_EXPORT void vrapi_DestroyTextureSwapChain( ovrTextureSwapChain * chain );
+/// Must be called from a thread with the same OpenGL ES context current when
+/// vrapi_CreateTextureSwapChain was called.
+OVR_VRAPI_EXPORT void vrapi_DestroyTextureSwapChain(ovrTextureSwapChain* chain);
 
 /// Returns the number of textures in the swap chain.
-OVR_VRAPI_EXPORT int vrapi_GetTextureSwapChainLength( ovrTextureSwapChain * chain );
+OVR_VRAPI_EXPORT int vrapi_GetTextureSwapChainLength(ovrTextureSwapChain* chain);
 
 /// Get the OpenGL name of the texture at the given index.
-OVR_VRAPI_EXPORT unsigned int vrapi_GetTextureSwapChainHandle( ovrTextureSwapChain * chain, int index );
+OVR_VRAPI_EXPORT unsigned int vrapi_GetTextureSwapChainHandle(
+    ovrTextureSwapChain* chain,
+    int index);
 
 
 /// Get the Android Surface object associated with the swap chain.
-OVR_VRAPI_EXPORT jobject vrapi_GetTextureSwapChainAndroidSurface( ovrTextureSwapChain * chain );
+OVR_VRAPI_EXPORT jobject vrapi_GetTextureSwapChainAndroidSurface(ovrTextureSwapChain* chain);
 
 
 //-----------------------------------------------------------------
@@ -787,11 +844,12 @@ OVR_VRAPI_EXPORT jobject vrapi_GetTextureSwapChainAndroidSurface( ovrTextureSwap
 /// be called from a thread with an OpenGL ES context whose completion ensures that
 /// frame rendering is complete. Generally this is the thread and context that was used
 /// for the rendering.
-OVR_VRAPI_EXPORT void vrapi_SubmitFrame( ovrMobile * ovr, const ovrFrameParms * parms );
+OVR_VRAPI_EXPORT void vrapi_SubmitFrame(ovrMobile* ovr, const ovrFrameParms* parms);
 
 /// vrapi_SubmitFrame2 takes a frameDescription describing per-frame information such as:
 /// a flexible list of layers which should be drawn this frame and a frame index.
-OVR_VRAPI_EXPORT ovrResult vrapi_SubmitFrame2( ovrMobile * ovr, const ovrSubmitFrameDescription2 * frameDescription );
+OVR_VRAPI_EXPORT ovrResult
+vrapi_SubmitFrame2(ovrMobile* ovr, const ovrSubmitFrameDescription2* frameDescription);
 
 //-----------------------------------------------------------------
 // Performance
@@ -802,17 +860,21 @@ OVR_VRAPI_EXPORT ovrResult vrapi_SubmitFrame2( ovrMobile * ovr, const ovrSubmitF
 /// Increasing the levels increases performance at the cost of higher power consumption
 /// which likely leads to a greater chance of overheating.
 ///
-/// Levels will be clamped to the expected range. Default clock levels are cpuLevel = 2, gpuLevel = 2.
-OVR_VRAPI_EXPORT ovrResult vrapi_SetClockLevels( ovrMobile * ovr, const int32_t cpuLevel, const int32_t gpuLevel );
+/// Levels will be clamped to the expected range. Default clock levels are cpuLevel = 2, gpuLevel
+/// = 2.
+OVR_VRAPI_EXPORT ovrResult
+vrapi_SetClockLevels(ovrMobile* ovr, const int32_t cpuLevel, const int32_t gpuLevel);
 
 /// Specify which app threads should be given higher scheduling priority.
-OVR_VRAPI_EXPORT ovrResult vrapi_SetPerfThread( ovrMobile * ovr, const ovrPerfThreadType type, const uint32_t threadId );
+OVR_VRAPI_EXPORT ovrResult
+vrapi_SetPerfThread(ovrMobile* ovr, const ovrPerfThreadType type, const uint32_t threadId);
 
-/// If VRAPI_EXTRA_LATENCY_MODE_ON specified, adds an extra frame of latency for full GPU utilization.
-/// Default is VRAPI_EXTRA_LATENCY_MODE_OFF.
+/// If VRAPI_EXTRA_LATENCY_MODE_ON specified, adds an extra frame of latency for full GPU
+/// utilization. Default is VRAPI_EXTRA_LATENCY_MODE_OFF.
 ///
 /// The latency mode specified will be applied on the next call to vrapi_SubmitFrame(2).
-OVR_VRAPI_EXPORT ovrResult vrapi_SetExtraLatencyMode( ovrMobile * ovr, const ovrExtraLatencyMode mode );
+OVR_VRAPI_EXPORT ovrResult
+vrapi_SetExtraLatencyMode(ovrMobile* ovr, const ovrExtraLatencyMode mode);
 
 //-----------------------------------------------------------------
 // Display Refresh Rate
@@ -821,14 +883,30 @@ OVR_VRAPI_EXPORT ovrResult vrapi_SetExtraLatencyMode( ovrMobile * ovr, const ovr
 /// Set the Display Refresh Rate.
 /// Returns ovrSuccess or an ovrError code.
 /// Returns 'ovrError_InvalidParameter' if requested refresh rate is not supported by the device.
-/// Returns 'ovrError_InvalidOperation' if setting the display refresh rate was not successful (such as when the device is in low power mode).
-OVR_VRAPI_EXPORT ovrResult vrapi_SetDisplayRefreshRate( ovrMobile * ovr, const float refreshRate );
+/// Returns 'ovrError_InvalidOperation' if the display refresh rate request was not allowed (such as
+/// when the device is in low power mode).
+OVR_VRAPI_EXPORT ovrResult vrapi_SetDisplayRefreshRate(ovrMobile* ovr, const float refreshRate);
+
+//-----------------------------------------------------------------
+// Events
+//-----------------------------------------------------------------
+
+/// Returns VrApi state information to the application.
+/// The application should read from the VrApi event queue with regularity.
+///
+/// The caller must pass a pointer to memory that is at least the size of the largest event
+/// structure, VRAPI_LARGEST_EVENT_TYPE. On return, the structure is filled in with the current
+/// event's data. All event structures start with the ovrEventHeader, which contains the
+/// type of the event. Based on this type, the caller can cast the passed ovrEventHeader
+/// pointer to the appropriate event type.
+///
+/// Returns ovrSuccess if no error occured.
+/// If no events are pending the event header EventType will be VRAPI_EVENT_NONE.
+OVR_VRAPI_EXPORT ovrResult vrapi_PollEvent(ovrEventHeader* event);
 
 
-
-
-#if defined( __cplusplus )
-}	// extern "C"
+#if defined(__cplusplus)
+} // extern "C"
 #endif
 
-#endif	// OVR_VrApi_h
+#endif // OVR_VrApi_h

@@ -56,6 +56,7 @@ typedef enum ovrMessageType_ {
   ovrMessage_IAP_GetNextPurchaseArrayPage                        = 0x47570A95, ///< Generated in response to ovr_IAP_GetNextPurchaseArrayPage()
   ovrMessage_IAP_GetProductsBySKU                                = 0x7E9ACAF5, ///< Generated in response to ovr_IAP_GetProductsBySKU()
   ovrMessage_IAP_GetViewerPurchases                              = 0x3A0F8419, ///< Generated in response to ovr_IAP_GetViewerPurchases()
+  ovrMessage_IAP_GetViewerPurchasesDurableCache                  = 0x63599E2B, ///< Generated in response to ovr_IAP_GetViewerPurchasesDurableCache()
   ovrMessage_IAP_LaunchCheckoutFlow                              = 0x3F9B0D0D, ///< Generated in response to ovr_IAP_LaunchCheckoutFlow()
   ovrMessage_LanguagePack_GetCurrent                             = 0x1F90F0D5, ///< Generated in response to ovr_LanguagePack_GetCurrent()
   ovrMessage_LanguagePack_SetCurrent                             = 0x5B4FBBE0, ///< Generated in response to ovr_LanguagePack_SetCurrent()
@@ -90,6 +91,8 @@ typedef enum ovrMessageType_ {
   ovrMessage_Notification_MarkAsRead                             = 0x717259E3, ///< Generated in response to ovr_Notification_MarkAsRead()
   ovrMessage_Party_GetCurrent                                    = 0x47933760, ///< Generated in response to ovr_Party_GetCurrent()
   ovrMessage_RichPresence_Clear                                  = 0x57B752B3, ///< Generated in response to ovr_RichPresence_Clear()
+  ovrMessage_RichPresence_GetDestinations                        = 0x586F2D14, ///< Generated in response to ovr_RichPresence_GetDestinations()
+  ovrMessage_RichPresence_GetNextDestinationArrayPage            = 0x67367F45, ///< Generated in response to ovr_RichPresence_GetNextDestinationArrayPage()
   ovrMessage_RichPresence_Set                                    = 0x3C147509, ///< Generated in response to ovr_RichPresence_Set()
   ovrMessage_Room_CreateAndJoinPrivate                           = 0x75D6E377, ///< Generated in response to ovr_Room_CreateAndJoinPrivate()
   ovrMessage_Room_CreateAndJoinPrivate2                          = 0x5A3A6243, ///< Generated in response to ovr_Room_CreateAndJoinPrivate2()
@@ -172,6 +175,19 @@ typedef enum ovrMessageType_ {
   /// ovr_Matchmaking_Enqueue(). Use ovr_Message_GetRoom() to extract the
   /// matchmaking room.
   ovrMessage_Notification_Matchmaking_MatchFound = 0x0BC3FCD7,
+
+  /// Sent when the status of a connection has changed.
+  ///
+  /// The message will contain a payload of type ::ovrNetSyncConnectionHandle.
+  /// Extract the payload from the message handle with ::ovr_Message_GetNetSyncConnection().
+  ovrMessage_Notification_NetSync_ConnectionStatusChanged = 0x073484CA,
+
+  /// Sent when the list of known connected sessions has changed. Contains the
+  /// new list of sessions.
+  ///
+  /// The message will contain a payload of type ::ovrNetSyncSessionsChangedNotificationHandle.
+  /// Extract the payload from the message handle with ::ovr_Message_GetNetSyncSessionsChangedNotification().
+  ovrMessage_Notification_NetSync_SessionsChanged = 0x387E7F36,
 
   /// Indicates that a connection has been established or there's been an error.
   /// Use ovr_NetworkingPeer_GetState() to get the result; as above,
