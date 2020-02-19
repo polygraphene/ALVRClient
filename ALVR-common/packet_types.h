@@ -118,6 +118,29 @@ enum ALVR_INPUT {
 	ALVR_INPUT_MAX = ALVR_INPUT_TRACKPAD_TOUCH,
 	ALVR_INPUT_COUNT = ALVR_INPUT_MAX + 1
 };
+enum ALVR_HAND {
+    alvrHandBone_Invalid						= -1,
+    alvrHandBone_WristRoot 					= 0,	// root frame of the hand, where the wrist is located
+    alvrHandBone_ForearmStub					= 1,	// frame for user's forearm
+    alvrHandBone_Thumb0						= 2,	// thumb trapezium bone
+    alvrHandBone_Thumb1						= 3,	// thumb metacarpal bone
+    alvrHandBone_Thumb2						= 4,	// thumb proximal phalange bone
+    alvrHandBone_Thumb3						= 5,	// thumb distal phalange bone
+    alvrHandBone_Index1						= 6,	// index proximal phalange bone
+    alvrHandBone_Index2						= 7,	// index intermediate phalange bone
+    alvrHandBone_Index3						= 8,	// index distal phalange bone
+    alvrHandBone_Middle1						= 9,	// middle proximal phalange bone
+    alvrHandBone_Middle2						= 10,	// middle intermediate phalange bone
+    alvrHandBone_Middle3						= 11,	// middle distal phalange bone
+    alvrHandBone_Ring1						= 12,	// ring proximal phalange bone
+    alvrHandBone_Ring2						= 13,	// ring intermediate phalange bone
+    alvrHandBone_Ring3						= 14,	// ring distal phalange bone
+    alvrHandBone_Pinky0						= 15,	// pinky metacarpal bone
+    alvrHandBone_Pinky1						= 16,	// pinky proximal phalange bone
+    alvrHandBone_Pinky2						= 17,	// pinky intermediate phalange bone
+    alvrHandBone_Pinky3						= 18,	// pinky distal phalange bone
+    alvrHandBone_MaxSkinnable				= 19,
+};
 #define ALVR_BUTTON_FLAG(input) (1ULL << input)
 
 #pragma pack(push, 1)
@@ -212,6 +235,7 @@ struct TrackingInfo {
 		static const uint32_t FLAG_CONTROLLER_GEARVR         = (1 << 2);
 		static const uint32_t FLAG_CONTROLLER_OCULUS_GO      = (1 << 3);
 		static const uint32_t FLAG_CONTROLLER_OCULUS_QUEST   = (1 << 4);
+        static const uint32_t FLAG_CONTROLLER_OCULUS_HAND    = (1 << 5);
 		uint32_t flags;
 		uint64_t buttons;
 
@@ -233,6 +257,14 @@ struct TrackingInfo {
 		TrackingVector3 linearVelocity;
 		TrackingVector3 angularAcceleration;
 		TrackingVector3 linearAcceleration;
+
+        // Tracking info of hand. A3
+        TrackingQuat boneRotations[alvrHandBone_MaxSkinnable];
+        //TrackingQuat boneRotationsBase[alvrHandBone_MaxSkinnable];
+        TrackingVector3 bonePositionsBase[alvrHandBone_MaxSkinnable];
+        TrackingQuat boneRootOrientation;
+        TrackingVector3 boneRootPosition;
+        uint32_t inputStateStatus;
 	} controller[2];
 };
 // Client >----(mode 0)----> Server

@@ -155,6 +155,19 @@ OVRP_PUBLIC_FUNCTION(ovrRequest) ovr_IAP_GetProductsBySKU(const char **skus, int
 /// Extract the payload from the message handle with ::ovr_Message_GetPurchaseArray().
 OVRP_PUBLIC_FUNCTION(ovrRequest) ovr_IAP_GetViewerPurchases();
 
+/// Retrieve a list of Purchase that the Logged-In-User has made. This list
+/// will only contain durable purchase (non-consumable) and is populated from a
+/// device cache. It is recommended in all cases to use
+/// ovr_User_GetViewerPurchases first and only check the cache if that fails.
+///
+/// A message with type ::ovrMessage_IAP_GetViewerPurchasesDurableCache will be generated in response.
+///
+/// First call ::ovr_Message_IsError() to check if an error occurred.
+///
+/// If no error occurred, the message will contain a payload of type ::ovrPurchaseArrayHandle.
+/// Extract the payload from the message handle with ::ovr_Message_GetPurchaseArray().
+OVRP_PUBLIC_FUNCTION(ovrRequest) ovr_IAP_GetViewerPurchasesDurableCache();
+
 /// Launch the checkout flow to purchase the existing product. Oculus Home
 /// tries handle and fix as many errors as possible. Home returns the
 /// appropriate error message and how to resolveit, if possible. Returns a
