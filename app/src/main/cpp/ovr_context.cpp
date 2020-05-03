@@ -220,6 +220,7 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
             c.flags |= TrackingInfo::Controller::FLAG_CONTROLLER_OCULUS_HAND;
 
             c.inputStateStatus = inputStateHand.InputStateStatus;
+            memcpy(&c.fingerPinchStrengths, &inputStateHand.PinchStrength, sizeof(float) * alvrFingerPinch_MaxPinches);
 
             memcpy(&c.orientation, &inputStateHand.PointerPose.Orientation, sizeof(inputStateHand.PointerPose.Orientation));
             memcpy(&c.position, &inputStateHand.PointerPose.Position, sizeof(inputStateHand.PointerPose.Position));
@@ -240,6 +241,7 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
 
             ovrHandPose handPose;
             handPose.Header.Version = ovrHandVersion_1;
+            c.handConfidence = handPose.HandConfidence == ovrConfidence_HIGH ? alvrHandConfidence_High : alvrHandConfidence_Low;
             if (vrapi_GetHandPose(Ovr, handCapabilities.Header.DeviceID, 0, &handPose.Header ) != ovrSuccess) {
                 LOG("VrHands - failed to get hand pose");
             } else {
