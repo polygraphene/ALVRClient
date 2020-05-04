@@ -241,10 +241,10 @@ void OvrContext::setControllerInfo(TrackingInfo *packet, double displayTime) {
 
             ovrHandPose handPose;
             handPose.Header.Version = ovrHandVersion_1;
-            c.handConfidence = handPose.HandConfidence == ovrConfidence_HIGH ? alvrHandConfidence_High : alvrHandConfidence_Low;
             if (vrapi_GetHandPose(Ovr, handCapabilities.Header.DeviceID, 0, &handPose.Header ) != ovrSuccess) {
                 LOG("VrHands - failed to get hand pose");
             } else {
+                c.handConfidence = handPose.HandConfidence == ovrConfidence_HIGH ? alvrHandConfidence_High : alvrHandConfidence_Low;
                 memcpy(&c.boneRootOrientation, &handPose.RootPose.Orientation, sizeof(handPose.RootPose.Orientation));
                 memcpy(&c.boneRootPosition, &handPose.RootPose.Position, sizeof(handPose.RootPose.Position));
                 for(int i=0;i<ovrHandBone_MaxSkinnable;i++) {
