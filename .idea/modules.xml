@@ -3,6 +3,8 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/ALVRClient.iml" filepath="$PROJECT_DIR$/ALVRClient.iml" />
+      <module fileurl="file://$PROJECT_DIR$/app/ALVRClient-app.iml" filepath="$PROJECT_DIR$/app/ALVRClient-app.iml" group="ALVRClient/app" />
+      <module fileurl="file://$PROJECT_DIR$/VR-ALVRClient.iml" filepath="$PROJECT_DIR$/VR-ALVRClient.iml" group="ALVRClient" />
       <module fileurl="file://$PROJECT_DIR$/app/app.iml" filepath="$PROJECT_DIR$/app/app.iml" />
     </modules>
   </component>
